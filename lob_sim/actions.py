@@ -3,18 +3,20 @@ import itertools
 
 import jax.numpy as jnp
 
-BID_TICKS = [1, 2, 3, 4, 5]
-ASK_TICKS = [1, 2, 3, 4, 5]
+BID_TICKS = [1, 3, 5]
+ASK_TICKS = [1, 3, 5]
 
 ACTION_TABLE = jnp.array(list(itertools.product(BID_TICKS, ASK_TICKS)))
-N_ACTIONS = 25
+N_ACTIONS = len(ACTION_TABLE)  # 9
 
 
 def action_index_to_offsets(idx):
-    """Convert action index (0-24) to (bid_ticks, ask_ticks)."""
+    """Convert action index to (bid_ticks, ask_ticks)."""
     return ACTION_TABLE[idx]
 
 
 def offsets_to_action_index(bid, ask):
     """Convert (bid_ticks, ask_ticks) to action index."""
-    return (bid - 1) * 5 + (ask - 1)
+    bid_idx = jnp.array(BID_TICKS).searchsorted(bid)
+    ask_idx = jnp.array(ASK_TICKS).searchsorted(ask)
+    return bid_idx * len(ASK_TICKS) + ask_idx

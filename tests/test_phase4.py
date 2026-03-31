@@ -31,7 +31,7 @@ def _compute_mean_reward(config, action_idx, regime_idx, n_episodes, t_steps, ma
 
 @pytest.fixture(scope="module")
 def reward_matrix():
-    """Compute the (25, 3) reward matrix once for all tests.
+    """Compute the (N_ACTIONS, 3) reward matrix once for all tests.
     reward_matrix[action_idx, regime_idx] = mean total reward.
     """
     master_key = jax.random.PRNGKey(42)
@@ -52,7 +52,7 @@ def reward_matrix():
 class TestPolicyDivergence:
     def test_completes_in_reasonable_time(self, reward_matrix):
         """The full evaluation should complete (this test just checks it ran)."""
-        assert reward_matrix.shape == (25, 3)
+        assert reward_matrix.shape == (N_ACTIONS, 3)
 
     def test_optimal_actions_differ(self, reward_matrix):
         """Optimal action (argmax) is different for each regime."""

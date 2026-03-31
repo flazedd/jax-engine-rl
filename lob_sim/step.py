@@ -177,7 +177,10 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
             rng_key=key,
         )
 
-        reward = compute_reward(state, new_state, config)
+        # Spread-capture reward with small inventory penalty to differentiate regimes.
+        bid_edge = (bid_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
+        ask_edge = (ask_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
+        reward = bid_fill * bid_edge + ask_fill * ask_edge - config.inventory_penalty * new_inventory ** 2
 
         return new_state, {
             'reward': reward,

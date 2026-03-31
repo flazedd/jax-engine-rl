@@ -810,11 +810,18 @@ All tests pass: `pytest tests/test_phase5.py -v -s` (with `-s` to see throughput
 
 ## Scope
 
-Build the agent interface, rollout collection, GAE computation, PPO training loop, and the vanilla PPO agent. Train PPO on a single locked regime as proof of concept.
+Build the agent interface, closed-loop rollout collection (agent picks actions inside
+`lax.scan`), GAE computation, PPO training loop, and the vanilla PPO agent. Train PPO
+on a single locked regime as proof of concept.
 
 ## Additional Dependencies
 
-Add to pyproject.toml: `optax`, `distrax`, `equinox`
+Add to `pyproject.toml`:
+```toml
+dependencies = ["jax", "jaxlib", "matplotlib", "pytest", "optax", "distrax", "equinox"]
+```
+
+Run `uv sync` after updating.
 
 ## Files to Create
 
@@ -830,108 +837,761 @@ Add to pyproject.toml: `optax`, `distrax`, `equinox`
 - `scripts/train.py`
 - `tests/test_phase6.py`
 
+---
+
 ## Specifications
 
-### `agents/base.py`
+### `agents/base.py` — Types and Protocol
+
+Define two NamedTuples used throughout:
 
 ```python
-class Agent(eqx.Module):
-    def initial_agent_state(self, rng_key) -> AgentState: ...
-    def get_action(self, obs, agent_state, rng_key) -> tuple[action, new_state, info]: ...
-    def update_policy(self, rollout_data, opt_state) -> tuple[Agent, opt_state, metrics]: ...
+class AgentState(typing.NamedTuple):
+    """Carries agent-internal state across timesteps inside lax.scan.
+    For stateless agents (PPO), all fields are dummy zeros.
+    For recurrent agents (RL2), hidden holds the GRU hidden state.
+    """
+    hidden: jnp.ndarray   # shape (hidden_size,) — zeros for PPO, shape (128,) for RL2
+    prev_action: jnp.ndarray   # scalar int32 — previous action taken
+    prev_reward: jnp.ndarray   # scalar float32 — previous reward received
+
+class RolloutBatch(typing.NamedTuple):
+    """One batch of experience collected by collect_rollout()."""
+    obs: jnp.ndarray         # (n_envs, n_steps, obs_dim)
+    actions: jnp.ndarray     # (n_envs, n_steps)         int32
+    log_probs: jnp.ndarray   # (n_envs, n_steps)         float32
+    values: jnp.ndarray      # (n_envs, n_steps)         float32
+    rewards: jnp.ndarray     # (n_envs, n_steps)         float32
+    dones: jnp.ndarray       # (n_envs, n_steps)         bool
+    last_value: jnp.ndarray  # (n_envs,)                 float32 — bootstrap value
 ```
 
-`info` must include `{"log_prob": scalar, "value": scalar}`.
+Define an `Agent` protocol (use `typing.Protocol`, not equinox, so it works as a type
+hint):
 
-### `agents/networks.py`
+```python
+class Agent(typing.Protocol):
+    def initial_agent_state(self, rng_key: jnp.ndarray) -> AgentState: ...
 
-Equinox: `MLP(in_size, hidden_sizes, out_size, key)`, `GRUCell`.
+    def get_action(
+        self,
+        obs: jnp.ndarray,       # (obs_dim,)
+        agent_state: AgentState,
+        rng_key: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, AgentState, dict]:
+        """Returns (action_scalar_int32, new_agent_state, info).
+        info must contain:
+          'log_prob': scalar float32
+          'value':    scalar float32
+        """
+        ...
 
-### `agents/ppo.py`
+    def update(
+        self,
+        batch: RolloutBatch,
+        opt_state: Any,
+        rng_key: jnp.ndarray,
+    ) -> tuple["Agent", Any, dict]:
+        """Returns (updated_agent, updated_opt_state, metrics_dict).
+        metrics_dict must contain:
+          'policy_loss': scalar
+          'value_loss':  scalar
+          'entropy':     scalar
+          'total_loss':  scalar
+        """
+        ...
+```
 
-`obs (33,) → MLP [64,64] → policy_head (25,) → Categorical; → value_head (1,)`.
+---
 
-PPOConfig: lr=3e-4, gamma=0.99, gae_lambda=0.95, clip_eps=0.2, entropy_coef=0.01, value_coef=0.5, max_grad_norm=0.5, n_epochs=4, n_minibatches=4, n_envs=64, n_steps=256.
+### `agents/networks.py` — Neural Network Primitives
 
-### `training/rollout.py`
+Use `equinox` throughout. All modules are pytrees automatically.
 
-Closed-loop via `lax.scan` — agent picks actions inside the loop. `vmap` over N envs.
+**`MLP`**:
+```python
+class MLP(eqx.Module):
+    layers: list
 
-### `training/trainer.py`
+    def __init__(self, in_size: int, hidden_sizes: list[int], out_size: int, *, key):
+        # Build list of eqx.nn.Linear layers with ReLU activations between them
+        # Final layer has no activation
+        ...
 
-GAE via reverse `lax.scan`. PPO update loop: n_epochs × n_minibatches.
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        ...
+```
+
+**`GRUCell`** (for Phase 7, but define here):
+```python
+class GRUCell(eqx.Module):
+    """Single GRU step. Takes (input, hidden) → new_hidden."""
+    cell: eqx.nn.GRUCell
+
+    def __init__(self, input_size: int, hidden_size: int, *, key): ...
+    def __call__(self, x: jnp.ndarray, hidden: jnp.ndarray) -> jnp.ndarray: ...
+```
+
+---
+
+### `agents/ppo.py` — PPO Agent
+
+**`PPOConfig`** NamedTuple:
+
+| Field | Type | Value | Description |
+|---|---|---|---|
+| `lr` | float | 3e-4 | Adam learning rate |
+| `gamma` | float | 0.99 | Discount factor |
+| `gae_lambda` | float | 0.95 | GAE lambda |
+| `clip_eps` | float | 0.2 | PPO clip epsilon |
+| `entropy_coef` | float | 0.01 | Entropy bonus coefficient |
+| `value_coef` | float | 0.5 | Value loss coefficient |
+| `max_grad_norm` | float | 0.5 | Gradient clipping norm |
+| `n_epochs` | int | 4 | PPO epochs per update |
+| `n_minibatches` | int | 4 | Minibatches per epoch |
+| `n_envs` | int | 64 | Parallel environments |
+| `n_steps` | int | 128 | Steps per rollout per env |
+| `hidden_size` | int | 0 | Dummy — PPO is stateless |
+
+**`PPOAgent(eqx.Module)`**:
+
+Architecture:
+```
+obs (33,) → MLP([64, 64]) → trunk_out (64,)
+trunk_out → Linear(64, 25) → policy_logits (25,)  [actor head]
+trunk_out → Linear(64, 1)  → value (1,)            [critic head]
+```
+
+Implement as two separate heads on a shared trunk. The trunk and both heads are
+`eqx.nn.Linear` layers combined into the MLP.
+
+```python
+class PPOAgent(eqx.Module):
+    trunk: MLP           # in=33, hidden=[64,64], out=64
+    policy_head: eqx.nn.Linear   # 64 → 25
+    value_head: eqx.nn.Linear    # 64 → 1
+    ppo_config: PPOConfig = eqx.field(static=True)
+
+    def initial_agent_state(self, rng_key) -> AgentState:
+        # PPO is stateless — return zeros
+        return AgentState(
+            hidden=jnp.zeros(1),       # dummy
+            prev_action=jnp.int32(0),
+            prev_reward=jnp.float32(0.0),
+        )
+
+    def get_action(self, obs, agent_state, rng_key) -> tuple[...]:
+        # Forward pass → logits, value
+        # Sample action from Categorical(logits) using distrax
+        # Return (action, agent_state_unchanged, {"log_prob": ..., "value": ...})
+        ...
+
+    def update(self, batch, opt_state, rng_key) -> tuple[...]:
+        # See training/trainer.py for GAE — this receives pre-computed advantages
+        # Run n_epochs × n_minibatches of PPO gradient updates
+        ...
+```
+
+**Critical implementation notes**:
+- Use `distrax.Categorical(logits=logits)` for the action distribution
+- `get_action` must not mutate `agent_state` for PPO — return it unchanged
+- Mark `ppo_config` as `eqx.field(static=True)` so its Python ints don't get traced
+
+---
+
+### `training/rollout.py` — Closed-Loop Rollout
+
+This is the most architecturally important file. The agent picks actions **inside**
+`lax.scan` — do NOT use `run_episode` from Phase 2/3 (that takes pre-generated
+actions). Build a new scan here.
+
+**Carry structure** (what flows step-to-step inside scan):
+```python
+class RolloutCarry(typing.NamedTuple):
+    sim_state: OrderBookState    # full simulator state
+    agent_state: AgentState      # agent's internal state (hidden, prev_action, etc.)
+    rng_key: jnp.ndarray         # PRNGKey, split each step
+```
+
+**Per-step output** (what gets stacked into the trajectory):
+```python
+class StepOutput(typing.NamedTuple):
+    obs: jnp.ndarray        # (obs_dim,)
+    action: jnp.ndarray     # scalar int32
+    log_prob: jnp.ndarray   # scalar float32
+    value: jnp.ndarray      # scalar float32
+    reward: jnp.ndarray     # scalar float32
+    done: jnp.ndarray       # scalar bool
+```
+
+**`collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1)`**:
+
+```python
+def collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1):
+    """Collect n_steps of experience from a single environment.
+    Returns (final_carry, StepOutput) where StepOutput has leading dim n_steps.
+    """
+    step_fn = make_step_fn(sim_config, locked_regime=locked_regime)
+
+    def scan_body(carry: RolloutCarry, _) -> tuple[RolloutCarry, StepOutput]:
+        rng, rng_action, rng_step = jax.random.split(carry.rng_key, 3)
+
+        # 1. Get current observation from sim state
+        obs = observe(carry.sim_state, sim_config)
+
+        # 2. Agent picks action
+        action, new_agent_state, info = agent.get_action(obs, carry.agent_state, rng_action)
+
+        # 3. Sim steps forward
+        new_sim_state, sim_out = step_fn(carry.sim_state, action)
+
+        # 4. Record output
+        output = StepOutput(
+            obs=obs,
+            action=action,
+            log_prob=info["log_prob"],
+            value=info["value"],
+            reward=sim_out["reward"],
+            done=sim_out["done"],
+        )
+
+        new_carry = RolloutCarry(
+            sim_state=new_sim_state,
+            agent_state=new_agent_state,
+            rng_key=rng,
+        )
+        return new_carry, output
+
+    # Initialize
+    rng_init, rng_agent, rng_scan = jax.random.split(rng_key, 3)
+    init_sim_state = init_state(sim_config, rng_init)
+    init_agent_state = agent.initial_agent_state(rng_agent)
+    init_carry = RolloutCarry(init_sim_state, init_agent_state, rng_scan)
+
+    final_carry, trajectory = jax.lax.scan(scan_body, init_carry, None, length=n_steps)
+
+    # Bootstrap value for GAE
+    last_obs = observe(final_carry.sim_state, sim_config)
+    _, _, last_info = agent.get_action(last_obs, final_carry.agent_state, rng_key)
+    last_value = last_info["value"]
+
+    return final_carry, trajectory, last_value
+```
+
+**`collect_rollout_batch(agent, sim_config, rng_key, n_envs, n_steps, locked_regime=-1)`**:
+
+```python
+def collect_rollout_batch(agent, sim_config, rng_key, n_envs, n_steps, locked_regime=-1):
+    """vmap collect_rollout over n_envs independent environments.
+    Returns RolloutBatch with shapes (n_envs, n_steps, ...).
+    """
+    keys = jax.random.split(rng_key, n_envs)
+    vmapped = jax.vmap(
+        lambda k: collect_rollout(agent, sim_config, k, n_steps, locked_regime)
+    )
+    _, trajectories, last_values = vmapped(keys)
+
+    return RolloutBatch(
+        obs=trajectories.obs,             # (n_envs, n_steps, obs_dim)
+        actions=trajectories.action,      # (n_envs, n_steps)
+        log_probs=trajectories.log_prob,  # (n_envs, n_steps)
+        values=trajectories.value,        # (n_envs, n_steps)
+        rewards=trajectories.reward,      # (n_envs, n_steps)
+        dones=trajectories.done,          # (n_envs, n_steps)
+        last_value=last_values,           # (n_envs,)
+    )
+```
+
+---
+
+### `training/trainer.py` — GAE + PPO Update
+
+**`compute_gae(batch, gamma, gae_lambda) -> tuple[advantages, returns]`**:
+
+GAE must be computed via **reverse `lax.scan`** — no Python loops.
+
+```python
+def compute_gae(batch: RolloutBatch, gamma: float, gae_lambda: float):
+    """Compute GAE advantages and value targets.
+
+    Algorithm (per env, reverse over time):
+        delta_t = r_t + gamma * V(s_{t+1}) * (1 - done_t) - V(s_t)
+        A_t = delta_t + gamma * lambda * (1 - done_t) * A_{t+1}
+
+    Returns:
+        advantages: (n_envs, n_steps) float32
+        returns:    (n_envs, n_steps) float32  [= advantages + values, used as value targets]
+    """
+    # Build next_values: shift values by 1, use last_value for final step
+    # next_values[t] = values[t+1] if t < T-1 else last_value
+    # next_dones[t]  = dones[t]  (done at t means no bootstrap)
+
+    def gae_step(gae_next, t_data):
+        reward, value, next_value, done = t_data
+        delta = reward + gamma * next_value * (1.0 - done) - value
+        gae = delta + gamma * gae_lambda * (1.0 - done) * gae_next
+        return gae, gae
+
+    # Reverse scan: process from T-1 down to 0
+    # Input arrays must be reversed before scan, then output reversed back
+    ...
+
+    advantages = ...
+    returns = advantages + batch.values
+    return advantages, returns
+```
+
+**`ppo_update(agent, opt_state, batch, advantages, returns, ppo_config, rng_key)`**:
+
+```python
+def ppo_update(agent, opt_state, batch, advantages, returns, ppo_config, rng_key):
+    """Run n_epochs × n_minibatches of PPO updates.
+
+    Minibatch construction:
+    - Flatten (n_envs, n_steps) → (n_envs * n_steps,) for all fields
+    - Each epoch: shuffle indices with jax.random.permutation
+    - Split into n_minibatches contiguous chunks
+    - Run gradient update on each chunk
+
+    PPO loss (per minibatch):
+        ratio = exp(new_log_prob - old_log_prob)
+        clip_loss = -mean(min(ratio * A, clip(ratio, 1-eps, 1+eps) * A))
+        value_loss = mean((new_value - returns)^2)
+        entropy_loss = -mean(entropy)
+        total_loss = clip_loss + value_coef * value_loss + entropy_coef * entropy_loss
+
+    Gradient clipping: optax.clip_by_global_norm(max_grad_norm)
+
+    Returns: (updated_agent, updated_opt_state, metrics_dict)
+    metrics_dict keys: 'policy_loss', 'value_loss', 'entropy', 'total_loss'
+    """
+    ...
+```
+
+**Important**: use `optax.chain(optax.clip_by_global_norm(max_grad_norm), optax.adam(lr))`
+as the optimizer. The optimizer is created once and passed in as `opt_state`.
+
+**`create_optimizer(ppo_config, agent) -> opt_state`**:
+```python
+def create_optimizer(ppo_config, agent):
+    optimizer = optax.chain(
+        optax.clip_by_global_norm(ppo_config.max_grad_norm),
+        optax.adam(ppo_config.lr),
+    )
+    opt_state = optimizer.init(eqx.filter(agent, eqx.is_array))
+    return optimizer, opt_state
+```
+
+---
+
+### `training/eval.py` — Evaluation Harness
+
+```python
+def evaluate_agent(agent, sim_config, rng_key, n_episodes=50, locked_regime=-1):
+    """Run n_episodes episodes, return mean total reward and per-episode stats.
+
+    Returns dict:
+        'mean_reward':  scalar
+        'std_reward':   scalar
+        'mean_episode_length': scalar
+        'rewards':      (n_episodes,) array of per-episode total rewards
+    """
+    ...
+```
+
+This is used in tests to measure whether training improved performance. Keep it
+simple — no `lax.scan` required here since it is not on the critical training path.
+
+---
+
+### `training/logger.py`
+
+Simple Python class (not JAX) that accumulates metrics dicts and can print a summary:
+
+```python
+class Logger:
+    def log(self, iteration: int, metrics: dict): ...
+    def print_summary(self, last_n=10): ...
+    def get_means(self, key: str, last_n=None) -> list[float]: ...
+```
+
+---
 
 ### `scripts/train.py`
 
 ```
-python scripts/train.py --agent ppo --regime noise --n_iterations 500 --seed 42
+uv run python scripts/train.py --agent ppo --regime noise --n_iterations 200 --seed 42
 ```
 
+Training loop skeleton:
+```python
+for iteration in range(n_iterations):
+    rng_key, rng_rollout, rng_update = jax.random.split(rng_key, 3)
+
+    # 1. Collect rollout
+    batch = collect_rollout_batch(agent, sim_config, rng_rollout,
+                                  n_envs=ppo_config.n_envs,
+                                  n_steps=ppo_config.n_steps,
+                                  locked_regime=locked_regime)
+
+    # 2. Compute GAE
+    advantages, returns = compute_gae(batch, ppo_config.gamma, ppo_config.gae_lambda)
+
+    # 3. PPO update
+    agent, opt_state, metrics = ppo_update(agent, opt_state, batch,
+                                            advantages, returns, ppo_config, rng_update)
+
+    # 4. Log
+    if iteration % 10 == 0:
+        eval_stats = evaluate_agent(agent, sim_config, rng_key, n_episodes=20,
+                                     locked_regime=locked_regime)
+        logger.log(iteration, {**metrics, **eval_stats})
+        logger.print_summary(last_n=5)
+```
+
+Print a one-line summary every 10 iterations showing iteration number, total loss,
+policy loss, value loss, entropy, and mean eval reward.
+
+---
+
 ## Test File: `tests/test_phase6.py`
+
+All tests must run in under **60 seconds total** on CPU. Use small configs where noted.
 
 ```python
 """Phase 6 tests — agent framework + PPO training."""
 import pytest
 import jax
+import jax.numpy as jnp
+import time
+import equinox as eqx
+import optax
+
+from lob_sim.config import SimConfig
+from lob_sim.agents.ppo import PPOAgent, PPOConfig
+from lob_sim.agents.base import AgentState, RolloutBatch
+from lob_sim.training.rollout import collect_rollout, collect_rollout_batch
+from lob_sim.training.trainer import compute_gae, ppo_update, create_optimizer
+from lob_sim.training.eval import evaluate_agent
+
+# Small configs for fast tests
+FAST_PPO_CONFIG = PPOConfig(
+    lr=3e-4, gamma=0.99, gae_lambda=0.95, clip_eps=0.2,
+    entropy_coef=0.01, value_coef=0.5, max_grad_norm=0.5,
+    n_epochs=2, n_minibatches=2, n_envs=8, n_steps=64, hidden_size=0,
+)
+SIM_CONFIG = SimConfig()
+
+
+@pytest.fixture(scope="module")
+def agent():
+    key = jax.random.PRNGKey(0)
+    return PPOAgent(ppo_config=FAST_PPO_CONFIG, key=key)
+
+
+@pytest.fixture(scope="module")
+def agent_and_opt(agent):
+    optimizer, opt_state = create_optimizer(FAST_PPO_CONFIG, agent)
+    return agent, optimizer, opt_state
+
 
 class TestAgentInterface:
-    def test_ppo_initial_state(self):
-        """PPO agent creates a valid initial AgentState."""
+    def test_initial_state_shape(self, agent):
+        """PPO initial_agent_state returns AgentState with correct dummy shapes."""
+        key = jax.random.PRNGKey(0)
+        state = agent.initial_agent_state(key)
+        assert isinstance(state, AgentState)
+        assert state.prev_action.shape == ()
+        assert state.prev_reward.shape == ()
 
-    def test_ppo_get_action_shape(self):
-        """get_action returns (scalar_action, agent_state, info_dict)."""
-        # action should be scalar int32 in [0, 24]
-        # info should have 'log_prob' and 'value' keys
+    def test_get_action_shapes(self, agent):
+        """get_action returns (scalar int32, AgentState, info_dict)."""
+        key = jax.random.PRNGKey(1)
+        obs = jnp.zeros(33)
+        agent_state = agent.initial_agent_state(key)
+        action, new_state, info = agent.get_action(obs, agent_state, key)
+        assert action.shape == ()
+        assert action.dtype == jnp.int32
+        assert 0 <= int(action) <= 24
+        assert "log_prob" in info
+        assert "value" in info
+        assert info["log_prob"].shape == ()
+        assert info["value"].shape == ()
 
-    def test_ppo_get_action_jit(self):
-        """get_action is JIT-compatible."""
+    def test_get_action_action_in_range(self, agent):
+        """Actions sampled over 100 calls are all in [0, 24]."""
+        key = jax.random.PRNGKey(2)
+        obs = jnp.zeros(33)
+        agent_state = agent.initial_agent_state(key)
+        keys = jax.random.split(key, 100)
+        actions = jnp.array([
+            agent.get_action(obs, agent_state, k)[0] for k in keys
+        ])
+        assert jnp.all(actions >= 0)
+        assert jnp.all(actions <= 24)
+
+    def test_get_action_jit(self, agent):
+        """get_action compiles under jax.jit without error."""
+        key = jax.random.PRNGKey(3)
+        obs = jnp.zeros(33)
+        agent_state = agent.initial_agent_state(key)
+        jit_fn = jax.jit(agent.get_action)
+        action, _, info = jit_fn(obs, agent_state, key)
+        jax.block_until_ready(action)
+
+    def test_ppo_stateless(self, agent):
+        """PPO agent_state is unchanged after get_action (stateless)."""
+        key = jax.random.PRNGKey(4)
+        obs = jnp.zeros(33)
+        agent_state = agent.initial_agent_state(key)
+        _, new_state, _ = agent.get_action(obs, agent_state, key)
+        # hidden should still be zeros
+        assert jnp.allclose(new_state.hidden, agent_state.hidden)
+
+    def test_different_keys_different_actions(self, agent):
+        """Different RNG keys produce at least some different actions."""
+        obs = jnp.zeros(33)
+        agent_state = agent.initial_agent_state(jax.random.PRNGKey(0))
+        keys = jax.random.split(jax.random.PRNGKey(99), 20)
+        actions = [int(agent.get_action(obs, agent_state, k)[0]) for k in keys]
+        assert len(set(actions)) > 1, "All actions identical — RNG not being used"
 
 
 class TestRollout:
-    def test_rollout_compiles(self):
-        """collect_rollout with PPO agent compiles under jit."""
+    def test_single_rollout_compiles(self, agent):
+        """collect_rollout compiles under jax.jit."""
+        key = jax.random.PRNGKey(0)
+        jit_fn = jax.jit(
+            lambda k: collect_rollout(agent, SIM_CONFIG, k, n_steps=32, locked_regime=0)
+        )
+        _, traj, last_val = jit_fn(key)
+        jax.block_until_ready(traj.obs)
 
-    def test_rollout_shapes(self):
-        """Rollout data has correct shapes (n_steps, ...)."""
-        # obs: (n_steps, 33), action: (n_steps,), reward: (n_steps,), etc.
+    def test_single_rollout_shapes(self, agent):
+        """collect_rollout trajectory has leading dim n_steps."""
+        key = jax.random.PRNGKey(0)
+        N = 32
+        _, traj, last_val = collect_rollout(agent, SIM_CONFIG, key, n_steps=N, locked_regime=0)
+        assert traj.obs.shape == (N, 33)
+        assert traj.action.shape == (N,)
+        assert traj.log_prob.shape == (N,)
+        assert traj.value.shape == (N,)
+        assert traj.reward.shape == (N,)
+        assert traj.done.shape == (N,)
+        assert last_val.shape == ()
 
-    def test_batched_rollout(self):
-        """vmap over n_envs produces (n_envs, n_steps, ...) shaped data."""
+    def test_batch_rollout_shapes(self, agent):
+        """collect_rollout_batch returns (n_envs, n_steps, ...) shapes."""
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=4, n_steps=32, locked_regime=0)
+        assert batch.obs.shape == (4, 32, 33)
+        assert batch.actions.shape == (4, 32)
+        assert batch.rewards.shape == (4, 32)
+        assert batch.last_value.shape == (4,)
 
-    def test_actions_in_valid_range(self):
+    def test_actions_in_valid_range(self, agent):
         """All actions in rollout are in [0, 24]."""
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=4, n_steps=64, locked_regime=0)
+        assert jnp.all(batch.actions >= 0)
+        assert jnp.all(batch.actions <= 24)
+
+    def test_no_nan_in_rollout(self, agent):
+        """Rollout contains no NaN values in obs, rewards, or log_probs."""
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=4, n_steps=64, locked_regime=0)
+        assert not jnp.any(jnp.isnan(batch.obs))
+        assert not jnp.any(jnp.isnan(batch.rewards))
+        assert not jnp.any(jnp.isnan(batch.log_probs))
+
+    def test_rollout_throughput(self, agent):
+        """Warm rollout throughput > 5,000 steps/sec (single env)."""
+        key = jax.random.PRNGKey(0)
+        N = 512
+        fn = jax.jit(lambda k: collect_rollout(agent, SIM_CONFIG, k, n_steps=N, locked_regime=0))
+        fn(key)  # compile
+        jax.block_until_ready(fn(key))
+        t0 = time.perf_counter()
+        _, traj, _ = fn(key)
+        jax.block_until_ready(traj.obs)
+        elapsed = time.perf_counter() - t0
+        steps_per_sec = N / elapsed
+        print(f"\nRollout throughput: {steps_per_sec:.0f} steps/sec")
+        assert steps_per_sec > 5_000
 
 
 class TestGAE:
-    def test_gae_shape(self):
-        """compute_gae returns advantages and returns with shape (n_steps,)."""
+    def test_gae_shapes(self, agent):
+        """compute_gae returns advantages and returns with shape (n_envs, n_steps)."""
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=4, n_steps=32, locked_regime=0)
+        adv, ret = compute_gae(batch, gamma=0.99, gae_lambda=0.95)
+        assert adv.shape == (4, 32)
+        assert ret.shape == (4, 32)
 
-    def test_gae_known_case(self):
-        """GAE matches hand-computed value for a simple 3-step trajectory."""
-        # rewards = [1, 0, 1], values = [0.5, 0.5, 0.5], dones = [0, 0, 1]
-        # Verify advantages match expected values
+    def test_gae_no_nan(self, agent):
+        """GAE produces no NaN values."""
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=4, n_steps=32, locked_regime=0)
+        adv, ret = compute_gae(batch, gamma=0.99, gae_lambda=0.95)
+        assert not jnp.any(jnp.isnan(adv))
+        assert not jnp.any(jnp.isnan(ret))
+
+    def test_gae_known_trajectory(self):
+        """GAE matches hand-computed value for a 3-step single-env trajectory.
+
+        Setup:
+            rewards    = [1.0, 0.0, 1.0]
+            values     = [0.5, 0.5, 0.5]
+            dones      = [0,   0,   1  ]
+            last_value = 0.5             (ignored because final done=1)
+            gamma=1.0, gae_lambda=1.0   (simplifies arithmetic)
+
+        Hand calculation (reverse):
+            t=2: delta = 1.0 + 1.0*0.5*(1-1) - 0.5 = 0.5;  A_2 = 0.5
+            t=1: delta = 0.0 + 1.0*0.5*(1-0) - 0.5 = 0.0;  A_1 = 0.0 + 1.0*1.0*(1-0)*0.5 = 0.5
+            t=0: delta = 1.0 + 1.0*0.5*(1-0) - 0.5 = 1.0;  A_0 = 1.0 + 1.0*1.0*(1-0)*0.5 = 1.5
+        Expected advantages: [1.5, 0.5, 0.5]
+        Expected returns:    [2.0, 1.0, 1.0]  (advantages + values)
+        """
+        batch = RolloutBatch(
+            obs=jnp.zeros((1, 3, 33)),
+            actions=jnp.zeros((1, 3), dtype=jnp.int32),
+            log_probs=jnp.zeros((1, 3)),
+            values=jnp.array([[0.5, 0.5, 0.5]]),
+            rewards=jnp.array([[1.0, 0.0, 1.0]]),
+            dones=jnp.array([[0.0, 0.0, 1.0]]),
+            last_value=jnp.array([0.5]),
+        )
+        adv, ret = compute_gae(batch, gamma=1.0, gae_lambda=1.0)
+        expected_adv = jnp.array([[1.5, 0.5, 0.5]])
+        expected_ret = jnp.array([[2.0, 1.0, 1.0]])
+        assert jnp.allclose(adv, expected_adv, atol=1e-5), f"GAE advantages wrong: {adv}"
+        assert jnp.allclose(ret, expected_ret, atol=1e-5), f"GAE returns wrong: {ret}"
+
+    def test_returns_equal_advantages_plus_values(self, agent):
+        """Returns must equal advantages + values everywhere."""
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=4, n_steps=32, locked_regime=0)
+        adv, ret = compute_gae(batch, gamma=0.99, gae_lambda=0.95)
+        assert jnp.allclose(ret, adv + batch.values, atol=1e-5)
 
 
-class TestPPOTraining:
-    def test_single_update(self):
-        """One PPO update step runs without error and returns metrics."""
-        # metrics should include 'policy_loss', 'value_loss', 'entropy'
+class TestPPOUpdate:
+    def test_single_update_runs(self, agent_and_opt):
+        """One PPO update step runs without error and returns finite metrics."""
+        agent, optimizer, opt_state = agent_and_opt
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=FAST_PPO_CONFIG.n_envs,
+                                      n_steps=FAST_PPO_CONFIG.n_steps,
+                                      locked_regime=0)
+        adv, ret = compute_gae(batch, FAST_PPO_CONFIG.gamma, FAST_PPO_CONFIG.gae_lambda)
+        updated_agent, new_opt_state, metrics = ppo_update(
+            agent, optimizer, opt_state, batch, adv, ret, FAST_PPO_CONFIG, key
+        )
+        assert "policy_loss" in metrics
+        assert "value_loss" in metrics
+        assert "entropy" in metrics
+        assert "total_loss" in metrics
+        for k, v in metrics.items():
+            assert jnp.isfinite(v), f"Metric {k} is not finite: {v}"
 
-    def test_loss_decreases_over_updates(self):
-        """After 50 training iterations on locked noise, mean reward improves."""
-        # Train for 50 iterations
-        # Compare mean reward: last 10 iterations vs first 10
-        # Assert improvement (last > first, or at least not dramatically worse)
+    def test_update_changes_params(self, agent_and_opt):
+        """After one update, agent parameters must actually change."""
+        agent, optimizer, opt_state = agent_and_opt
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=FAST_PPO_CONFIG.n_envs,
+                                      n_steps=FAST_PPO_CONFIG.n_steps,
+                                      locked_regime=0)
+        adv, ret = compute_gae(batch, FAST_PPO_CONFIG.gamma, FAST_PPO_CONFIG.gae_lambda)
+        updated_agent, _, _ = ppo_update(
+            agent, optimizer, opt_state, batch, adv, ret, FAST_PPO_CONFIG, key
+        )
+        # Compare one weight tensor from trunk
+        old_w = eqx.filter(agent, eqx.is_array)
+        new_w = eqx.filter(updated_agent, eqx.is_array)
+        old_leaves = jax.tree_util.tree_leaves(old_w)
+        new_leaves = jax.tree_util.tree_leaves(new_w)
+        any_changed = any(
+            not jnp.allclose(o, n) for o, n in zip(old_leaves, new_leaves)
+        )
+        assert any_changed, "No parameters changed after PPO update"
 
-    def test_action_distribution_shifts(self):
-        """After training on noise, agent should prefer symmetric actions."""
-        # Evaluate trained agent, collect action counts
-        # Most common action should be roughly symmetric (bid ≈ ask)
+    def test_entropy_positive(self, agent_and_opt):
+        """Entropy metric should be positive (policy not fully deterministic)."""
+        agent, optimizer, opt_state = agent_and_opt
+        key = jax.random.PRNGKey(0)
+        batch = collect_rollout_batch(agent, SIM_CONFIG, key,
+                                      n_envs=FAST_PPO_CONFIG.n_envs,
+                                      n_steps=FAST_PPO_CONFIG.n_steps,
+                                      locked_regime=0)
+        adv, ret = compute_gae(batch, FAST_PPO_CONFIG.gamma, FAST_PPO_CONFIG.gae_lambda)
+        _, _, metrics = ppo_update(
+            agent, optimizer, opt_state, batch, adv, ret, FAST_PPO_CONFIG, key
+        )
+        assert float(metrics["entropy"]) > 0.0
+
+
+class TestTrainingImprovement:
+    def test_reward_improves_over_training(self):
+        """After 30 training iterations on locked noise, mean eval reward in last
+        10 iterations >= mean eval reward in first 10 iterations.
+        Uses small config to keep runtime under 30s.
+        """
+        import optax
+        key = jax.random.PRNGKey(42)
+        ppo_cfg = FAST_PPO_CONFIG  # n_envs=8, n_steps=64, n_epochs=2, n_minibatches=2
+        sim_cfg = SimConfig()
+
+        key, k0 = jax.random.split(key)
+        agent = PPOAgent(ppo_config=ppo_cfg, key=k0)
+        optimizer, opt_state = create_optimizer(ppo_cfg, agent)
+
+        eval_rewards = []
+        for i in range(30):
+            key, k_roll, k_upd, k_eval = jax.random.split(key, 4)
+            batch = collect_rollout_batch(agent, sim_cfg, k_roll,
+                                          n_envs=ppo_cfg.n_envs,
+                                          n_steps=ppo_cfg.n_steps,
+                                          locked_regime=0)
+            adv, ret = compute_gae(batch, ppo_cfg.gamma, ppo_cfg.gae_lambda)
+            agent, opt_state, _ = ppo_update(agent, optimizer, opt_state,
+                                              batch, adv, ret, ppo_cfg, k_upd)
+            stats = evaluate_agent(agent, sim_cfg, k_eval,
+                                    n_episodes=10, locked_regime=0)
+            eval_rewards.append(float(stats["mean_reward"]))
+
+        first_10 = sum(eval_rewards[:10]) / 10
+        last_10 = sum(eval_rewards[20:]) / 10
+        print(f"\nFirst 10 mean reward: {first_10:.4f}")
+        print(f"Last 10 mean reward:  {last_10:.4f}")
+        # Reward should improve or at least not collapse
+        # Allow 20% tolerance — PPO on 30 iterations may not fully converge
+        assert last_10 >= first_10 - abs(first_10) * 0.20, (
+            f"Reward regressed: {first_10:.4f} → {last_10:.4f}"
+        )
 ```
+
+---
 
 ## Success Criteria
 
-All tests pass: `pytest tests/test_phase6.py -v`. PPO trains and reward improves.
+All tests pass: `uv run pytest tests/test_phase6.py -v -s` shows all green.
+
+The `-s` flag will print rollout throughput and reward improvement numbers.
+
+Previous phases still pass:
+```
+uv run pytest tests/test_phase1.py tests/test_phase2.py tests/test_phase3.py tests/test_phase4.py tests/test_phase5.py -v
+```
 
 ---
 

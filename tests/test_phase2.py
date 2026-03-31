@@ -11,7 +11,7 @@ from lob_sim.obs import observe, obs_size
 from lob_sim.reward import compute_reward
 from lob_sim.step import make_step_fn, run_episode
 
-T = 2000  # steps for integration tests
+T = 1000  # steps for integration tests (must be <= SimConfig.max_steps)
 
 
 @pytest.fixture

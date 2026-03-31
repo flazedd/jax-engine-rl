@@ -60,15 +60,15 @@ class TestRegime:
 
 class TestActions:
     def test_table_shape(self):
-        """ACTION_TABLE has shape (25, 2)."""
-        assert ACTION_TABLE.shape == (25, 2)
+        """ACTION_TABLE has shape (N_ACTIONS, 2)."""
+        assert ACTION_TABLE.shape == (N_ACTIONS, 2)
 
     def test_table_contents(self):
-        """ACTION_TABLE[0] = [1,1], ACTION_TABLE[24] = [5,5]."""
+        """ACTION_TABLE[0] = [1,1], ACTION_TABLE[-1] = [5,5]."""
         assert int(ACTION_TABLE[0, 0]) == 1
         assert int(ACTION_TABLE[0, 1]) == 1
-        assert int(ACTION_TABLE[24, 0]) == 5
-        assert int(ACTION_TABLE[24, 1]) == 5
+        assert int(ACTION_TABLE[N_ACTIONS - 1, 0]) == 5
+        assert int(ACTION_TABLE[N_ACTIONS - 1, 1]) == 5
 
     def test_round_trip(self):
         """offsets_to_action_index(action_index_to_offsets(i)) == i for all i."""
@@ -83,7 +83,7 @@ class TestLockedRegime:
         """With locked_regime=0, regime is 0 for all T steps."""
         config = SimConfig()
         T = 500
-        actions = jnp.full((T,), 12, dtype=jnp.int32)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)
         _, outputs = run_episode(config, jax.random.PRNGKey(0), actions, locked_regime=NOISE)
         assert jnp.all(outputs['regime'] == NOISE)
 
@@ -91,7 +91,7 @@ class TestLockedRegime:
         """With locked_regime=1, regime is 1 for all T steps."""
         config = SimConfig()
         T = 500
-        actions = jnp.full((T,), 12, dtype=jnp.int32)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)
         _, outputs = run_episode(config, jax.random.PRNGKey(0), actions, locked_regime=BULL)
         assert jnp.all(outputs['regime'] == BULL)
 
@@ -99,7 +99,7 @@ class TestLockedRegime:
         """With locked_regime=-1, at least 2 different regimes appear over T=5000 steps."""
         config = SimConfig()
         T = 5000
-        actions = jnp.full((T,), 12, dtype=jnp.int32)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)
         _, outputs = run_episode(config, jax.random.PRNGKey(42), actions, locked_regime=-1)
         unique = jnp.unique(outputs['regime'])
         assert len(unique) >= 2, f"Only saw regimes: {unique}"
@@ -110,7 +110,7 @@ class TestRegimeEffectOnDynamics:
         """In locked bull regime, mean mid-price change > 0 over T=2000 steps."""
         config = SimConfig()
         T = 2000
-        actions = jnp.full((T,), 12, dtype=jnp.int32)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)
         _, outputs = run_episode(config, jax.random.PRNGKey(0), actions, locked_regime=BULL)
         assert float(outputs['mid_price'][-1]) > float(outputs['mid_price'][0])
 
@@ -118,7 +118,7 @@ class TestRegimeEffectOnDynamics:
         """In locked bear regime, mean mid-price change < 0 over T=2000 steps."""
         config = SimConfig()
         T = 2000
-        actions = jnp.full((T,), 12, dtype=jnp.int32)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)
         _, outputs = run_episode(config, jax.random.PRNGKey(0), actions, locked_regime=BEAR)
         assert float(outputs['mid_price'][-1]) < float(outputs['mid_price'][0])
 
@@ -126,7 +126,7 @@ class TestRegimeEffectOnDynamics:
         """In locked noise regime, abs(mid_prices[-1] - mid_prices[0]) < bull drift."""
         config = SimConfig()
         T = 2000
-        actions = jnp.full((T,), 12, dtype=jnp.int32)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)
 
         _, bull_out = run_episode(config, jax.random.PRNGKey(0), actions, locked_regime=BULL)
         bull_drift = abs(float(bull_out['mid_price'][-1]) - float(bull_out['mid_price'][0]))
@@ -160,7 +160,7 @@ class TestRegimeEffectOnDynamics:
         """run_episode works with scalar int32 actions."""
         config = SimConfig()
         T = 100
-        actions = jnp.full((T,), 12, dtype=jnp.int32)  # action 12 = (3,3)
+        actions = jnp.full((T,), 4, dtype=jnp.int32)  # action 4 = (3,3)
         final, outputs = run_episode(config, jax.random.PRNGKey(0), actions)
         assert final.step_count == T
         assert outputs['mid_price'].shape == (T,)

@@ -1,4 +1,5 @@
 """Quick PPO smoke test with diagnostics."""
+import argparse
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -8,6 +9,11 @@ from lob_sim.agents.ppo import PPOAgent, PPOConfig
 from lob_sim.training.rollout import collect_rollout, collect_rollout_batch
 from lob_sim.training.trainer import compute_gae, ppo_update, create_optimizer
 from lob_sim.training.eval import evaluate_agent
+
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--fast", action="store_true",
+                     help="Quick smoke test with minimal iterations")
+_args = _parser.parse_args()
 
 # --- First: diagnose reward components with a random agent ---
 sim_cfg = SimConfig()
@@ -44,8 +50,8 @@ print(f"Inv penalty:      mean={np.mean(penalty_per_step):.4f}/step  total={np.s
 print()
 
 # --- Now train ---
-N_ITER = 100
-EVAL_EVERY = 10
+N_ITER = 10 if _args.fast else 100
+EVAL_EVERY = 5 if _args.fast else 10
 
 print(f"Config: lr={ppo_cfg.lr} ent={ppo_cfg.entropy_coef} inv_pen={sim_cfg.inventory_penalty}")
 print(f"        max_inv={sim_cfg.max_inventory} max_steps={sim_cfg.max_steps} actions=9")

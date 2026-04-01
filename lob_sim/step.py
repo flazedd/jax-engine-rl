@@ -17,7 +17,7 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
 
     Returns step_fn(state, action) -> (new_state, output_dict)
     where action is either:
-        - scalar int32 (Phase 3+): index into ACTION_TABLE (0-24)
+        - scalar int32 (Phase 3+): index into ACTION_TABLE (0 to N_ACTIONS-1)
         - array shape (2,) (Phase 1-2): [bid_offset_ticks, ask_offset_ticks]
     """
     n = config.n_levels
@@ -177,10 +177,11 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
             rng_key=key,
         )
 
-        # Spread-capture reward with small inventory penalty to differentiate regimes.
+        # Spread capture + mark-to-market on existing inventory + inventory penalty.
         bid_edge = (bid_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
         ask_edge = (ask_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
-        reward = bid_fill * bid_edge + ask_fill * ask_edge - config.inventory_penalty * new_inventory ** 2
+        mtm = state.inventory * (mid2 - state.mid_price)
+        reward = bid_fill * bid_edge + ask_fill * ask_edge + mtm - config.inventory_penalty * new_inventory ** 2
 
         return new_state, {
             'reward': reward,

@@ -6,6 +6,21 @@
 - Run plot scripts: `uv run python scripts/plot_regimes.py`
 - Install deps: `uv sync`
 - Never call python or pytest directly — always prefix with `uv run`
+
+## Fast Validation (--fast flag)
+
+Every script that runs a long task (training, Monte Carlo evaluation) supports a `--fast` flag that drastically reduces iterations/episodes to quickly verify the code runs end-to-end without errors. Use `--fast` first to catch bugs early, then run the full version once confident.
+
+- `uv run python scripts/train.py --fast` — 10 iterations instead of 200
+- `uv run python scripts/analyze_ppo.py --fast` — 10 iterations instead of 300
+- `uv run python scripts/ppo_diagnostics.py --fast` — 10 iterations instead of 200
+- `uv run python scripts/plot_divergence.py --fast` — 10 episodes / 200 steps instead of 200 / 1000
+- `uv run python scripts/quick_ppo.py --fast` — 10 iterations instead of 100
+- `uv run python scripts/quick_regimes.py --fast` — 10 iterations instead of 150
+
+Scripts that are already fast (`plot_sanity.py`, `plot_regimes.py`) don't need `--fast`.
+
+**Convention for new scripts**: any script that takes >30 seconds should accept `--fast` to run in <10 seconds. Use Claude Code's fast mode (`/fast`) together with `--fast` flags when iterating on code changes — verify correctness quickly, then run full training.
 ```
 
 Then in your prompt:
@@ -36,6 +51,7 @@ These apply to every phase. Keep them in mind throughout:
 2. **`jnp.roll` wrap-around**: after rolling, values that wrap from the other end are stale. Always mask to zero: `jnp.where(jnp.arange(n) >= n - shift, 0.0, rolled)`.
 3. **No Python `if`/`for` inside JIT-traced functions**: use `jnp.where`, `lax.scan`, `lax.fori_loop`.
 4. **Division by zero guards**: use `jnp.where(denom > 0, num / denom, 0.0)`.
+5. **Action space is 3×3 (9 actions), not 5×5**: `BID_TICKS = [1,3,5]`, `ASK_TICKS = [1,3,5]`. Never hardcode 25 or 5×5. Always use `N_ACTIONS`, `len(BID_TICKS)`, `len(ASK_TICKS)` from `lob_sim.actions`.
 
 ---
 
@@ -67,7 +83,7 @@ lob_sim/
 ├── background.py       # generate_background_flow()
 ├── obs.py              # observe() → flat array
 ├── reward.py           # compute_reward()
-├── actions.py          # Discrete action table (25 actions)
+├── actions.py          # Discrete action table (3x3 = 9 actions)
 ├── step.py             # make_step_fn(), run_episode()
 ├── agents/
 │   ├── __init__.py
@@ -131,23 +147,23 @@ A `typing.NamedTuple` with all hyperparameters:
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `n_levels` | int | 100 | Price levels each side of mid |
-| `tick_size` | float | 0.01 | Price increment per level |
-| `limit_order_rate` | float | 0.5 | Base arrival rate per level per step |
+| `tick_size` | float | 0.02 | Price increment per level |
+| `limit_order_rate` | float | 0.25 | Base arrival rate per level per step |
 | `limit_order_size` | float | 1.0 | Fixed size of background limit orders |
-| `market_buy_prob` | float | 0.15 | Probability of market buy per step |
-| `market_sell_prob` | float | 0.15 | Probability of market sell per step |
+| `market_buy_prob` | float | 0.20 | Probability of market buy per step |
+| `market_sell_prob` | float | 0.20 | Probability of market sell per step |
 | `market_order_size_min` | float | 1.0 | Market order size lower bound |
-| `market_order_size_max` | float | 5.0 | Market order size upper bound |
-| `cancel_prob` | float | 0.02 | Per-level cancellation probability per step |
+| `market_order_size_max` | float | 8.0 | Market order size upper bound |
+| `cancel_prob` | float | 0.10 | Per-level cancellation probability per step |
 | `depth_decay` | float | 0.05 | Exponential decay of arrival rate with depth |
 | `price_drift` | float | 0.0 | Drift added to mid-price per step |
 | `volatility_scale` | float | 1.0 | Multiplier on market order sizes |
 | `agent_order_size` | float | 1.0 | Size of agent's limit orders |
-| `max_inventory` | int | 50 | Absolute inventory limit |
-| `inventory_penalty` | float | 0.001 | Lambda for inventory² penalty |
-| `max_steps` | int | 5000 | Maximum episode length |
-| `initial_volume_per_level` | float | 5.0 | Starting volume at best level |
-| `initial_spread_ticks` | int | 2 | Initial spread in ticks |
+| `max_inventory` | int | 20 | Absolute inventory limit |
+| `inventory_penalty` | float | 0.0002 | Lambda for inventory² penalty |
+| `max_steps` | int | 1000 | Maximum episode length |
+| `initial_volume_per_level` | float | 1.5 | Starting volume at best level |
+| `initial_spread_ticks` | int | 4 | Initial spread in ticks |
 
 ### `state.py` — OrderBookState
 
@@ -323,6 +339,16 @@ value(s) = s.cash + s.inventory * s.mid_price
 reward = value(next) - value(prev) - config.inventory_penalty * next.inventory²
 ```
 
+**Note**: `step.py` uses a more granular reward computed inline:
+```
+bid_edge = (bid_level + half_spread_ticks) * tick_size
+ask_edge = (ask_level + half_spread_ticks) * tick_size
+mtm = inventory_before * (mid_price_after - mid_price_before)
+reward = bid_fill * bid_edge + ask_fill * ask_edge + mtm - inventory_penalty * new_inventory²
+```
+The mark-to-market (`mtm`) term is critical — it makes the reward sensitive to price drift,
+causing different regimes to have different optimal actions (bull→(1,5), bear→(5,1), noise→(1,1)).
+
 ### `step.py`
 
 **`make_step_fn(config) → step_fn`** where `step_fn(state, action) → (state, output_dict)`.
@@ -448,7 +474,7 @@ All tests pass: `pytest tests/test_phase2.py -v` shows all green. Then visually 
 
 ## Scope
 
-Add the HMM regime system and the 5×5 discrete action table. Refactor background flow to be regime-conditioned. Add locked-regime mode.
+Add the HMM regime system and the 3×3 discrete action table. Refactor background flow to be regime-conditioned. Add locked-regime mode.
 
 ## Files to Create/Modify
 
@@ -476,12 +502,12 @@ Per-regime parameter arrays (each shape `(3,)` indexed by regime):
 
 | Parameter | Noise | Bull | Bear |
 |---|---|---|---|
-| `market_buy_prob` | 0.15 | 0.25 | 0.08 |
-| `market_sell_prob` | 0.15 | 0.08 | 0.25 |
-| `price_drift` | 0.0 | +0.002 | -0.002 |
+| `market_buy_prob` | 0.15 | 0.30 | 0.05 |
+| `market_sell_prob` | 0.15 | 0.05 | 0.30 |
+| `price_drift` | 0.0 | +0.003 | -0.003 |
 | `volatility_scale` | 1.0 | 1.3 | 1.3 |
-| `cancel_prob` | 0.02 | 0.04 | 0.04 |
-| `limit_order_rate` | 0.5 | 0.4 | 0.4 |
+| `cancel_prob` | 0.10 | 0.12 | 0.12 |
+| `limit_order_rate` | 0.25 | 0.20 | 0.20 |
 
 `RegimeStepParams` NamedTuple with these 6 fields.
 `transition_regime(current, rng_key) → new_regime` via `jax.random.choice`.
@@ -489,15 +515,15 @@ Per-regime parameter arrays (each shape `(3,)` indexed by regime):
 
 ### `actions.py`
 
-`BID_TICKS = [1,2,3,4,5]`, `ASK_TICKS = [1,2,3,4,5]` → 25 actions.
-`ACTION_TABLE = jnp.array(list(itertools.product(...)))` shape `(25, 2)`.
-`N_ACTIONS = 25`.
+`BID_TICKS = [1,3,5]`, `ASK_TICKS = [1,3,5]` → 9 actions.
+`ACTION_TABLE = jnp.array(list(itertools.product(...)))` shape `(9, 2)`.
+`N_ACTIONS = 9`.
 Helper functions: `action_index_to_offsets(idx)`, `offsets_to_action_index(bid, ask)`.
 
 ### Modifications to `step.py`
 
 - `make_step_fn(config, locked_regime=-1)` — locked_regime is closed over
-- Action is now scalar int32 (index 0–24), looked up via `ACTION_TABLE[action]`
+- Action is now scalar int32 (index 0–N_ACTIONS-1), looked up via `ACTION_TABLE[action]`
 - Step 1: transition regime, apply `locked_regime` override via `jnp.where`, get regime params
 - Step 2: apply `mid_price += regime_params.price_drift`
 - Background flow receives `regime_params` instead of config for varying params
@@ -533,7 +559,7 @@ class TestRegime:
         """get_regime_params(NOISE) returns market_buy_prob=0.15."""
 
     def test_get_regime_params_bull(self):
-        """get_regime_params(BULL) returns market_buy_prob=0.25, market_sell_prob=0.08."""
+        """get_regime_params(BULL) returns market_buy_prob=0.30, market_sell_prob=0.05."""
 
     def test_jit_compatible(self):
         """transition_regime and get_regime_params work under jit."""
@@ -541,10 +567,10 @@ class TestRegime:
 
 class TestActions:
     def test_table_shape(self):
-        """ACTION_TABLE has shape (25, 2)."""
+        """ACTION_TABLE has shape (9, 2)."""
 
     def test_table_contents(self):
-        """ACTION_TABLE[0] = [1,1], ACTION_TABLE[24] = [5,5]."""
+        """ACTION_TABLE[0] = [1,1], ACTION_TABLE[8] = [5,5]."""
 
     def test_round_trip(self):
         """offsets_to_action_index(action_index_to_offsets(i)) == i for all i."""
@@ -613,7 +639,7 @@ Monte Carlo evaluation proving that different regimes have different optimal act
 
 ## Specification
 
-For each of 25 actions × 3 regimes: run N=200 episodes of T=1000 steps (locked regime, fixed action). Use `jax.vmap` over episodes.
+For each of N_ACTIONS (9) actions × 3 regimes: run N=200 episodes of T=1000 steps (locked regime, fixed action). Use `jax.vmap` over episodes.
 
 ```python
 keys = jax.random.split(master_key, N)
@@ -642,7 +668,7 @@ T_STEPS = 500     # reduced from 1000 for test speed
 
 @pytest.fixture(scope="module")
 def reward_matrix():
-    """Compute the (25, 3) reward matrix once for all tests.
+    """Compute the (N_ACTIONS, 3) reward matrix once for all tests.
     reward_matrix[action_idx, regime_idx] = mean total reward.
     """
     # ... compute and return
@@ -650,7 +676,7 @@ def reward_matrix():
 class TestPolicyDivergence:
     def test_completes_in_reasonable_time(self, reward_matrix):
         """The full evaluation should complete (this test just checks it ran)."""
-        assert reward_matrix.shape == (25, 3)
+        assert reward_matrix.shape == (N_ACTIONS, 3)
 
     def test_optimal_actions_differ(self, reward_matrix):
         """Optimal action (argmax) is different for each regime."""
@@ -705,7 +731,7 @@ class TestPolicyDivergence:
 ## Plot File: `scripts/plot_divergence.py`
 
 Runs the full N=200, T=1000 evaluation. Generates `plots/divergence.png`:
-1. Three 5×5 heatmaps (shared color scale)
+1. Three 3×3 heatmaps (shared color scale)
 2. Prints optimal action per regime
 3. Cross-regime penalty table
 4. Cohen's d effect sizes
@@ -854,6 +880,7 @@ class AgentState(typing.NamedTuple):
     hidden: jnp.ndarray   # shape (hidden_size,) — zeros for PPO, shape (128,) for RL2
     prev_action: jnp.ndarray   # scalar int32 — previous action taken
     prev_reward: jnp.ndarray   # scalar float32 — previous reward received
+    prev_done: jnp.ndarray = jnp.float32(0.0)  # scalar float32 — whether previous step was terminal
 
 class RolloutBatch(typing.NamedTuple):
     """One batch of experience collected by collect_rollout()."""
@@ -950,7 +977,7 @@ class GRUCell(eqx.Module):
 | `n_epochs` | int | 4 | PPO epochs per update |
 | `n_minibatches` | int | 4 | Minibatches per epoch |
 | `n_envs` | int | 64 | Parallel environments |
-| `n_steps` | int | 128 | Steps per rollout per env |
+| `n_steps` | int | 256 | Steps per rollout per env |
 | `hidden_size` | int | 0 | Dummy — PPO is stateless |
 
 **`PPOAgent(eqx.Module)`**:
@@ -958,7 +985,7 @@ class GRUCell(eqx.Module):
 Architecture:
 ```
 obs (33,) → MLP([64, 64]) → trunk_out (64,)
-trunk_out → Linear(64, 25) → policy_logits (25,)  [actor head]
+trunk_out → Linear(64, N_ACTIONS) → policy_logits (N_ACTIONS,)  [actor head]
 trunk_out → Linear(64, 1)  → value (1,)            [critic head]
 ```
 
@@ -968,7 +995,7 @@ Implement as two separate heads on a shared trunk. The trunk and both heads are
 ```python
 class PPOAgent(eqx.Module):
     trunk: MLP           # in=33, hidden=[64,64], out=64
-    policy_head: eqx.nn.Linear   # 64 → 25
+    policy_head: eqx.nn.Linear   # 64 → N_ACTIONS
     value_head: eqx.nn.Linear    # 64 → 1
     ppo_config: PPOConfig = eqx.field(static=True)
 
@@ -1024,11 +1051,12 @@ class StepOutput(typing.NamedTuple):
     done: jnp.ndarray       # scalar bool
 ```
 
-**`collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1)`**:
+**`collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1, meta_episode=False)`**:
 
 ```python
-def collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1):
+def collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1, meta_episode=False):
     """Collect n_steps of experience from a single environment.
+    If meta_episode=True, reset sim on done but keep agent hidden state.
     Returns (final_carry, StepOutput) where StepOutput has leading dim n_steps.
     """
     step_fn = make_step_fn(sim_config, locked_regime=locked_regime)
@@ -1078,16 +1106,16 @@ def collect_rollout(agent, sim_config, rng_key, n_steps, locked_regime=-1):
     return final_carry, trajectory, last_value
 ```
 
-**`collect_rollout_batch(agent, sim_config, rng_key, n_envs, n_steps, locked_regime=-1)`**:
+**`collect_rollout_batch(agent, sim_config, rng_key, n_envs, n_steps, locked_regime=-1, meta_episode=False)`**:
 
 ```python
-def collect_rollout_batch(agent, sim_config, rng_key, n_envs, n_steps, locked_regime=-1):
+def collect_rollout_batch(agent, sim_config, rng_key, n_envs, n_steps, locked_regime=-1, meta_episode=False):
     """vmap collect_rollout over n_envs independent environments.
     Returns RolloutBatch with shapes (n_envs, n_steps, ...).
     """
     keys = jax.random.split(rng_key, n_envs)
     vmapped = jax.vmap(
-        lambda k: collect_rollout(agent, sim_config, k, n_steps, locked_regime)
+        lambda k: collect_rollout(agent, sim_config, k, n_steps, locked_regime, meta_episode)
     )
     _, trajectories, last_values = vmapped(keys)
 
@@ -1181,6 +1209,11 @@ def create_optimizer(ppo_config, agent):
     opt_state = optimizer.init(eqx.filter(agent, eqx.is_array))
     return optimizer, opt_state
 ```
+
+**`rl2_ppo_update(agent, optimizer, opt_state, batch, advantages, returns, config, rng_key)`**:
+
+PPO update variant for RL² — processes trajectories sequentially through GRU (minibatches
+are over environments, not shuffled across time). Same return signature as `ppo_update`.
 
 ---
 
@@ -1278,7 +1311,7 @@ from lob_sim.training.eval import evaluate_agent
 FAST_PPO_CONFIG = PPOConfig(
     lr=3e-4, gamma=0.99, gae_lambda=0.95, clip_eps=0.2,
     entropy_coef=0.01, value_coef=0.5, max_grad_norm=0.5,
-    n_epochs=2, n_minibatches=2, n_envs=8, n_steps=64, hidden_size=0,
+    n_epochs=2, n_minibatches=2, n_envs=16, n_steps=128, hidden_size=0,
 )
 SIM_CONFIG = SimConfig()
 
@@ -1610,8 +1643,8 @@ Add the RL² recurrent baseline. GRU hidden state carries across the entire meta
 ## Specification
 
 ```
-[obs (33,) ; prev_action (25,) one-hot ; prev_reward (1,)] → GRU (hidden=128) → hidden
-hidden → policy_head (25,) / value_head (1,)
+[obs (33,) ; prev_action (N_ACTIONS,) one-hot ; prev_reward (1,)] → GRU (hidden=128) → hidden
+hidden → policy_head (N_ACTIONS,) / value_head (1,)
 ```
 
 `RL2AgentState`: GRU hidden `(128,)`, prev_action `int32`, prev_reward `float32`.
@@ -1634,7 +1667,7 @@ class TestRL2Agent:
         # Call get_action twice with same obs, verify hidden states differ
 
     def test_input_includes_prev_action_reward(self):
-        """GRU input is [obs, prev_action_onehot, prev_reward] = dim 33+25+1 = 59."""
+        """GRU input is [obs, prev_action_onehot, prev_reward, prev_done] = dim 33+N_ACTIONS+1+1."""
 
     def test_jit_compatible(self):
         """get_action compiles under jit."""
@@ -1691,7 +1724,7 @@ Implement VariBAD (Zintgraf et al., 2020): VAE encoder-decoder with belief-condi
 
 ### Policy
 
-`[obs (33,) ; μ (5,) ; σ (5,)] → MLP [64, 64] → policy_head (25,) / value_head (1,)`
+`[obs (33,) ; μ (5,) ; σ (5,)] → MLP [64, 64] → policy_head (N_ACTIONS,) / value_head (1,)`
 
 ### Training
 

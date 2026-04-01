@@ -127,5 +127,12 @@ def analyze(agent, sim_cfg, reward_history, entropy_history):
 
 
 if __name__ == "__main__":
-    agent, sim_cfg, rh, eh = train(n_iterations=300)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fast", action="store_true",
+                        help="Quick smoke test with minimal iterations")
+    args = parser.parse_args()
+
+    n_iters = 10 if args.fast else 300
+    agent, sim_cfg, rh, eh = train(n_iterations=n_iters)
     analyze(agent, sim_cfg, rh, eh)

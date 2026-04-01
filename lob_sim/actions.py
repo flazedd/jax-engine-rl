@@ -1,4 +1,4 @@
-"""Discrete action table — 5x5 grid of (bid_ticks, ask_ticks)."""
+"""Discrete action table — grid of (bid_ticks, ask_ticks)."""
 import itertools
 
 import jax.numpy as jnp

@@ -20,7 +20,12 @@ def main():
     parser.add_argument("--regime", default="noise", choices=list(REGIME_MAP.keys()))
     parser.add_argument("--n_iterations", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fast", action="store_true",
+                        help="Quick smoke test with minimal iterations")
     args = parser.parse_args()
+
+    if args.fast:
+        args.n_iterations = 10
 
     locked_regime = REGIME_MAP[args.regime]
     key = jax.random.PRNGKey(args.seed)

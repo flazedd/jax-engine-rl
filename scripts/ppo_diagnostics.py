@@ -25,6 +25,12 @@ from lob_sim.training.rollout import collect_rollout_batch
 from lob_sim.training.trainer import compute_gae, ppo_update, create_optimizer
 from lob_sim.training.eval import evaluate_agent
 
+import argparse
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--fast", action="store_true",
+                     help="Quick smoke test with minimal iterations")
+_args = _parser.parse_args()
+
 os.makedirs("plots", exist_ok=True)
 
 REGIME_NAMES = ["NOISE", "BULL", "BEAR"]
@@ -36,9 +42,9 @@ PPO_CFG = PPOConfig(
     n_epochs=4, n_minibatches=4, n_envs=16, n_steps=128,
 )
 SIM_CFG = SimConfig()
-N_ITERS = 200
-EVAL_EVERY = 10
-N_EVAL_EPISODES = 30
+N_ITERS = 10 if _args.fast else 200
+EVAL_EVERY = 5 if _args.fast else 10
+N_EVAL_EPISODES = 5 if _args.fast else 30
 
 
 def collect_eval_actions(agent, sim_config, rng_key, n_episodes, locked_regime):

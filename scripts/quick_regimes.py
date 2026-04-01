@@ -9,8 +9,14 @@ from lob_sim.agents.ppo import PPOAgent, PPOConfig
 from lob_sim.training.rollout import collect_rollout, collect_rollout_batch
 from lob_sim.training.trainer import compute_gae, ppo_update, create_optimizer
 
+import argparse
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--fast", action="store_true",
+                     help="Quick smoke test with minimal iterations")
+_args = _parser.parse_args()
+
 REGIME_NAMES = ["noise", "bull", "bear"]
-N_ITER = 150
+N_ITER = 10 if _args.fast else 150
 sim_cfg = SimConfig()
 ppo_cfg = PPOConfig(n_envs=16, n_steps=128)
 

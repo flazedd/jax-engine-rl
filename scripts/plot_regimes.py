@@ -9,14 +9,21 @@ from lob_sim.config import SimConfig
 from lob_sim.regime import NOISE, BULL, BEAR
 from lob_sim.step import run_episode
 
+from plot_style import (apply_style, save_fig,
+                        NOISE_COLOR, BULL_COLOR, BEAR_COLOR)
+
+apply_style()
+
 T = 2000
 NAMES = {NOISE: "Noise", BULL: "Bull", BEAR: "Bear"}
-COLORS = {NOISE: "gray", BULL: "green", BEAR: "red"}
+COLORS = {NOISE: NOISE_COLOR, BULL: BULL_COLOR, BEAR: BEAR_COLOR}
 
 
 def main():
-    config = SimConfig()
-    actions = jnp.full((T,), 12, dtype=jnp.int32)
+    # Raise max_inventory and max_steps so episodes don't terminate early,
+    # and use action 4 = (3,3) symmetric — a valid index.
+    config = SimConfig(max_inventory=999, max_steps=T)
+    actions = jnp.full((T,), 4, dtype=jnp.int32)  # (3,3) symmetric
     key = jax.random.PRNGKey(0)
 
     results = {}
@@ -74,12 +81,8 @@ def main():
     ax.set_ylabel("Avg Volume")
     ax.legend(fontsize=7)
 
-    plot_dir = os.path.join(os.path.dirname(__file__), "..", "plots")
-    os.makedirs(plot_dir, exist_ok=True)
-    out_path = os.path.join(plot_dir, "regimes.png")
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
-    print(f"Saved {out_path}")
+    fig.tight_layout()
+    save_fig(fig, "regimes.png", script_file=__file__)
 
 
 if __name__ == "__main__":

@@ -16,8 +16,11 @@ from lob_sim.config import SimConfig
 from lob_sim.regime import N_REGIMES
 from lob_sim.step import run_episode
 
-N_BID = len(BID_TICKS)
-N_ASK = len(ASK_TICKS)
+from plot_style import (apply_style, action_heatmap, mark_optimal,
+                        save_fig, REGIME_NAMES as _RNAMES,
+                        N_BID, N_ASK)
+
+apply_style()
 
 _parser = argparse.ArgumentParser()
 _parser.add_argument("--fast", action="store_true",
@@ -28,7 +31,7 @@ N_EPISODES = 10 if _args.fast else 200
 T_STEPS = 200 if _args.fast else 1000
 N_SEEDS = 2 if _args.fast else 3
 N_BOOTSTRAP = 100 if _args.fast else 1000
-REGIME_NAMES = ["Noise", "Bull", "Bear"]
+REGIME_NAMES = list(_RNAMES)
 
 
 def compute_episode_rewards(config, action_idx, regime_idx, master_key, n_episodes):
@@ -165,52 +168,42 @@ def main():
               f"gap = {gap:.2f}, SE = {se:.2f} ({ratio:.1f}% of gap)")
 
     # ── Step 6: Heatmaps ──
-    plot_dir = os.path.join(os.path.dirname(__file__), "..", "plots")
-    os.makedirs(plot_dir, exist_ok=True)
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     reshaped = mean_matrix.reshape(N_BID, N_ASK, N_REGIMES)
-
+    se_reshaped = se_matrix.reshape(N_BID, N_ASK, N_REGIMES)
     vmin = mean_matrix.min()
     vmax = mean_matrix.max()
 
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     for r in range(N_REGIMES):
         ax = axes[r]
-        im = ax.imshow(reshaped[:, :, r], cmap="RdYlGn", vmin=vmin, vmax=vmax,
-                       origin="lower", aspect="equal")
-        ax.set_title(f"{REGIME_NAMES[r]} Regime")
-        ax.set_xlabel("Ask Ticks")
-        ax.set_ylabel("Bid Ticks")
-        ax.set_xticks(range(N_ASK))
-        ax.set_xticklabels(ASK_TICKS)
-        ax.set_yticks(range(N_BID))
-        ax.set_yticklabels(BID_TICKS)
-
-        # Annotate cells with mean ± SE
-        se_reshaped = se_matrix.reshape(N_BID, N_ASK, N_REGIMES)
-        for i in range(N_BID):
-            for j in range(N_ASK):
-                val = reshaped[i, j, r]
-                se = se_reshaped[i, j, r]
-                ax.text(j, i, f"{val:.0f}±{se:.0f}", ha="center", va="center",
-                        fontsize=8, color="black")
-
-        # Mark optimal
-        opt = mean_matrix[:, r].argmax()
-        opt_bid = opt // N_ASK
-        opt_ask = opt % N_ASK
-        ax.add_patch(plt.Rectangle(
-            (opt_ask - 0.5, opt_bid - 0.5), 1, 1,
-            fill=False, edgecolor="blue", linewidth=3
-        ))
+        im = action_heatmap(ax, reshaped[:, :, r],
+                            f"{REGIME_NAMES[r]} Regime",
+                            kind="reward", vmin=vmin, vmax=vmax,
+                            se_matrix=se_reshaped[:, :, r])
+        mark_optimal(ax, int(mean_matrix[:, r].argmax()), origin="lower")
 
     fig.suptitle(f"Policy Divergence: Mean Reward by Action & Regime "
-                 f"(N={N_EPISODES}, T={T_STEPS}, {N_SEEDS} seeds)", fontsize=13)
+                 f"(N={N_EPISODES}, T={T_STEPS}, {N_SEEDS} seeds)")
     fig.tight_layout(rect=[0, 0, 0.92, 0.95])
     cbar_ax = fig.add_axes([0.93, 0.15, 0.02, 0.7])
     fig.colorbar(im, cax=cbar_ax, label="Mean Total Reward")
-    out_path = os.path.join(plot_dir, "divergence.png")
-    plt.savefig(out_path, dpi=150)
-    print(f"\nSaved {out_path}")
+    save_fig(fig, "divergence.png", script_file=__file__)
+
+    # Save MC optimal actions for use by train.py
+    import json
+    mc_optimal = {
+        "optimal_actions": [int(mean_matrix[:, r].argmax()) for r in range(N_REGIMES)],
+        "regime_names": REGIME_NAMES[:N_REGIMES],
+        "n_episodes": N_EPISODES,
+        "t_steps": T_STEPS,
+        "n_seeds": N_SEEDS,
+    }
+    _plot_dir = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "plots"))
+    opt_path = os.path.join(_plot_dir, "mc_optimal.json")
+    with open(opt_path, "w") as f:
+        json.dump(mc_optimal, f, indent=2)
+    print(f">>> Saved {opt_path}")
 
 
 if __name__ == "__main__":

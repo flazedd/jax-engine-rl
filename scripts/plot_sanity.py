@@ -24,6 +24,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lob_sim.config import SimConfig
 from lob_sim.step import run_episode
 
+from plot_style import apply_style, save_fig
+apply_style()
+
 
 def main():
     config = SimConfig()
@@ -82,7 +85,7 @@ def main():
     axes[1, 1].imshow(combined.T, aspect="auto", cmap="hot", origin="lower")
     axes[1, 1].set_title("LOB Depth Heatmap")
     axes[1, 1].set_xlabel("Step")
-    axes[1, 1].set_ylabel("Level (bid ← | → ask)")
+    axes[1, 1].set_ylabel("Level (bid | ask)")
 
     # 5. Inventory
     axes[2, 0].plot(inv, linewidth=0.5)
@@ -94,11 +97,9 @@ def main():
     axes[2, 1].set_title("Cumulative Reward")
     axes[2, 1].set_xlabel("Step")
 
-    plt.tight_layout()
-    out_path = os.path.join(plot_dir, "sanity.png")
-    plt.savefig(out_path, dpi=150)
+    fig.tight_layout()
+    save_fig(fig, "sanity.png", script_file=__file__)
     plt.close()
-    print(f"Saved {out_path}")
 
     # Summary stats
     print(f"Price range: {float(jnp.min(mid)):.4f} – {float(jnp.max(mid)):.4f}")

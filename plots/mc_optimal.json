@@ -1,0 +1,15 @@
+{
+  "optimal_actions": [
+    0,
+    2,
+    6
+  ],
+  "regime_names": [
+    "Noise",
+    "Bull",
+    "Bear"
+  ],
+  "n_episodes": 200,
+  "t_steps": 1000,
+  "n_seeds": 3
+}

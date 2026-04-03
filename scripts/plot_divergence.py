@@ -193,6 +193,7 @@ def main():
     import json
     mc_optimal = {
         "optimal_actions": [int(mean_matrix[:, r].argmax()) for r in range(N_REGIMES)],
+        "optimal_mean_rewards": [float(mean_matrix[:, r].max()) for r in range(N_REGIMES)],
         "regime_names": REGIME_NAMES[:N_REGIMES],
         "n_episodes": N_EPISODES,
         "t_steps": T_STEPS,

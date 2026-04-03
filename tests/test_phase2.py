@@ -130,15 +130,18 @@ class TestStepFunction:
         # With no background flow and no fills, volume should be unchanged
         assert abs(vol2 - init_vol) < 1.0
 
-    def test_done_on_max_inventory(self, config, key):
-        """Done flag triggers when abs(inventory) >= max_inventory."""
+    def test_inventory_clamped_at_max(self, config, key):
+        """Inventory is clamped to [-max_inventory, +max_inventory], no termination."""
         state = init_state(config, key)
-        # Set inventory just at the limit
+        # Set inventory at the limit
         state = state._replace(inventory=jnp.float32(float(config.max_inventory)))
         step_fn = make_step_fn(config)
         action = jnp.array([3.0, 3.0])
         new_state, _ = step_fn(state, action)
-        assert bool(new_state.done)
+        # Episode continues (not done) and inventory stays clamped
+        assert not bool(new_state.done)
+        assert float(new_state.inventory) <= config.max_inventory
+        assert float(new_state.inventory) >= -config.max_inventory
 
 
 # ---------- Run Episode ----------

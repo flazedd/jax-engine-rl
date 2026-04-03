@@ -21,6 +21,8 @@ def compute_gae(batch: RolloutBatch, gamma: float, gae_lambda: float):
     """
     n_envs, n_steps = batch.rewards.shape
 
+    rewards = batch.rewards
+
     # Build next_values: shift values by 1, use last_value for final step
     next_values = jnp.concatenate(
         [batch.values[:, 1:], batch.last_value[:, None]], axis=1
@@ -34,7 +36,7 @@ def compute_gae(batch: RolloutBatch, gamma: float, gae_lambda: float):
 
     # Reverse: process from T-1 down to 0
     # We need to reverse the time dimension, scan, then reverse back
-    rewards_rev = jnp.flip(batch.rewards, axis=1)
+    rewards_rev = jnp.flip(rewards, axis=1)
     values_rev = jnp.flip(batch.values, axis=1)
     next_values_rev = jnp.flip(next_values, axis=1)
     dones_rev = jnp.flip(batch.dones, axis=1)

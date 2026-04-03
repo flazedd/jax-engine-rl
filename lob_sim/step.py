@@ -156,13 +156,12 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
         bid_price = state.mid_price - (bid_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
         ask_price = state.mid_price + (ask_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
 
-        new_inventory = state.inventory + bid_fill - ask_fill
+        new_inventory = jnp.clip(state.inventory + bid_fill - ask_fill,
+                                 -config.max_inventory, config.max_inventory)
         new_cash = state.cash - bid_fill * bid_price + ask_fill * ask_price
         new_step = state.step_count + 1
 
-        done = (jnp.abs(new_inventory) >= config.max_inventory) | (
-            new_step >= config.max_steps
-        )
+        done = new_step >= config.max_steps
 
         new_state = OrderBookState(
             bid_volumes=new_bids,

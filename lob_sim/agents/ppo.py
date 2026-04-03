@@ -14,12 +14,12 @@ class PPOConfig(NamedTuple):
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
     entropy_coef: float = 0.01
-    value_coef: float = 0.5
+    value_coef: float = 1.0
     max_grad_norm: float = 0.5
     n_epochs: int = 4
     n_minibatches: int = 4
-    n_envs: int = 64
-    n_steps: int = 256
+    n_envs: int = 16
+    n_steps: int = 128
     hidden_size: int = 0
 
 

@@ -124,10 +124,12 @@ for regime_name in regimes_to_plot:
                   color=MIXED_COLOR, linewidth=2, label=f"{agent_upper}")
     ax_train.axhline(vi_reward, color=VI_COLOR, linestyle="--", alpha=0.7,
                      label=f"VI oracle ({vi_reward:.1f})")
+    n_vi_eval = vi_eval["n_eval"]
+    vi_reward_sem = vi_reward_std / np.sqrt(n_vi_eval)
     iters = training["iters"]
     ax_train.fill_between(iters,
-                          vi_reward - vi_reward_std, vi_reward + vi_reward_std,
-                          color=VI_COLOR, alpha=0.12)
+                          vi_reward - vi_reward_sem, vi_reward + vi_reward_sem,
+                          color=VI_COLOR, alpha=0.15)
     ax_train.set_xlabel("Training iteration")
     ax_train.set_ylabel("Mean eval reward")
     ax_train.set_title("Learning Curve")

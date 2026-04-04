@@ -7,7 +7,6 @@ from lob_sim.state import OrderBookState, init_state
 from lob_sim.matching import fill_market_buy, fill_market_sell
 from lob_sim.background import generate_background_flow
 from lob_sim.obs import observe
-from lob_sim.reward import compute_reward
 from lob_sim.regime import transition_regime, get_regime_params
 from lob_sim.actions import ACTION_TABLE
 
@@ -176,11 +175,11 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
             rng_key=key,
         )
 
-        # Spread capture + mark-to-market on existing inventory + inventory penalty.
+        # Spread capture + mark-to-market on existing inventory
         bid_edge = (bid_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
         ask_edge = (ask_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
         mtm = state.inventory * (mid2 - state.mid_price)
-        reward = bid_fill * bid_edge + ask_fill * ask_edge + mtm - config.inventory_penalty * new_inventory ** 2
+        reward = bid_fill * bid_edge + ask_fill * ask_edge + mtm
 
         return new_state, {
             'reward': reward,

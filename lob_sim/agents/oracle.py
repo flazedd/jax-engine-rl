@@ -73,41 +73,26 @@ def evaluate_oracle(sim_config: SimConfig, rng_key, n_episodes=50,
 
 # ── VI oracle (inventory-aware) ─────────────────────────────────
 
-def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
-                      n_mc_episodes=100):
-    """Compute optimal mixed-regime policy via value iteration.
+def _mc_estimate(sim_config, rng_key, n_mc_episodes):
+    """Collect per-(regime, action) MC statistics for VI.
 
-    State space: (regime, inventory) where inventory is discretised to
-    integers in [-max_inv, +max_inv].
+    Reward = spread_capture + inventory * Δmid (no penalty term).
+    We decompose into inventory-independent spread capture and Δmid,
+    then reconstruct R[r, i, a] = sc[r,a] + i * Δmid[r,a].
 
-    Uses analytical reward decomposition to avoid sparse inventory binning:
-      R(r, inv, a) = E[sc|r,a] + inv*E[Δmid|r,a]
-                     - penalty*(inv² + 2*inv*E[Δinv|r,a] + E[Δinv²|r,a])
-    where sc (spread capture), Δmid, Δinv are inventory-independent,
-    so all MC samples per (regime, action) can be pooled.
-
-    Returns (policy, values):
-      policy : int array (N_REGIMES, n_inv) — optimal action per state
-      values : float array (N_REGIMES, n_inv) — state values
+    Returns (reward_table, trans_probs) that can be reused across different
+    transition matrices.
     """
     max_inv = sim_config.max_inventory
     n_inv = 2 * max_inv + 1
     n_steps = sim_config.max_steps
-    penalty = sim_config.inventory_penalty
 
-    # Per (regime, action) statistics — pooled across all inventory levels
-    mean_sc = np.zeros((N_REGIMES, N_ACTIONS))      # spread capture
-    mean_dmid = np.zeros((N_REGIMES, N_ACTIONS))     # mid price change
-    mean_dinv = np.zeros((N_REGIMES, N_ACTIONS))     # inventory change
-    mean_dinv2 = np.zeros((N_REGIMES, N_ACTIONS))    # squared inv change
-    # Δinv distribution for transition probabilities
-    # Δinv is typically small: -1, 0, or +1 (agent_order_size=1)
-    # but could be fractional fills; we'll bin integer Δinv
-    max_dinv = 3  # allow Δinv in [-3, +3]
+    mean_sc = np.zeros((N_REGIMES, N_ACTIONS))
+    mean_dmid = np.zeros((N_REGIMES, N_ACTIONS))
+    max_dinv = 3
     n_dinv = 2 * max_dinv + 1
     dinv_hist = np.zeros((N_REGIMES, N_ACTIONS, n_dinv))
 
-    # ── Step 1: MC estimation with analytical decomposition ──
     print("    MC estimation ", end="", flush=True)
     for regime in range(N_REGIMES):
         rng_key, k_regime = jax.random.split(rng_key)
@@ -122,34 +107,27 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
             actions_arr = jnp.full(n_steps, action_idx, dtype=jnp.int32)
             _, outputs = vmapped(keys, actions_arr)
 
-            inv = np.array(outputs["inventory"])     # (n_ep, n_steps)
-            rew = np.array(outputs["reward"])         # (n_ep, n_steps)
-            mid = np.array(outputs["mid_price"])      # (n_ep, n_steps)
-            done = np.array(outputs["done"])           # (n_ep, n_steps)
+            inv = np.array(outputs["inventory"])
+            rew = np.array(outputs["reward"])
+            mid = np.array(outputs["mid_price"])
+            done = np.array(outputs["done"])
 
-            # inv_before[t] and mid_before[t] = state entering step t
             inv_before = np.concatenate(
                 [np.zeros((n_mc_episodes, 1)), inv[:, :-1]], axis=1)
             mid_before = np.concatenate(
                 [np.full((n_mc_episodes, 1), 100.0), mid[:, :-1]], axis=1)
 
-            # Valid = not done AND not at inventory boundary (where
-            # clamping distorts Δinv, making it inventory-dependent)
             was_done = np.concatenate(
                 [np.zeros((n_mc_episodes, 1), dtype=bool), done[:, :-1]],
                 axis=1)
             unclamped = np.abs(inv_before) < max_inv
             valid = ~was_done & unclamped
 
-            # Compute per-step quantities (inventory-independent components)
-            d_inv = inv - inv_before                   # Δinv per step
-            d_mid = mid - mid_before                   # Δmid per step
-            new_inv = inv                              # inventory after step
-            # spread_capture = reward + penalty*new_inv² - inv_before*Δmid
-            # (undo the mtm and penalty terms to isolate spread capture)
-            sc = rew + penalty * new_inv**2 - inv_before * d_mid
+            d_inv = inv - inv_before
+            d_mid = mid - mid_before
+            # Extract spread capture: reward - inventory * Δmid
+            sc = rew - inv_before * d_mid
 
-            # Pool all valid samples
             v_sc = sc[valid]
             v_dmid = d_mid[valid]
             v_dinv = d_inv[valid]
@@ -158,10 +136,7 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
             if n_valid > 0:
                 mean_sc[regime, action_idx] = np.mean(v_sc)
                 mean_dmid[regime, action_idx] = np.mean(v_dmid)
-                mean_dinv[regime, action_idx] = np.mean(v_dinv)
-                mean_dinv2[regime, action_idx] = np.mean(v_dinv**2)
 
-                # Bin Δinv into integer buckets for transition probabilities
                 dinv_rounded = np.clip(np.round(v_dinv).astype(int),
                                        -max_dinv, max_dinv)
                 for d in range(-max_dinv, max_dinv + 1):
@@ -172,32 +147,17 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
             print(".", end="", flush=True)
     print(" done", flush=True)
 
-    # ── Build reward and transition tables analytically ──
-    inv_grid = np.arange(n_inv) - max_inv  # [-max_inv, ..., +max_inv]
+    # ── Build reward and transition tables ──
+    inv_grid = np.arange(n_inv) - max_inv
 
-    # R(r, inv, a) = E[sc|r,a] + inv*E[Δmid|r,a]
-    #   - penalty * E[clip(inv+Δinv_raw, -max, +max)²|r,a]
-    # The penalty term depends on inventory due to clamping, so we compute
-    # it explicitly using the Δinv distribution.
     reward_table = np.zeros((N_REGIMES, n_inv, N_ACTIONS))
     for r in range(N_REGIMES):
         for a in range(N_ACTIONS):
-            sc = mean_sc[r, a]
-            dm = mean_dmid[r, a]
             for i_idx in range(n_inv):
-                inv = inv_grid[i_idx]
-                # E[clip(inv + Δinv, -max, max)²] from Δinv distribution
-                expected_clipped_inv2 = 0.0
-                for d in range(-max_dinv, max_dinv + 1):
-                    prob = dinv_hist[r, a, d + max_dinv]
-                    if prob > 0:
-                        new_inv = np.clip(inv + d, -max_inv, max_inv)
-                        expected_clipped_inv2 += prob * new_inv**2
                 reward_table[r, i_idx, a] = (
-                    sc + inv * dm - penalty * expected_clipped_inv2
+                    mean_sc[r, a] + inv_grid[i_idx] * mean_dmid[r, a]
                 )
 
-    # T[r, i, a, i'] = P(Δinv = i' - i | r, a)
     trans_probs = np.zeros((N_REGIMES, n_inv, N_ACTIONS, n_inv))
     for r in range(N_REGIMES):
         for a in range(N_ACTIONS):
@@ -209,17 +169,29 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
                         if 0 <= j < n_inv:
                             trans_probs[r, i, a, j] += prob
                         else:
-                            # Clip: stay at boundary
                             trans_probs[r, i, a, np.clip(j, 0, n_inv - 1)] += prob
 
-    # ── Step 2: Value iteration ──
-    # Regime transitions BEFORE step dynamics (step.py:73-76), so reward
-    # and inventory transition depend on the NEW regime r', not current r.
-    # Bellman: Q(r,i,a) = sum_{r'} P(r'|r) * [R(r',i,a) + gamma * sum_{i'} P(i'|r',i,a) * V(r',i')]
-    print("    Value iteration ... ", end="", flush=True)
-    tm = np.array(TRANSITION_MATRIX)
+    return reward_table, trans_probs
+
+
+def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99):
+    """Run value iteration given pre-computed reward/transition tables.
+
+    Args:
+        reward_table: (N_REGIMES, n_inv, N_ACTIONS)
+        trans_probs: (N_REGIMES, n_inv, N_ACTIONS, n_inv)
+        transition_matrix: (N_REGIMES, N_REGIMES) — row-stochastic
+        gamma: discount factor
+
+    Returns (policy, values, info) where info contains convergence data.
+    """
+    n_inv = reward_table.shape[1]
+    tm = np.array(transition_matrix)
+
     V = np.zeros((N_REGIMES, n_inv))
     policy = np.zeros((N_REGIMES, n_inv), dtype=int)
+    deltas = []
+    policy_stable_since = 0
 
     for iteration in range(2000):
         Q = np.zeros((N_ACTIONS, N_REGIMES, n_inv))
@@ -228,8 +200,8 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
             for r in range(N_REGIMES):
                 q_ri = np.zeros(n_inv)
                 for rp in range(N_REGIMES):
-                    R = reward_table[rp, :, a]         # (n_inv,)
-                    T = trans_probs[rp, :, a, :]       # (n_inv, n_inv)
+                    R = reward_table[rp, :, a]
+                    T = trans_probs[rp, :, a, :]
                     q_ri += tm[r, rp] * (R + gamma * (T @ V[rp]))
                 Q[a, r] = q_ri
 
@@ -237,23 +209,102 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
         new_policy = np.argmax(Q, axis=0)
 
         delta = np.max(np.abs(V_new - V))
+        deltas.append(float(delta))
+
+        if not np.array_equal(new_policy, policy):
+            policy_stable_since = iteration
+
         if delta < 1e-6:
-            print(f"converged at iteration {iteration}", flush=True)
+            print(f"converged at iteration {iteration} "
+                  f"(policy stable since {policy_stable_since})", flush=True)
             break
         V = V_new
         policy = new_policy
     else:
         print(f"max iterations (delta={delta:.2e})", flush=True)
 
-    return policy, V
+    # Compute Bellman residual for final policy as sanity check
+    bellman_residual = np.zeros((N_REGIMES, n_inv))
+    for r in range(N_REGIMES):
+        for i in range(n_inv):
+            a = policy[r, i]
+            q = 0.0
+            for rp in range(N_REGIMES):
+                R = reward_table[rp, i, a]
+                future = gamma * np.dot(trans_probs[rp, i, a, :], V[rp])
+                q += tm[r, rp] * (R + future)
+            bellman_residual[r, i] = abs(q - V[r, i])
+
+    info = {
+        "n_iterations": min(iteration + 1, 2000),
+        "final_delta": deltas[-1],
+        "policy_stable_since": policy_stable_since,
+        "max_bellman_residual": float(np.max(bellman_residual)),
+        "deltas": deltas,
+    }
+
+    return policy, V, info
+
+
+def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
+                      n_mc_episodes=100, transition_matrix=None):
+    """Compute optimal policy via value iteration over (regime, inventory).
+
+    Args:
+        transition_matrix: optional override. Defaults to TRANSITION_MATRIX.
+            Use np.eye(N_REGIMES) for isolated-regime policies.
+
+    Returns (policy, values):
+      policy : int array (N_REGIMES, n_inv) — optimal action per state
+      values : float array (N_REGIMES, n_inv) — state values
+    """
+    if transition_matrix is None:
+        transition_matrix = TRANSITION_MATRIX
+
+    reward_table, trans_probs = _mc_estimate(sim_config, rng_key,
+                                             n_mc_episodes)
+
+    print("    Value iteration ... ", end="", flush=True)
+    policy, V, info = _value_iteration(reward_table, trans_probs,
+                                       transition_matrix, gamma)
+    return policy, V, info
+
+
+def compute_vi_isolated_and_mixed(sim_config: SimConfig, rng_key, gamma=0.99,
+                                  n_mc_episodes=100):
+    """Compute both isolated-regime and mixed-regime VI policies.
+
+    Shares MC samples across both, so this is cheaper than calling
+    compute_vi_policy twice.
+
+    Returns:
+        isolated: (policy, values) with np.eye(3) transition matrix
+        mixed: (policy, values) with TRANSITION_MATRIX
+    """
+    reward_table, trans_probs = _mc_estimate(sim_config, rng_key,
+                                             n_mc_episodes)
+
+    print("    VI (isolated regimes) ... ", end="", flush=True)
+    iso_policy, iso_values, iso_info = _value_iteration(
+        reward_table, trans_probs, np.eye(N_REGIMES), gamma)
+
+    print("    VI (mixed regimes) ... ", end="", flush=True)
+    mix_policy, mix_values, mix_info = _value_iteration(
+        reward_table, trans_probs, TRANSITION_MATRIX, gamma)
+
+    return (iso_policy, iso_values, iso_info), (mix_policy, mix_values, mix_info)
+
+
+def _plots_path(filename):
+    return os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "..", "plots", filename))
 
 
 def save_vi_policy(policy, values, path=None):
     """Save VI policy and values to JSON."""
     if path is None:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "..", "..", "plots", "vi_optimal.json")
-        path = os.path.normpath(path)
+        path = _plots_path("vi_optimal.json")
     data = {
         "policy": policy.tolist(),
         "values": values.tolist(),
@@ -264,12 +315,33 @@ def save_vi_policy(policy, values, path=None):
     print(f"    Saved VI policy to {path}")
 
 
+def save_vi_isolated(policy, values, path=None):
+    """Save isolated-regime VI policy and values to JSON."""
+    if path is None:
+        path = _plots_path("vi_isolated.json")
+    data = {
+        "policy": policy.tolist(),
+        "values": values.tolist(),
+        "max_inventory": (policy.shape[1] - 1) // 2,
+    }
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"    Saved isolated VI policy to {path}")
+
+
 def load_vi_policy(path=None):
     """Load VI policy from JSON. Returns (policy, values) as numpy arrays."""
     if path is None:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "..", "..", "plots", "vi_optimal.json")
-        path = os.path.normpath(path)
+        path = _plots_path("vi_optimal.json")
+    with open(path) as f:
+        data = json.load(f)
+    return np.array(data["policy"], dtype=int), np.array(data["values"])
+
+
+def load_vi_isolated(path=None):
+    """Load isolated-regime VI policy. Returns (policy, values) as numpy arrays."""
+    if path is None:
+        path = _plots_path("vi_isolated.json")
     with open(path) as f:
         data = json.load(f)
     return np.array(data["policy"], dtype=int), np.array(data["values"])
@@ -295,19 +367,25 @@ def print_vi_policy(policy, max_inv=20):
 
 
 def evaluate_vi_oracle(sim_config: SimConfig, rng_key, policy,
-                       n_episodes=100):
-    """Evaluate the VI-optimal oracle on mixed (free-transition) regimes.
+                       n_episodes=100, locked_regime=-1,
+                       return_trajectories=False):
+    """Evaluate the VI-optimal oracle.
 
     At each step the oracle reads the true regime and current inventory
     to look up the optimal action from the VI policy table.
 
-    Returns dict: 'mean_reward', 'std_reward', 'mean_episode_length', 'rewards'
+    If return_trajectories=True, also returns per-step rewards and actions
+    for cumulative reward curves and action-inventory analysis.
+
+    Returns dict: 'mean_reward', 'std_reward', 'mean_episode_length',
+                  'rewards', and optionally 'step_rewards', 'step_actions',
+                  'step_inventories', 'step_mask'.
     """
     max_inv = sim_config.max_inventory
     n_inv = 2 * max_inv + 1
     n_steps = sim_config.max_steps
 
-    step_fn = make_step_fn(sim_config, locked_regime=-1)
+    step_fn = make_step_fn(sim_config, locked_regime=locked_regime)
     policy_jax = jnp.array(policy, dtype=jnp.int32)
 
     def run_one(key):
@@ -316,26 +394,40 @@ def evaluate_vi_oracle(sim_config: SimConfig, rng_key, policy,
 
         def step(carry, _):
             sim_state, total_reward, ep_len = carry
+            was_live = ~sim_state.done
             inv_idx = jnp.clip(
                 jnp.round(sim_state.inventory).astype(jnp.int32) + max_inv,
                 0, n_inv - 1)
             action = policy_jax[sim_state.regime, inv_idx]
             new_state, out = step_fn(sim_state, action)
-            total_reward = total_reward + out["reward"]
+            reward = out["reward"]
+            total_reward = total_reward + reward
             ep_len = ep_len + jnp.where(sim_state.done, 0, 1)
-            return (new_state, total_reward, ep_len), None
+            return (new_state, total_reward, ep_len), (reward, action,
+                                                        sim_state.inventory,
+                                                        was_live)
 
         init_carry = (sim_state, jnp.float32(0.0), jnp.int32(0))
-        (_, total_reward, ep_len), _ = jax.lax.scan(
+        (_, total_reward, ep_len), step_data = jax.lax.scan(
             step, init_carry, None, length=n_steps)
-        return total_reward, ep_len
+        return total_reward, ep_len, step_data
 
     keys = jax.random.split(rng_key, n_episodes)
-    rewards, lengths = jax.vmap(run_one)(keys)
+    rewards, lengths, step_data = jax.vmap(run_one)(keys)
+    # step_data: each element is (n_episodes, n_steps)
 
-    return {
+    result = {
         "mean_reward": jnp.mean(rewards),
         "std_reward": jnp.std(rewards),
         "mean_episode_length": jnp.mean(lengths.astype(jnp.float32)),
         "rewards": rewards,
     }
+
+    if return_trajectories:
+        step_rewards, step_actions, step_inventories, step_mask = step_data
+        result["step_rewards"] = step_rewards
+        result["step_actions"] = step_actions
+        result["step_inventories"] = step_inventories
+        result["step_mask"] = step_mask
+
+    return result

@@ -17,7 +17,7 @@ class SimConfig(NamedTuple):
     volatility_scale: float = 1.0
     agent_order_size: float = 1.0
     max_inventory: int = 20
-    inventory_penalty: float = 0.0002
+    inventory_penalty: float = 0.0
     max_steps: int = 1000
     initial_volume_per_level: float = 1.5
     initial_spread_ticks: int = 4

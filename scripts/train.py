@@ -273,7 +273,7 @@ if MC_OPTIMAL is not None:
         ORACLE_REWARDS["mixed"] = float(stats_mix["mean_reward"])
         print(f"    Mixed (myopic):  {ORACLE_REWARDS['mixed']:.2f}")
 
-        # VI oracle: load precomputed policy from plots/vi_optimal.json
+        # VI oracle: load precomputed policy from results/vi_optimal.json
         # (run scripts/compute_vi_oracle.py to generate)
         try:
             VI_POLICY, _ = load_vi_policy()

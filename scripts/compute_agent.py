@@ -7,7 +7,7 @@ Usage:
     uv run python scripts/compute_agent.py --agent varibad --regime mixed
 
 Saves per regime:
-    plots/{agent}_{regime}.json — action-inventory histogram, rewards, training curve
+    results/{agent}_{regime}.json — action-inventory histogram, rewards, training curve
 """
 import argparse
 import json
@@ -31,8 +31,8 @@ from lob_sim.training.trainer import compute_gae, create_optimizer, ppo_update
 
 REGIME_NAMES = ["noise", "bull", "bear"]
 REGIME_MAP = {"noise": 0, "bull": 1, "bear": 2, "mixed": -1}
-PLOTS_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "plots"))
+RESULTS_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "results"))
 
 
 # ── CLI ──────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ for regime_name in regimes_to_run:
 
     # Save
     filename = f"{args.agent}_{regime_name}.json"
-    path = os.path.join(PLOTS_DIR, filename)
+    path = os.path.join(RESULTS_DIR, filename)
     with open(path, "w") as f:
         json.dump(result, f, indent=2)
     print(f"\n  Saved {path}")

@@ -21,9 +21,9 @@ from lob_sim.step import make_step_fn, run_episode
 # ── Myopic oracle (existing) ────────────────────────────────────
 
 def load_mc_optimal() -> list[int]:
-    """Load MC optimal actions from plots/mc_optimal.json."""
+    """Load MC optimal actions from results/mc_optimal.json."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "..", "..", "plots", "mc_optimal.json")
+                        "..", "..", "results", "mc_optimal.json")
     path = os.path.normpath(path)
     with open(path) as f:
         data = json.load(f)
@@ -174,7 +174,8 @@ def _mc_estimate(sim_config, rng_key, n_mc_episodes):
     return reward_table, trans_probs
 
 
-def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99):
+def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99,
+                     verbose=True):
     """Run value iteration given pre-computed reward/transition tables.
 
     Args:
@@ -182,6 +183,7 @@ def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99):
         trans_probs: (N_REGIMES, n_inv, N_ACTIONS, n_inv)
         transition_matrix: (N_REGIMES, N_REGIMES) — row-stochastic
         gamma: discount factor
+        verbose: print convergence info
 
     Returns (policy, values, info) where info contains convergence data.
     """
@@ -215,13 +217,15 @@ def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99):
             policy_stable_since = iteration
 
         if delta < 1e-6:
-            print(f"converged at iteration {iteration} "
-                  f"(policy stable since {policy_stable_since})", flush=True)
+            if verbose:
+                print(f"converged at iteration {iteration} "
+                      f"(policy stable since {policy_stable_since})", flush=True)
             break
         V = V_new
         policy = new_policy
     else:
-        print(f"max iterations (delta={delta:.2e})", flush=True)
+        if verbose:
+            print(f"max iterations (delta={delta:.2e})", flush=True)
 
     # Compute Bellman residual for final policy as sanity check
     bellman_residual = np.zeros((N_REGIMES, n_inv))
@@ -271,19 +275,80 @@ def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
 
 
 def compute_vi_isolated_and_mixed(sim_config: SimConfig, rng_key, gamma=0.99,
-                                  n_mc_episodes=100):
+                                  n_mc_episodes=100, max_doublings=4):
     """Compute both isolated-regime and mixed-regime VI policies.
 
-    Shares MC samples across both, so this is cheaper than calling
-    compute_vi_policy twice.
+    Verifies MC convergence: runs estimation with two independent seeds
+    and checks that policies agree. If not, doubles n_mc and retries
+    (up to max_doublings times).
 
     Returns:
-        isolated: (policy, values) with np.eye(3) transition matrix
-        mixed: (policy, values) with TRANSITION_MATRIX
+        isolated: (policy, values, info) with np.eye(3) transition matrix
+        mixed: (policy, values, info) with TRANSITION_MATRIX
     """
-    reward_table, trans_probs = _mc_estimate(sim_config, rng_key,
-                                             n_mc_episodes)
+    n_mc = n_mc_episodes
+    max_inv = sim_config.max_inventory
 
+    # Display range for convergence reporting (skip boundary)
+    display_lo = 5
+    display_hi = 2 * max_inv + 1 - 5
+
+    for attempt in range(max_doublings + 1):
+        k1, k2, rng_key = jax.random.split(rng_key, 3)
+
+        print(f"\n  MC convergence check (n_mc={n_mc}, attempt {attempt+1})")
+
+        print(f"    Seed A:")
+        rt_a, tp_a = _mc_estimate(sim_config, k1, n_mc)
+        print(f"    Seed B:")
+        rt_b, tp_b = _mc_estimate(sim_config, k2, n_mc)
+
+        # Average the two estimates for the final tables
+        reward_table = (rt_a + rt_b) / 2
+        trans_probs = (tp_a + tp_b) / 2
+
+        # Compute policies from each seed independently
+        iso_a, _, _ = _value_iteration(rt_a, tp_a, np.eye(N_REGIMES), gamma,
+                                       verbose=False)
+        iso_b, _, _ = _value_iteration(rt_b, tp_b, np.eye(N_REGIMES), gamma,
+                                       verbose=False)
+        mix_a, _, _ = _value_iteration(rt_a, tp_a, TRANSITION_MATRIX, gamma,
+                                       verbose=False)
+        mix_b, _, _ = _value_iteration(rt_b, tp_b, TRANSITION_MATRIX, gamma,
+                                       verbose=False)
+
+        # Check agreement in display range (skip boundary artifacts)
+        n_cells = iso_a[:, display_lo:display_hi].size
+        # Allow up to max_disagree cells to differ — these are at transition
+        # points where two actions have near-identical Q-values.
+        max_disagree = max(1, n_cells // 30)  # ~3% tolerance
+
+        iso_diff = int(np.sum(iso_a[:, display_lo:display_hi]
+                              != iso_b[:, display_lo:display_hi]))
+        mix_diff = int(np.sum(mix_a[:, display_lo:display_hi]
+                              != mix_b[:, display_lo:display_hi]))
+
+        iso_ok = iso_diff <= max_disagree
+        mix_ok = mix_diff <= max_disagree
+
+        print(f"    Isolated policy: {n_cells - iso_diff}/{n_cells} agree "
+              f"({'CONVERGED' if iso_ok else f'{iso_diff} differ'})")
+        print(f"    Mixed policy:    {n_cells - mix_diff}/{n_cells} agree "
+              f"({'CONVERGED' if mix_ok else f'{mix_diff} differ'})")
+        print(f"    (tolerance: {max_disagree} cells)")
+
+        if iso_ok and mix_ok:
+            break
+
+        if attempt < max_doublings:
+            n_mc *= 2
+            print(f"    Doubling to n_mc={n_mc}...")
+        else:
+            print(f"    WARNING: MC not fully converged after {max_doublings} "
+                  f"doublings (n_mc={n_mc}). Using averaged estimates.")
+
+    # Final VI from averaged tables
+    print(f"\n    Final VI from averaged MC estimates (n_mc={n_mc} × 2 seeds):")
     print("    VI (isolated regimes) ... ", end="", flush=True)
     iso_policy, iso_values, iso_info = _value_iteration(
         reward_table, trans_probs, np.eye(N_REGIMES), gamma)
@@ -292,19 +357,27 @@ def compute_vi_isolated_and_mixed(sim_config: SimConfig, rng_key, gamma=0.99,
     mix_policy, mix_values, mix_info = _value_iteration(
         reward_table, trans_probs, TRANSITION_MATRIX, gamma)
 
+    # Store MC convergence metadata
+    iso_info["n_mc_final"] = n_mc
+    iso_info["mc_converged"] = bool(iso_ok)
+    iso_info["mc_seed_disagreements"] = iso_diff
+    mix_info["n_mc_final"] = n_mc
+    mix_info["mc_converged"] = bool(mix_ok)
+    mix_info["mc_seed_disagreements"] = mix_diff
+
     return (iso_policy, iso_values, iso_info), (mix_policy, mix_values, mix_info)
 
 
-def _plots_path(filename):
+def _results_path(filename):
     return os.path.normpath(os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "..", "..", "plots", filename))
+        "..", "..", "results", filename))
 
 
 def save_vi_policy(policy, values, path=None):
     """Save VI policy and values to JSON."""
     if path is None:
-        path = _plots_path("vi_optimal.json")
+        path = _results_path("vi_optimal.json")
     data = {
         "policy": policy.tolist(),
         "values": values.tolist(),
@@ -318,7 +391,7 @@ def save_vi_policy(policy, values, path=None):
 def save_vi_isolated(policy, values, path=None):
     """Save isolated-regime VI policy and values to JSON."""
     if path is None:
-        path = _plots_path("vi_isolated.json")
+        path = _results_path("vi_isolated.json")
     data = {
         "policy": policy.tolist(),
         "values": values.tolist(),
@@ -332,7 +405,7 @@ def save_vi_isolated(policy, values, path=None):
 def load_vi_policy(path=None):
     """Load VI policy from JSON. Returns (policy, values) as numpy arrays."""
     if path is None:
-        path = _plots_path("vi_optimal.json")
+        path = _results_path("vi_optimal.json")
     with open(path) as f:
         data = json.load(f)
     return np.array(data["policy"], dtype=int), np.array(data["values"])
@@ -341,7 +414,7 @@ def load_vi_policy(path=None):
 def load_vi_isolated(path=None):
     """Load isolated-regime VI policy. Returns (policy, values) as numpy arrays."""
     if path is None:
-        path = _plots_path("vi_isolated.json")
+        path = _results_path("vi_isolated.json")
     with open(path) as f:
         data = json.load(f)
     return np.array(data["policy"], dtype=int), np.array(data["values"])

@@ -4,9 +4,9 @@ Usage:
     uv run python scripts/plot_vi.py
 
 Reads:
-    plots/vi_isolated.json
-    plots/vi_optimal.json
-    plots/vi_eval.json
+    results/vi_isolated.json
+    results/vi_optimal.json
+    results/vi_eval.json
 
 Saves:
     plots/vi_comparison.png  — 6-panel policy grid (isolated vs mixed)
@@ -24,12 +24,12 @@ from matplotlib.colors import ListedColormap
 from lob_sim.actions import ACTION_TABLE, N_ACTIONS
 from plot_style import apply_style, save_fig, REGIME_NAMES, REGIME_COLORS
 
-PLOTS_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "plots"))
+RESULTS_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "results"))
 
 
 def _load(filename):
-    with open(os.path.join(PLOTS_DIR, filename)) as f:
+    with open(os.path.join(RESULTS_DIR, filename)) as f:
         return json.load(f)
 
 
@@ -121,14 +121,62 @@ for ax, data, label in [(ax_iso, iso_data, "Isolated"),
 plt.tight_layout()
 save_fig(fig2, "vi_convergence.png", script_file=__file__)
 
+# ── Plot 3: Cumulative reward trajectories ──
+iso_traj = eval_data["isolated_trajectories"]
+mix_traj = eval_data["mixed_trajectories"]
+mix_vi_traj = eval_data["mixed_vi"]
+n_eval = eval_data["n_eval"]
+
+fig3, axes3 = plt.subplots(1, 4, figsize=(20, 5))
+fig3.suptitle("VI Oracle — Cumulative Reward Trajectories",
+              fontsize=14, fontweight="bold")
+
+# Panels 1-3: per locked regime (isolated VI)
+for r, name in enumerate(["Noise", "Bull", "Bear"]):
+    ax = axes3[r]
+    color = REGIME_COLORS[r]
+
+    iso = iso_traj[name]
+    iso_mean = np.array(iso["cumulative_reward_mean"])
+    iso_sem = np.array(iso["cumulative_reward_std"]) / np.sqrt(n_eval)
+    steps = np.arange(len(iso_mean))
+
+    ax.plot(steps, iso_mean, color=color, linewidth=1.5, label="Isolated VI")
+    ax.fill_between(steps, iso_mean - iso_sem, iso_mean + iso_sem,
+                    color=color, alpha=0.2)
+
+    ax.set_title(f"{name} (locked)")
+    ax.set_xlabel("Step")
+    if r == 0:
+        ax.set_ylabel("Cumulative reward")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+
+# Panel 4: mixed VI on unlocked (switching) regimes
+ax = axes3[3]
+if "cumulative_reward_mean" in mix_vi_traj:
+    mv_mean = np.array(mix_vi_traj["cumulative_reward_mean"])
+    mv_sem = np.array(mix_vi_traj["cumulative_reward_std"]) / np.sqrt(n_eval)
+    steps = np.arange(len(mv_mean))
+    ax.plot(steps, mv_mean, color="#7B1FA2", linewidth=1.5, label="Mixed VI")
+    ax.fill_between(steps, mv_mean - mv_sem, mv_mean + mv_sem,
+                    color="#7B1FA2", alpha=0.2)
+    ax.set_title("Mixed (switching)")
+    ax.set_xlabel("Step")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+else:
+    ax.set_visible(False)
+
+plt.tight_layout()
+save_fig(fig3, "vi_trajectories.png", script_file=__file__)
+
 # ── Print eval summary ──
 print("\nEvaluation summary (from vi_eval.json):")
-print(f"  Mixed VI oracle:  {eval_data['mixed_vi']['mean_reward']:.2f} "
-      f"(std={eval_data['mixed_vi']['std_reward']:.2f})")
-print(f"  Myopic oracle:    {eval_data['myopic']['mean_reward']:.2f} "
-      f"(std={eval_data['myopic']['std_reward']:.2f})")
+print(f"  Mixed VI oracle:  {mix_vi_traj['mean_reward']:.2f} "
+      f"(std={mix_vi_traj['std_reward']:.2f})")
 for name, stats in eval_data["per_regime"].items():
-    print(f"  {name:>5s} locked: VI={stats['vi_mean']:.2f}, "
-          f"Myopic={stats['myopic_mean']:.2f}")
+    print(f"  {name:>5s} locked: VI={stats['vi_mean']:.2f} "
+          f"(std={stats['vi_std']:.2f})")
 
 print("\nDone.")

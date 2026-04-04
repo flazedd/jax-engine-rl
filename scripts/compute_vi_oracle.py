@@ -4,8 +4,8 @@ Run once (or when SimConfig/regime params change):
     uv run python scripts/compute_vi_oracle.py [--fast]
 
 Saves:
-    plots/vi_isolated.json  — optimal policy per regime in isolation
-    plots/vi_optimal.json   — optimal policy under regime switching
+    results/vi_isolated.json  — optimal policy per regime in isolation
+    results/vi_optimal.json   — optimal policy under regime switching
 """
 import argparse
 import json
@@ -34,8 +34,8 @@ n_eval = 50 if args.fast else 200
 seed_vi = 999
 seed_eval = 888
 
-PLOTS_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "plots"))
+RESULTS_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "results"))
 
 # ── Print parameters ──
 print("=" * 60)
@@ -94,9 +94,13 @@ AGENT_EVAL_SEED = 42  # must match compute_agent.py --seed default
 
 print(f"\nEvaluating VI policies ({n_eval} episodes each, trajectories=True)...")
 
-# Mixed VI on mixed regimes
+# Mixed VI on mixed regimes (unlocked, with trajectories)
 mix_stats = evaluate_vi_oracle(SIM_CFG, jax.random.PRNGKey(seed_eval),
-                               mix_policy, n_episodes=n_eval)
+                               mix_policy, n_episodes=n_eval,
+                               return_trajectories=True)
+mix_step_rewards = np.array(mix_stats["step_rewards"])
+mix_step_mask = np.array(mix_stats["step_mask"])
+mix_cum = np.cumsum(mix_step_rewards * mix_step_mask, axis=1)
 print(f"  Mixed VI oracle:  mean={mix_stats['mean_reward']:.2f} "
       f"(std={mix_stats['std_reward']:.2f})")
 
@@ -151,7 +155,7 @@ for r in range(3):
 
 # ── Save everything ──
 def _save(filename, data):
-    path = os.path.join(PLOTS_DIR, filename)
+    path = os.path.join(RESULTS_DIR, filename)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
     print(f"  Saved {path}")
@@ -177,6 +181,9 @@ _save("vi_eval.json", {
     "mixed_vi": {
         "mean_reward": float(mix_stats["mean_reward"]),
         "std_reward": float(mix_stats["std_reward"]),
+        "cumulative_reward_mean": mix_cum.mean(axis=0).tolist(),
+        "cumulative_reward_std": mix_cum.std(axis=0).tolist(),
+        "episode_rewards": np.array(mix_stats["rewards"]).tolist(),
     },
     "per_regime": per_regime_eval,
     "isolated_trajectories": vi_trajectories,

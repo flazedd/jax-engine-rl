@@ -3,8 +3,8 @@ import itertools
 
 import jax.numpy as jnp
 
-BID_TICKS = [1, 3, 5]
-ASK_TICKS = [1, 3, 5]
+BID_TICKS = [1, 5, 9]
+ASK_TICKS = [1, 5, 9]
 
 ACTION_TABLE = jnp.array(list(itertools.product(BID_TICKS, ASK_TICKS)))
 N_ACTIONS = len(ACTION_TABLE)  # 9

@@ -4,7 +4,14 @@ version = "0.2.0"
 description = "Analytical market making MDP with HMM regime switching"
 readme = "README.md"
 requires-python = "==3.12.*"
-dependencies = ["numpy", "matplotlib", "pytest"]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pytest",
+    "jax",
+    "equinox",
+    "optax",
+]
 
 [build-system]
 requires = ["hatchling"]

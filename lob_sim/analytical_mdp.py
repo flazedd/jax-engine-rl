@@ -9,8 +9,8 @@ State: (regime, inventory)
 
 Actions: discrete (bid_offset, ask_offset) tick pairs
   - Action 0: (2,2) tight symmetric — best spread capture (total offset 4)
-  - Action 1: (1,7) aggressive long — strong directional (total offset 8)
-  - Action 2: (7,1) aggressive short — strong directional (total offset 8)
+  - Action 1: (1,9) aggressive long — strong directional (total offset 10)
+  - Action 2: (9,1) aggressive short — strong directional (total offset 10)
 
 a0 has a lower total offset → genuinely better spread capture. Directional
 actions sacrifice spread for inventory flow. This creates a wide "a0 zone"
@@ -44,9 +44,9 @@ BEAR = 2
 N_REGIMES = 3
 
 TRANSITION_MATRIX = np.array([
-    [0.92, 0.04, 0.04],   # NOISE → ...
-    [0.05, 0.90, 0.05],   # BULL  → ...
-    [0.05, 0.05, 0.90],   # BEAR  → ...
+    [0.98, 0.01, 0.01],   # NOISE → ...
+    [0.01, 0.98, 0.01],   # BULL  → ...
+    [0.01, 0.01, 0.98],   # BEAR  → ...
 ])
 
 
@@ -56,8 +56,8 @@ TRANSITION_MATRIX = np.array([
 
 ACTION_TABLE_ANALYTICAL = np.array([
     [2, 2],   # tight symmetric — best spread capture
-    [1, 7],   # aggressive long — strong directional (bull)
-    [7, 1],   # aggressive short — strong directional (bear)
+    [1, 9],   # aggressive long — strong directional (bull)
+    [9, 1],   # aggressive short — strong directional (bear)
 ])
 N_ACTIONS_ANALYTICAL = len(ACTION_TABLE_ANALYTICAL)
 
@@ -74,11 +74,14 @@ class MDPConfig(NamedTuple):
     meaningfully differ across regimes.
 
     Three actions: tight symmetric (2,2) with total offset 4, and
-    aggressive directional (1,7)/(7,1) with total offset 8. The lower
+    aggressive directional (1,9)/(9,1) with total offset 10. The lower
     total offset gives a0 genuinely better spread capture, creating a
-    wide "a0 zone" in Noise. Subtle fill asymmetry (~1.7x ratio) makes
-    the regime hard to observe, while large drift (±0.40) makes playing
-    the wrong action very costly → ~30% value-of-information gap.
+    wide "a0 zone" in Noise. Moderate fill asymmetry (~3.3x ratio) lets
+    the POMDP agent learn the regime over ~10 steps. Persistent regimes
+    (98% self-transition, ~50 step duration) give time to exploit.
+    Large drift (±1.0) makes playing a0 in trending regimes costly.
+    The POMDP earns ~0.41/step more than regime-blind — an RL agent
+    should aim to match or approach the POMDP trajectory.
     """
     max_inv: int = 10
     tick_size: float = 0.05
@@ -87,11 +90,11 @@ class MDPConfig(NamedTuple):
     fill_decay: float = 0.30          # κ in exp(-κ * (δ - 1))
     # Per-regime arrival rates: (noise, bull, bear)
     # Market sells hit our bid; market buys hit our ask
-    # Subtle asymmetry — hard to infer regime from fills alone (~1.7x ratio)
-    sell_arrival: tuple = (0.30, 0.38, 0.22)
-    buy_arrival: tuple = (0.30, 0.22, 0.38)
+    # Moderate asymmetry (~3.3x ratio) — regime learnable over ~10 steps
+    sell_arrival: tuple = (0.30, 0.50, 0.15)
+    buy_arrival: tuple = (0.30, 0.15, 0.50)
     # Per-regime mid-price drift (large — wrong-side inventory is very costly)
-    drift: tuple = (0.0, 0.40, -0.40)
+    drift: tuple = (0.0, 1.00, -1.00)
     # Quadratic inventory penalty coefficient
     inv_penalty: float = 0.001
     # HMM transition matrix (row = from, col = to); None = use default
@@ -408,11 +411,129 @@ def print_fill_probs(tables: MDPTables):
         print(f"  {names[r]:>5s}:  " + "    ".join(parts))
 
 
+def stationary_distribution(tables: MDPTables) -> np.ndarray:
+    """Stationary distribution of the HMM regime chain."""
+    T = tables.trans_regime
+    vals, vecs = np.linalg.eig(T.T)
+    idx = int(np.argmin(np.abs(vals - 1.0)))
+    pi = np.real(vecs[:, idx])
+    return pi / pi.sum()
+
+
 def value_of_info(tables: MDPTables, full_sol: VISolution,
                   pomdp_sol: VISolution) -> float:
-    """Value of regime information at (uniform belief, zero inventory)."""
+    """Value of regime information at (stationary belief, zero inventory)."""
     q0 = tables.config.max_inv
-    v_full = np.mean(full_sol.values[:, q0])
+    pi = stationary_distribution(tables)
+    v_full = float(pi @ full_sol.values[:, q0])
     grid = _build_belief_grid(tables.config.n_belief_points)
-    bi = _nearest_belief(np.ones(N_REGIMES) / N_REGIMES, grid)
+    bi = _nearest_belief(pi, grid)
     return float(v_full - pomdp_sol.values[bi, q0])
+
+
+# ---------------------------------------------------------------------------
+# Episode simulation
+# ---------------------------------------------------------------------------
+
+class SimResult(NamedTuple):
+    """Output of simulate_episodes."""
+    cumulative_reward: np.ndarray  # (n_episodes, n_steps)
+    mean_reward: np.ndarray        # (n_steps,) — mean cumulative across episodes
+    std_reward: np.ndarray         # (n_steps,) — std of cumulative
+
+
+def simulate_episodes(
+    tables: MDPTables,
+    policy: str,
+    full_sol: VISolution | None = None,
+    pomdp_sol: VISolution | None = None,
+    n_episodes: int = 500,
+    n_steps: int = 200,
+    seed: int = 42,
+    locked_regime: int = -1,
+) -> SimResult:
+    """Simulate episodes under a given policy type.
+
+    Args:
+        policy: one of "full_info", "pomdp", "blind"
+        full_sol: required if policy == "full_info"
+        pomdp_sol: required if policy == "pomdp"
+        locked_regime: -1 for normal HMM, 0/1/2 to lock regime
+    """
+    rng = np.random.default_rng(seed)
+    cfg = tables.config
+    max_inv = cfg.max_inv
+    at = _get_action_table(cfg)
+    tick = cfg.tick_size
+    hs = cfg.half_spread_ticks
+    drift = np.array(cfg.drift)
+    phi = cfg.inv_penalty
+    T_hmm = tables.trans_regime
+    fills = tables.fill_probs
+
+    # POMDP belief grid (only needed for pomdp policy)
+    grid = None
+    if policy == "pomdp":
+        assert pomdp_sol is not None
+        grid = _build_belief_grid(cfg.n_belief_points)
+
+    # Stationary distribution for initial regime sampling
+    pi = stationary_distribution(tables)
+
+    cumulative = np.zeros((n_episodes, n_steps))
+
+    for ep in range(n_episodes):
+        # Sample initial regime
+        if locked_regime >= 0:
+            regime = locked_regime
+        else:
+            regime = rng.choice(N_REGIMES, p=pi)
+        inv = 0
+        belief = pi.copy() if policy == "pomdp" else None
+        cum_r = 0.0
+
+        for t in range(n_steps):
+            # Select action
+            qi = inv + max_inv
+            if policy == "full_info":
+                action = int(full_sol.policy[regime, qi])
+            elif policy == "pomdp":
+                bi = _nearest_belief(belief, grid)
+                action = int(pomdp_sol.policy[bi, qi])
+            else:  # blind
+                action = 0
+
+            # Sample fills
+            pb = fills.bid[regime, action]
+            pa = fills.ask[regime, action]
+            bid_filled = rng.random() < pb
+            ask_filled = rng.random() < pa
+
+            # Compute reward
+            bid_edge = (at[action, 0] + hs) * tick
+            ask_edge = (at[action, 1] + hs) * tick
+            reward = (bid_filled * bid_edge + ask_filled * ask_edge
+                      + inv * drift[regime] - phi * inv * inv)
+
+            cum_r += reward
+            cumulative[ep, t] = cum_r
+
+            # Update inventory
+            dq = int(bid_filled) - int(ask_filled)
+            inv = max(-max_inv, min(max_inv, inv + dq))
+
+            # Update belief (POMDP only)
+            if policy == "pomdp":
+                belief = _bayesian_update(
+                    belief, int(bid_filled), int(ask_filled),
+                    action, fills, T_hmm)
+
+            # Regime transition (skip if locked)
+            if locked_regime < 0:
+                regime = rng.choice(N_REGIMES, p=T_hmm[regime])
+
+    return SimResult(
+        cumulative_reward=cumulative,
+        mean_reward=cumulative.mean(axis=0),
+        std_reward=cumulative.std(axis=0),
+    )

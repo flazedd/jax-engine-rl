@@ -49,7 +49,7 @@ class TestFillModel:
     def test_tighter_offset_higher_fill(self, cfg):
         """Tighter quotes (smaller offset) should fill more often."""
         fills = compute_fill_probs(cfg)
-        # a1=(1,7): bid offset=1 (tight), a2=(7,1): bid offset=7 (wide)
+        # a1=(1,9): bid offset=1 (tight), a2=(9,1): bid offset=9 (wide)
         for r in range(N_REGIMES):
             assert fills.bid[r, 1] > fills.bid[r, 2], \
                 f"Regime {r}: tight bid should fill more"

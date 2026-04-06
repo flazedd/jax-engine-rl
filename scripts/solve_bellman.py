@@ -24,7 +24,8 @@ sys.path.insert(0, ROOT)
 
 from lob_sim.analytical_mdp import (
     MDPConfig, build_mdp_tables, solve_full_info, solve_pomdp_belief,
-    print_policy, print_fill_probs, value_of_info,
+    print_policy, print_fill_probs, value_of_info, stationary_distribution,
+    simulate_episodes,
     _build_belief_grid, _nearest_belief, _get_action_table,
     N_REGIMES,
 )
@@ -149,15 +150,52 @@ def save_results(cfg, tables, sol, sol_p=None):
 
     if sol_p is not None:
         voi = value_of_info(tables, sol, sol_p)
+        pi = stationary_distribution(tables)
         grid = _build_belief_grid(cfg.n_belief_points)
-        bi_u = _nearest_belief(np.ones(3) / 3, grid)
+        bi_s = _nearest_belief(pi, grid)
         data["pomdp_solution"] = {
             "value_of_information_at_inv0": round(voi, 8),
-            "pomdp_value_uniform_belief_inv0": round(
-                float(sol_p.values[bi_u, mi]), 8),
-            "full_info_mean_value_inv0": round(
-                float(np.mean(sol.values[:, mi])), 8),
+            "pomdp_value_stationary_belief_inv0": round(
+                float(sol_p.values[bi_s, mi]), 8),
+            "full_info_stationary_value_inv0": round(
+                float(pi @ sol.values[:, mi]), 8),
+            "stationary_distribution": [round(float(p), 6) for p in pi],
             "policy_at_inv0": sol_p.policy[:, mi].tolist(),
+        }
+
+    if sol_p is not None:
+        sim_f = simulate_episodes(tables, "full_info", full_sol=sol, seed=42)
+        sim_p = simulate_episodes(tables, "pomdp", pomdp_sol=sol_p, seed=42)
+        sim_b = simulate_episodes(tables, "blind", seed=42)
+        n_steps = len(sim_f.mean_reward)
+        data["simulation"] = {
+            "n_episodes": 500,
+            "n_steps": n_steps,
+            "seed": 42,
+            "per_step_reward": {
+                "full_info": round(float(sim_f.mean_reward[-1] / n_steps), 6),
+                "pomdp": round(float(sim_p.mean_reward[-1] / n_steps), 6),
+                "regime_blind": round(float(sim_b.mean_reward[-1] / n_steps), 6),
+            },
+            "cumulative_reward_200": {
+                "full_info": round(float(sim_f.mean_reward[-1]), 2),
+                "pomdp": round(float(sim_p.mean_reward[-1]), 2),
+                "regime_blind": round(float(sim_b.mean_reward[-1]), 2),
+            },
+        }
+
+    # Per-regime locked simulations (full-info optimal vs blind)
+    data["per_regime"] = {}
+    for r, rname in enumerate(regime_names):
+        sim_opt = simulate_episodes(
+            tables, "full_info", full_sol=sol, seed=42, locked_regime=r)
+        sim_bld = simulate_episodes(
+            tables, "blind", seed=42, locked_regime=r)
+        ns = len(sim_opt.mean_reward)
+        data["per_regime"][rname] = {
+            "optimal_per_step": round(float(sim_opt.mean_reward[-1] / ns), 6),
+            "blind_per_step": round(float(sim_bld.mean_reward[-1] / ns), 6),
+            "optimal_policy_at_inv0": int(sol.policy[r, mi]),
         }
 
     path = os.path.join(RESULTS_DIR, "bellman_solution.json")
@@ -239,9 +277,10 @@ def plot_results(cfg, tables, sol, sol_p=None):
 
         # 6 — Value of info
         ax = axes[ncols + 2]
-        v_full = np.mean(sol.values, axis=0)
-        bi_u = _nearest_belief(np.ones(3)/3, grid)
-        voi = v_full - sol_p.values[bi_u]
+        pi = stationary_distribution(tables)
+        v_full = pi @ sol.values  # stationary-weighted full-info value
+        bi_s = _nearest_belief(pi, grid)
+        voi = v_full - sol_p.values[bi_s]
         ax.plot(inv, voi, lw=2, color='#C44E52')
         ax.fill_between(inv, 0, voi, alpha=0.2, color='#C44E52')
         ax.set_xlabel("Inventory"); ax.set_ylabel("V_full - V_pomdp")
@@ -258,6 +297,43 @@ def plot_results(cfg, tables, sol, sol_p=None):
 
     plt.tight_layout()
     path = os.path.join(PLOTS_DIR, "bellman_solution.png")
+    plt.savefig(path, dpi=150)
+    print(f"  → {os.path.relpath(path, ROOT)}")
+
+
+def plot_trajectories(tables, sol, sol_p):
+    """Generate plots/reward_trajectories.png — cumulative reward comparison."""
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    print("\n  Simulating episodes ...")
+    t0 = time.time()
+    sim_full = simulate_episodes(tables, "full_info", full_sol=sol, seed=42)
+    sim_pomdp = simulate_episodes(tables, "pomdp", pomdp_sol=sol_p, seed=42)
+    sim_blind = simulate_episodes(tables, "blind", seed=42)
+    print(f"  {time.time()-t0:.1f} s  (3 × 500 episodes × 200 steps)")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    steps = np.arange(1, len(sim_full.mean_reward) + 1)
+
+    for sim, label, color in [
+        (sim_full, "Full-info (regime observed)", "#55A868"),
+        (sim_pomdp, "POMDP (regime hidden)", "#4C72B0"),
+        (sim_blind, "Regime-blind (always a0)", "#C44E52"),
+    ]:
+        ax.plot(steps, sim.mean_reward, label=label, lw=2, color=color)
+        ax.fill_between(steps,
+                        sim.mean_reward - sim.std_reward,
+                        sim.mean_reward + sim.std_reward,
+                        alpha=0.15, color=color)
+
+    ax.set_xlabel("Step")
+    ax.set_ylabel("Cumulative Reward")
+    ax.set_title("Reward Trajectories: Full-info vs POMDP vs Regime-blind")
+    ax.legend(loc="upper left")
+    ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+    path = os.path.join(PLOTS_DIR, "reward_trajectories.png")
     plt.savefig(path, dpi=150)
     print(f"  → {os.path.relpath(path, ROOT)}")
 
@@ -319,6 +395,8 @@ def main():
 
     # Plot
     plot_results(cfg, tables, sol, sol_p)
+    if sol_p:
+        plot_trajectories(tables, sol, sol_p)
 
     # Summary
     names = ["Noise", "Bull", "Bear"]

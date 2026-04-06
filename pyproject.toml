@@ -1,10 +1,10 @@
 [project]
 name = "jax-engine-rl"
-version = "0.1.0"
-description = "Blazing fast JAX engine limit order book simulator for training RL agents"
+version = "0.2.0"
+description = "Analytical market making MDP with HMM regime switching"
 readme = "README.md"
 requires-python = "==3.12.*"
-dependencies = ["jax", "jaxlib", "matplotlib", "pytest", "optax", "distrax", "equinox"]
+dependencies = ["numpy", "matplotlib", "pytest"]
 
 [build-system]
 requires = ["hatchling"]

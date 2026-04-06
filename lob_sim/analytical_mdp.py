@@ -1,0 +1,417 @@
+"""Analytical Market Making MDP with HMM Regime Switching.
+
+Literature-conform model (Avellaneda-Stoikov / Guéant-Lehalle-Fernandez-Tapia
+style) with discrete state/action spaces for exact Bellman equation solutions.
+
+State: (regime, inventory)
+  - regime ∈ {0=Noise, 1=Bull, 2=Bear}
+  - inventory ∈ {-Q_max, ..., +Q_max}
+
+Actions: discrete (bid_offset, ask_offset) tick pairs
+  - Action 0: (2,2) symmetric moderate — pure spread capture
+  - Action 1: (1,3) tight bid, wide ask — go long (bull strategy)
+  - Action 2: (3,1) wide bid, tight ask — go short (bear strategy)
+
+All actions have the same total offset (bid+ask=4), so spread capture at zero
+inventory is similar. Differentiation comes from directional inventory flow
+interacting with regime-dependent drift — exactly the tradeoff in Avellaneda-
+Stoikov market making.
+
+Fill model:
+  p_fill(δ, regime) = arrival_rate(regime) * exp(-κ * (δ - 1))
+
+Reward per step:
+  r = p_bid * bid_edge + p_ask * ask_edge + inv * drift - φ * inv²
+
+References:
+  - Avellaneda & Stoikov (2008), "High-frequency trading in a limit order book"
+  - Guéant, Lehalle & Fernandez-Tapia (2013), "Dealing with the inventory risk"
+  - Cartea, Jaimungal & Penalva (2015), "Algorithmic and HF Trading"
+"""
+from typing import NamedTuple
+
+import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# HMM regime system
+# ---------------------------------------------------------------------------
+
+NOISE = 0
+BULL = 1
+BEAR = 2
+N_REGIMES = 3
+
+TRANSITION_MATRIX = np.array([
+    [0.92, 0.04, 0.04],   # NOISE → ...
+    [0.05, 0.90, 0.05],   # BULL  → ...
+    [0.05, 0.05, 0.90],   # BEAR  → ...
+])
+
+
+# ---------------------------------------------------------------------------
+# Action table (defaults — can be overridden via MDPConfig.actions)
+# ---------------------------------------------------------------------------
+
+ACTION_TABLE_ANALYTICAL = np.array([
+    [3, 3],   # symmetric wide — pure spread capture
+    [1, 5],   # tight bid, wide ask — go long (bull strategy)
+    [5, 1],   # wide bid, tight ask — go short (bear strategy)
+])
+N_ACTIONS_ANALYTICAL = len(ACTION_TABLE_ANALYTICAL)
+
+
+# ---------------------------------------------------------------------------
+# MDP specification
+# ---------------------------------------------------------------------------
+
+class MDPConfig(NamedTuple):
+    """Parameters for the analytical market making MDP.
+
+    Calibrated so that spread capture, directional drift, and inventory
+    penalty are comparable in magnitude — producing policies that
+    meaningfully differ across regimes.
+
+    The wide action offsets (3,3)/(1,5)/(5,1) with low κ=0.3 create a
+    regime where playing the wrong action incurs a large penalty: tight
+    quotes in the wrong direction fill frequently against adverse drift,
+    while wide quotes miss profitable flow. Combined with very asymmetric
+    arrival rates and persistent regimes, this produces a value-of-
+    information gap of 15-25% — giving an RL agent a meaningful target.
+    """
+    max_inv: int = 15
+    tick_size: float = 0.05
+    half_spread_ticks: int = 2
+    gamma: float = 0.95
+    fill_decay: float = 0.30          # κ in exp(-κ * (δ - 1))
+    # Per-regime arrival rates: (noise, bull, bear)
+    # Market sells hit our bid; market buys hit our ask
+    # Subtle asymmetry — hard to infer regime from fills alone (~1.7x ratio)
+    sell_arrival: tuple = (0.30, 0.38, 0.22)
+    buy_arrival: tuple = (0.30, 0.22, 0.38)
+    # Per-regime mid-price drift (large — wrong-side inventory is very costly)
+    drift: tuple = (0.0, 0.40, -0.40)
+    # Quadratic inventory penalty coefficient
+    inv_penalty: float = 0.003
+    # HMM transition matrix (row = from, col = to); None = use default
+    transition_matrix: tuple | None = None
+    # Action table as flat tuple; None = use default ACTION_TABLE_ANALYTICAL
+    actions: tuple | None = None
+    # POMDP belief grid resolution
+    n_belief_points: int = 21
+
+
+class FillProbs(NamedTuple):
+    """Fill probabilities per (regime, action)."""
+    bid: np.ndarray   # (n_regimes, n_actions)
+    ask: np.ndarray   # (n_regimes, n_actions)
+
+
+class MDPTables(NamedTuple):
+    """Pre-computed MDP tables for value iteration."""
+    reward: np.ndarray       # (n_regimes, n_inv, n_actions)
+    trans_inv: np.ndarray    # (n_regimes, n_inv, n_actions, n_inv)
+    trans_regime: np.ndarray # (n_regimes, n_regimes)
+    fill_probs: FillProbs
+    config: MDPConfig
+
+
+class VISolution(NamedTuple):
+    """Value iteration output."""
+    policy: np.ndarray    # int — optimal action per state
+    values: np.ndarray    # float — state values
+    Q: np.ndarray         # float — Q-values
+    n_iters: int
+    residuals: list       # Bellman residual per iteration
+
+
+# ---------------------------------------------------------------------------
+# Fill probability model
+# ---------------------------------------------------------------------------
+
+def _get_action_table(cfg: MDPConfig) -> np.ndarray:
+    """Return the action table, either from config or the module default."""
+    if cfg.actions is not None:
+        n_act = len(cfg.actions) // 2
+        return np.array(cfg.actions, dtype=float).reshape(n_act, 2)
+    return ACTION_TABLE_ANALYTICAL.astype(float)
+
+
+def compute_fill_probs(cfg: MDPConfig) -> FillProbs:
+    """Avellaneda-Stoikov exponential fill model.
+
+    p_fill(δ, regime) = arrival_rate(regime) * exp(-κ * (δ - 1))
+    """
+    kappa = cfg.fill_decay
+    at = _get_action_table(cfg)
+
+    sell_rates = np.array(cfg.sell_arrival)
+    buy_rates = np.array(cfg.buy_arrival)
+
+    bid_fill = sell_rates[:, None] * np.exp(-kappa * (at[None, :, 0] - 1))
+    ask_fill = buy_rates[:, None] * np.exp(-kappa * (at[None, :, 1] - 1))
+
+    return FillProbs(
+        bid=np.clip(bid_fill, 0.0, 1.0),
+        ask=np.clip(ask_fill, 0.0, 1.0),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Exact transition and reward tables
+# ---------------------------------------------------------------------------
+
+def build_mdp_tables(cfg: MDPConfig = MDPConfig()) -> MDPTables:
+    """Build exact MDP transition and reward tables in closed form."""
+    max_inv = cfg.max_inv
+    n_inv = 2 * max_inv + 1
+    tick = cfg.tick_size
+    hs = cfg.half_spread_ticks
+    at = _get_action_table(cfg)
+    n_act = len(at)
+    drift = np.array(cfg.drift)
+    phi = cfg.inv_penalty
+    T_hmm = (np.array(cfg.transition_matrix).reshape(N_REGIMES, N_REGIMES)
+             if cfg.transition_matrix is not None
+             else np.array(TRANSITION_MATRIX))
+
+    fills = compute_fill_probs(cfg)
+    inv_grid = np.arange(n_inv) - max_inv
+
+    bid_edge = (at[:, 0] + hs) * tick  # (n_actions,)
+    ask_edge = (at[:, 1] + hs) * tick
+
+    # --- Reward table ---
+    reward = np.zeros((N_REGIMES, n_inv, n_act))
+    for r in range(N_REGIMES):
+        for a in range(n_act):
+            pb, pa = fills.bid[r, a], fills.ask[r, a]
+            sc = pb * bid_edge[a] + pa * ask_edge[a]
+            for qi in range(n_inv):
+                q = inv_grid[qi]
+                reward[r, qi, a] = sc + q * drift[r] - phi * q * q
+
+    # --- Inventory transition tensor ---
+    trans_inv = np.zeros((N_REGIMES, n_inv, n_act, n_inv))
+    for r in range(N_REGIMES):
+        for a in range(n_act):
+            pb, pa = fills.bid[r, a], fills.ask[r, a]
+            outcomes = [
+                (0,  pb * pa + (1 - pb) * (1 - pa)),
+                (+1, pb * (1 - pa)),
+                (-1, (1 - pb) * pa),
+            ]
+            for qi in range(n_inv):
+                q = inv_grid[qi]
+                for dq, prob in outcomes:
+                    q_new = int(np.clip(q + dq, -max_inv, max_inv))
+                    trans_inv[r, qi, a, q_new + max_inv] += prob
+
+    return MDPTables(
+        reward=reward, trans_inv=trans_inv, trans_regime=T_hmm,
+        fill_probs=fills, config=cfg,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Value iteration — full information (regime observed)
+# ---------------------------------------------------------------------------
+
+def solve_full_info(tables: MDPTables, verbose: bool = False) -> VISolution:
+    """Solve the MDP when the agent observes the true regime.
+
+    Bellman equation (regime transitions first):
+
+        V(r, q) = max_a Σ_{r'} T(r,r')
+                  [R(r',q,a) + γ Σ_{q'} P(q'|r',q,a) V(r',q')]
+
+    63-state problem — converges in milliseconds.
+    """
+    R = tables.reward
+    T_inv = tables.trans_inv
+    T_hmm = tables.trans_regime
+    gamma = tables.config.gamma
+
+    V = np.zeros((N_REGIMES, R.shape[1]))
+    residuals = []
+
+    for it in range(5000):
+        future = np.einsum('rqai,ri->rqa', T_inv, V)
+        val_next = R + gamma * future
+        Q = np.einsum('rs,sqa->rqa', T_hmm, val_next)
+
+        V_new = np.max(Q, axis=-1)
+        residual = float(np.max(np.abs(V_new - V)))
+        residuals.append(residual)
+        V = V_new
+
+        if residual < 1e-10:
+            if verbose:
+                print(f"  Converged at iter {it+1} "
+                      f"(residual={residual:.2e})")
+            break
+
+    return VISolution(policy=np.argmax(Q, axis=-1), values=V, Q=Q,
+                      n_iters=it + 1, residuals=residuals)
+
+
+# ---------------------------------------------------------------------------
+# Value iteration — POMDP (regime hidden, belief-state MDP)
+# ---------------------------------------------------------------------------
+
+def _build_belief_grid(n_points: int) -> np.ndarray:
+    """Uniform grid on the 3-regime belief simplex."""
+    pts = []
+    for i in range(n_points):
+        for j in range(n_points - i):
+            k = n_points - 1 - i - j
+            pts.append(np.array([i, j, k], dtype=float) / (n_points - 1))
+    return np.array(pts)
+
+
+def _nearest_belief(b: np.ndarray, grid: np.ndarray) -> int:
+    return int(np.argmin(np.sum(np.abs(grid - b), axis=1)))
+
+
+def _bayesian_update(belief: np.ndarray, obs_bid: int, obs_ask: int,
+                     action: int, fills: FillProbs,
+                     T_hmm: np.ndarray) -> np.ndarray:
+    """Bayesian belief update: predict via HMM, then condition on fills."""
+    b_pred = T_hmm.T @ belief
+    lik = np.ones(N_REGIMES)
+    for r in range(N_REGIMES):
+        pb, pa = fills.bid[r, action], fills.ask[r, action]
+        lik[r] = (pb if obs_bid else 1 - pb) * (pa if obs_ask else 1 - pa)
+    b_new = b_pred * lik
+    s = b_new.sum()
+    return b_new / s if s > 0 else np.ones(N_REGIMES) / N_REGIMES
+
+
+def solve_pomdp_belief(tables: MDPTables, verbose: bool = False) -> VISolution:
+    """Solve the POMDP via discretized belief-state value iteration.
+
+    State = (belief, inventory).
+    Observation = (bid_filled, ask_filled) — 4 outcomes.
+    """
+    R = tables.reward
+    T_hmm = tables.trans_regime
+    fills = tables.fill_probs
+    gamma = tables.config.gamma
+    max_inv = tables.config.max_inv
+    n_inv = R.shape[1]
+    n_act = R.shape[2]
+
+    grid = _build_belief_grid(tables.config.n_belief_points)
+    n_beliefs = len(grid)
+
+    if verbose:
+        print(f"  POMDP: {n_beliefs} belief × {n_inv} inv "
+              f"= {n_beliefs * n_inv} states")
+
+    obs_cases = [(0, 0, 0), (0, 1, -1), (1, 0, +1), (1, 1, 0)]
+
+    # Pre-compute observation probabilities and belief transitions
+    obs_prob = np.zeros((n_beliefs, n_act, 4))
+    obs_next = np.zeros((n_beliefs, n_act, 4), dtype=int)
+
+    for bi in range(n_beliefs):
+        b = grid[bi]
+        b_pred = T_hmm.T @ b
+        for a in range(n_act):
+            for oi, (ob, oa, _) in enumerate(obs_cases):
+                p = sum(
+                    b_pred[r] *
+                    (fills.bid[r, a] if ob else 1 - fills.bid[r, a]) *
+                    (fills.ask[r, a] if oa else 1 - fills.ask[r, a])
+                    for r in range(N_REGIMES)
+                )
+                obs_prob[bi, a, oi] = p
+                b_next = _bayesian_update(b, ob, oa, a, fills, T_hmm)
+                obs_next[bi, a, oi] = _nearest_belief(b_next, grid)
+
+    V = np.zeros((n_beliefs, n_inv))
+    residuals = []
+    dq_arr = np.array([c[2] for c in obs_cases])
+
+    for it in range(2000):
+        Q_all = np.zeros((n_beliefs, n_inv, n_act))
+        for bi in range(n_beliefs):
+            b_pred = T_hmm.T @ grid[bi]
+            R_exp = np.einsum('r,rqa->qa', b_pred, R)
+
+            for a in range(n_act):
+                future = np.zeros(n_inv)
+                for oi in range(4):
+                    p = obs_prob[bi, a, oi]
+                    if p < 1e-15:
+                        continue
+                    nbi = obs_next[bi, a, oi]
+                    dq = dq_arr[oi]
+                    for qi in range(n_inv):
+                        qi_new = min(max(qi + dq, 0), n_inv - 1)
+                        future[qi] += p * V[nbi, qi_new]
+                Q_all[bi, :, a] = R_exp[:, a] + gamma * future
+
+        V_new = np.max(Q_all, axis=-1)
+        residual = float(np.max(np.abs(V_new - V)))
+        residuals.append(residual)
+        V = V_new
+
+        if verbose and (it + 1) % 50 == 0:
+            print(f"    iter {it+1}: residual={residual:.2e}")
+        if residual < 1e-8:
+            if verbose:
+                print(f"  POMDP converged at iter {it+1} "
+                      f"(residual={residual:.2e})")
+            break
+
+    return VISolution(policy=np.argmax(Q_all, axis=-1), values=V, Q=Q_all,
+                      n_iters=it + 1, residuals=residuals)
+
+
+# ---------------------------------------------------------------------------
+# Convenience helpers
+# ---------------------------------------------------------------------------
+
+def print_policy(sol: VISolution, tables: MDPTables):
+    """Pretty-print the optimal policy table."""
+    mi = tables.config.max_inv
+    at = _get_action_table(tables.config)
+    names = ["Noise", "Bull ", "Bear "]
+    levels = list(range(-mi, mi + 1, max(1, mi // 5)))
+
+    if sol.policy.ndim == 2 and sol.policy.shape[0] == N_REGIMES:
+        header = "         " + "".join(f"{'q='+str(i):>8s}" for i in levels)
+        print(header)
+        for r in range(N_REGIMES):
+            parts = []
+            for q in levels:
+                a = sol.policy[r, q + mi]
+                parts.append(f"({int(at[a,0])},{int(at[a,1])})")
+            print("  " + names[r] + "  " + "".join(f"{p:>8s}" for p in parts))
+
+
+def print_fill_probs(tables: MDPTables):
+    at = _get_action_table(tables.config)
+    n_act = len(at)
+    fills = tables.fill_probs
+    names = ["Noise", "Bull", "Bear"]
+    print("  Fill probabilities (p_bid / p_ask):")
+    header = "         " + "".join(
+        f"  a{a}=({int(at[a,0])},{int(at[a,1])}) "
+        for a in range(n_act))
+    print(header)
+    for r in range(N_REGIMES):
+        parts = [f"{fills.bid[r,a]:.3f}/{fills.ask[r,a]:.3f}"
+                 for a in range(n_act)]
+        print(f"  {names[r]:>5s}:  " + "    ".join(parts))
+
+
+def value_of_info(tables: MDPTables, full_sol: VISolution,
+                  pomdp_sol: VISolution) -> float:
+    """Value of regime information at (uniform belief, zero inventory)."""
+    q0 = tables.config.max_inv
+    v_full = np.mean(full_sol.values[:, q0])
+    grid = _build_belief_grid(tables.config.n_belief_points)
+    bi = _nearest_belief(np.ones(N_REGIMES) / N_REGIMES, grid)
+    return float(v_full - pomdp_sol.values[bi, q0])

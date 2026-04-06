@@ -29,7 +29,8 @@ args = parser.parse_args()
 
 SIM_CFG = SimConfig()
 gamma = 0.99
-n_mc = 50 if args.fast else 200
+n_mc = 200 if args.fast else 200
+horizon = 30
 n_eval = 50 if args.fast else 200
 seed_vi = 999
 seed_eval = 888
@@ -44,6 +45,7 @@ print("=" * 60)
 print(f"  fast:           {args.fast}")
 print(f"  gamma:          {gamma}")
 print(f"  n_mc_episodes:  {n_mc}")
+print(f"  horizon:        {horizon}")
 print(f"  n_eval:         {n_eval}")
 print(f"  seed_vi:        {seed_vi}")
 print(f"  seed_eval:      {seed_eval}")
@@ -71,7 +73,8 @@ print("=" * 60)
 print("\nComputing VI policies (isolated + mixed)...")
 (iso_policy, iso_values, iso_info), (mix_policy, mix_values, mix_info) = \
     compute_vi_isolated_and_mixed(SIM_CFG, jax.random.PRNGKey(seed_vi),
-                                  gamma=gamma, n_mc_episodes=n_mc)
+                                  gamma=gamma, n_mc_episodes=n_mc,
+                                  horizon=horizon)
 
 print("\nIsolated-regime VI policy:")
 print_vi_policy(iso_policy, max_inv=SIM_CFG.max_inventory)
@@ -81,11 +84,16 @@ print_vi_policy(mix_policy, max_inv=SIM_CFG.max_inventory)
 
 # ── Convergence diagnostics ──
 print("\n  Convergence diagnostics:")
-for label, info in [("Isolated", iso_info), ("Mixed", mix_info)]:
-    print(f"    {label}: {info['n_iterations']} iterations, "
-          f"final delta={info['final_delta']:.2e}, "
-          f"policy stable since iter {info['policy_stable_since']}, "
-          f"max Bellman residual={info['max_bellman_residual']:.2e}")
+for r, name in enumerate(regime_names):
+    ri = iso_info["per_regime"][r]
+    print(f"    Isolated {name}: {ri['n_iterations']} iterations, "
+          f"final delta={ri['final_delta']:.2e}, "
+          f"policy stable since iter {ri['policy_stable_since']}, "
+          f"max Bellman residual={ri['max_bellman_residual']:.2e}")
+print(f"    Mixed: {mix_info['n_iterations']} iterations, "
+      f"final delta={mix_info['final_delta']:.2e}, "
+      f"policy stable since iter {mix_info['policy_stable_since']}, "
+      f"max Bellman residual={mix_info['max_bellman_residual']:.2e}")
 
 # ── Evaluate VI oracles (with trajectories, using same seeds as compute_agent) ──
 # compute_agent.py uses seed + 1000 + regime_idx for eval keys (default seed=42)
@@ -164,16 +172,28 @@ print("\nSaving results...")
 _save("vi_isolated.json", {
     "policy": iso_policy.tolist(),
     "values": iso_values.tolist(),
+    "Q": iso_info["Q"].tolist(),
     "max_inventory": SIM_CFG.max_inventory,
-    "convergence": {k: v for k, v in iso_info.items() if k != "deltas"},
+    "convergence": {
+        "n_iterations": iso_info["n_iterations"],
+        "final_delta": iso_info["final_delta"],
+        "policy_stable_since": iso_info["policy_stable_since"],
+        "max_bellman_residual": iso_info["max_bellman_residual"],
+    },
+    "per_regime_convergence": [
+        {k: v for k, v in ri.items() if k != "deltas"}
+        for ri in iso_info["per_regime"]
+    ],
     "convergence_deltas": iso_info["deltas"],
 })
 
 _save("vi_optimal.json", {
     "policy": mix_policy.tolist(),
     "values": mix_values.tolist(),
+    "Q": mix_info["Q"].tolist(),
     "max_inventory": SIM_CFG.max_inventory,
-    "convergence": {k: v for k, v in mix_info.items() if k != "deltas"},
+    "convergence": {k: v for k, v in mix_info.items()
+                    if k not in ("deltas", "Q")},
     "convergence_deltas": mix_info["deltas"],
 })
 

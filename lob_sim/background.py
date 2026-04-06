@@ -8,8 +8,8 @@ from lob_sim.config import SimConfig
 def generate_background_flow(bid_volumes, ask_volumes, config: SimConfig, rng_key, regime_params=None):
     """Generate one step of background order flow.
 
-    If regime_params is provided, use regime-specific parameters for varying
-    quantities. Otherwise fall back to config values (Phase 1/2 behaviour).
+    All tunable parameters come from regime_params. Config provides only
+    structural values (depth_decay). Phase 1/2 (no regime) is no longer supported.
 
     Returns (new_bid_volumes, new_ask_volumes, market_buy_qty, market_sell_qty).
     """
@@ -18,18 +18,14 @@ def generate_background_flow(bid_volumes, ask_volumes, config: SimConfig, rng_ke
 
     keys = jax.random.split(rng_key, 12)
 
-    if regime_params is not None:
-        cancel_prob = regime_params.cancel_prob
-        limit_order_rate = regime_params.limit_order_rate
-        market_buy_prob = regime_params.market_buy_prob
-        market_sell_prob = regime_params.market_sell_prob
-        volatility_scale = regime_params.volatility_scale
-    else:
-        cancel_prob = config.cancel_prob
-        limit_order_rate = config.limit_order_rate
-        market_buy_prob = config.market_buy_prob
-        market_sell_prob = config.market_sell_prob
-        volatility_scale = config.volatility_scale
+    cancel_prob = regime_params.cancel_prob
+    limit_order_rate = regime_params.limit_order_rate
+    limit_order_size = regime_params.limit_order_size
+    market_buy_prob = regime_params.market_buy_prob
+    market_sell_prob = regime_params.market_sell_prob
+    volatility_scale = regime_params.volatility_scale
+    market_order_size_min = regime_params.market_order_size_min
+    market_order_size_max = regime_params.market_order_size_max
 
     # --- Cancellations ---
     # Per-level: cancel with prob cancel_prob, remove random 0-50% fraction
@@ -47,21 +43,21 @@ def generate_background_flow(bid_volumes, ask_volumes, config: SimConfig, rng_ke
     # Rate decays with depth: limit_order_rate * exp(-depth_decay * i)
     rates = limit_order_rate * jnp.exp(-config.depth_decay * levels)
     bid_arrivals = jax.random.bernoulli(keys[4], rates, shape=(n,))
-    bid_new = bid_after_cancel + bid_arrivals * config.limit_order_size
+    bid_new = bid_after_cancel + bid_arrivals * limit_order_size
 
     ask_arrivals = jax.random.bernoulli(keys[5], rates, shape=(n,))
-    ask_new = ask_after_cancel + ask_arrivals * config.limit_order_size
+    ask_new = ask_after_cancel + ask_arrivals * limit_order_size
 
     # --- Market orders ---
     do_market_buy = jax.random.bernoulli(keys[6], market_buy_prob)
     market_buy_size = jax.random.uniform(
-        keys[7], minval=config.market_order_size_min, maxval=config.market_order_size_max
+        keys[7], minval=market_order_size_min, maxval=market_order_size_max
     )
     market_buy_qty = jnp.where(do_market_buy, market_buy_size * volatility_scale, 0.0)
 
     do_market_sell = jax.random.bernoulli(keys[8], market_sell_prob)
     market_sell_size = jax.random.uniform(
-        keys[9], minval=config.market_order_size_min, maxval=config.market_order_size_max
+        keys[9], minval=market_order_size_min, maxval=market_order_size_max
     )
     market_sell_qty = jnp.where(do_market_sell, market_sell_size * volatility_scale, 0.0)
 

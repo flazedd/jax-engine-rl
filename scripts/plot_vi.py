@@ -9,8 +9,11 @@ Reads:
     results/vi_eval.json
 
 Saves:
-    plots/vi_comparison.png  — 6-panel policy grid (isolated vs mixed)
-    plots/vi_convergence.png — convergence diagnostics
+    plots/vi_isolated_noise.png — Q-value heatmap for isolated noise regime
+    plots/vi_isolated_bull.png  — Q-value heatmap for isolated bull regime
+    plots/vi_isolated_bear.png  — Q-value heatmap for isolated bear regime
+    plots/vi_mixed.png          — Q-value heatmaps for mixed (3 regimes)
+    plots/vi_convergence.png    — convergence diagnostics
 """
 import json
 import sys
@@ -19,7 +22,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 
 from lob_sim.actions import ACTION_TABLE, N_ACTIONS
 from plot_style import apply_style, save_fig, REGIME_NAMES, REGIME_COLORS
@@ -48,130 +50,153 @@ action_labels = [f"({at[a][0]},{at[a][1]})" for a in range(N_ACTIONS)]
 
 apply_style()
 
-# ── Plot 1: Policy comparison (6-panel grid) ──
-# Display fewer levels than computed to avoid boundary artifacts
+iso_Q = np.array(iso_data["Q"])  # (N_REGIMES, n_inv, N_ACTIONS)
+mix_Q = np.array(mix_data["Q"])  # (N_REGIMES, n_inv, N_ACTIONS)
+
+# Display range (trim boundary artifacts)
 display_range = max_inv - 5
 lo = max_inv - display_range
 hi = max_inv + display_range + 1
 n_disp = hi - lo
 disp_inv = inv_grid[lo:hi]
 
-fig, axes = plt.subplots(3, 2, figsize=(18, 10))
-fig.suptitle("VI Optimal Policy: Isolated vs Mixed Regimes",
-             fontsize=14, fontweight="bold")
 
-column_titles = ["Isolated Regime", "Mixed Regime"]
-cmap = ListedColormap(["white", "#4CAF50"])
+def _plot_q_heatmap(ax, Q_slice, title, color):
+    """Plot a single Q-value heatmap on the given axis.
 
-for col, (policy, title) in enumerate([(iso_policy, column_titles[0]),
-                                        (mix_policy, column_titles[1])]):
-    for r in range(3):
-        ax = axes[r, col]
+    Q_slice: (n_disp, N_ACTIONS) — already sliced to display range.
+    Transpose to (N_ACTIONS, n_disp) for display: y=actions, x=inventory.
+    """
+    q = Q_slice.T  # (N_ACTIONS, n_disp)
 
-        grid = np.zeros((N_ACTIONS, n_disp))
-        for i in range(n_disp):
-            grid[policy[r, lo + i], i] = 1.0
+    im = ax.imshow(q, cmap="RdYlGn", aspect="auto", interpolation="nearest")
 
-        ax.imshow(grid, aspect="auto", cmap=cmap, vmin=0, vmax=1,
-                  interpolation="nearest", origin="lower")
+    best_per_inv = q.argmax(axis=0)
 
-        ax.set_xticks(np.arange(-0.5, n_disp, 1), minor=True)
-        ax.set_yticks(np.arange(-0.5, N_ACTIONS, 1), minor=True)
-        ax.grid(which="minor", color="grey", linewidth=0.3, alpha=0.5)
-        ax.tick_params(which="minor", length=0)
+    from matplotlib.patches import Rectangle
+    for i in range(n_disp):
+        for a in range(N_ACTIONS):
+            v = q[a, i]
+            mid_val = (q.max() + q.min()) / 2
+            txt_color = ("white" if abs(v - mid_val) > 0.55 * abs(q.max() - mid_val)
+                         else "black")
+            ax.text(i, a, f"{v:.1f}", ha="center", va="center",
+                    fontsize=5.5, color=txt_color)
 
-        major_x = np.arange(0, n_disp, 5)
-        ax.set_xticks(major_x)
-        ax.set_xticklabels([str(disp_inv[i]) for i in major_x], fontsize=7)
-        ax.set_yticks(range(N_ACTIONS))
-        ax.set_yticklabels(action_labels, fontsize=8)
+        best_a = best_per_inv[i]
+        rect = Rectangle((i - 0.5, best_a - 0.5), 1, 1,
+                          linewidth=2.0, edgecolor="#1565C0",
+                          facecolor="none", zorder=5)
+        ax.add_patch(rect)
 
-        ax.set_ylabel(f"{REGIME_NAMES[r]}\n(bid, ask) ticks", fontsize=10,
-                      fontweight="bold", color=REGIME_COLORS[r])
+    ax.set_xticks(np.arange(0, n_disp, 5))
+    ax.set_xticklabels([str(disp_inv[i]) for i in np.arange(0, n_disp, 5)],
+                       fontsize=7)
+    ax.set_yticks(range(N_ACTIONS))
+    ax.set_yticklabels(action_labels, fontsize=8)
+    ax.set_xlabel("Inventory")
+    ax.set_ylabel("Action (bid, ask) ticks")
+    ax.set_title(title, fontsize=12, fontweight="bold", color=color)
 
-        if r == 0:
-            ax.set_title(title, fontsize=12)
-        if r == 2:
-            ax.set_xlabel("Inventory")
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(0.8)
 
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(0.8)
+    return im
+
+
+# ── Plot 1-3: Isolated regime Q-value heatmaps (one figure each) ──
+for r in range(3):
+    fig, ax = plt.subplots(figsize=(max(16, n_disp * 0.55), N_ACTIONS * 0.7 + 2))
+    q_slice = iso_Q[r, lo:hi, :]  # (n_disp, N_ACTIONS)
+    im = _plot_q_heatmap(ax, q_slice,
+                         f"Isolated {REGIME_NAMES[r]} — VI Q-Values & Optimal Policy",
+                         REGIME_COLORS[r])
+    fig.colorbar(im, ax=ax, shrink=0.8, pad=0.02, label="Q-value")
+    plt.tight_layout()
+    save_fig(fig, f"vi_isolated_{REGIME_NAMES[r].lower()}.png", script_file=__file__)
+
+# ── Plot 4: Mixed regime — optimal action per (regime, inventory) ──
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
+
+# Action colormap: one color per action
+action_cmap = ListedColormap(["#4CAF50", "#2196F3", "#F44336"])  # green, blue, red
+
+# Build policy grid: (3 regimes, n_disp) with action index as value
+mix_policy_disp = np.array(mix_data["policy"])[:, lo:hi]  # (3, n_disp)
+
+fig, ax = plt.subplots(figsize=(max(14, n_disp * 0.45), 3.5))
+im = ax.imshow(mix_policy_disp, cmap=action_cmap, aspect="auto",
+               interpolation="nearest", vmin=0, vmax=N_ACTIONS - 1)
+
+# Annotate each cell with Q-values for all actions
+for r in range(3):
+    for i in range(n_disp):
+        best_a = mix_policy_disp[r, i]
+        q_best = mix_Q[r, lo + i, best_a]
+        ax.text(i, r, f"{action_labels[best_a]}\nQ={q_best:.1f}",
+                ha="center", va="center", fontsize=6, fontweight="bold",
+                color="white")
+
+ax.set_xticks(np.arange(0, n_disp, 5))
+ax.set_xticklabels([str(disp_inv[i]) for i in np.arange(0, n_disp, 5)],
+                   fontsize=8)
+ax.set_yticks(range(3))
+ax.set_yticklabels([REGIME_NAMES[r] for r in range(3)], fontsize=11,
+                   fontweight="bold")
+ax.set_xlabel("Inventory", fontsize=10)
+ax.set_title("Mixed Regime — Optimal Action per (Regime, Inventory)\n"
+             "HMM transition matrix active",
+             fontsize=13, fontweight="bold")
+
+for spine in ax.spines.values():
+    spine.set_visible(True)
+    spine.set_linewidth(0.8)
+
+legend_patches = [Patch(facecolor=action_cmap(a), label=action_labels[a])
+                  for a in range(N_ACTIONS)]
+ax.legend(handles=legend_patches, loc="upper right", fontsize=9,
+          title="Action", title_fontsize=10)
 
 plt.tight_layout()
-save_fig(fig, "vi_comparison.png", script_file=__file__)
+save_fig(fig, "vi_mixed.png", script_file=__file__)
 
-# ── Plot 2: Convergence ──
-fig2, (ax_iso, ax_mix) = plt.subplots(1, 2, figsize=(12, 4))
+# ── Plot 5: Convergence ──
+fig2, axes2 = plt.subplots(1, 2, figsize=(12, 4))
 fig2.suptitle("Value Iteration Convergence", fontsize=14, fontweight="bold")
 
-for ax, data, label in [(ax_iso, iso_data, "Isolated"),
-                          (ax_mix, mix_data, "Mixed")]:
-    deltas = data["convergence_deltas"]
-    conv = data["convergence"]
-    ax.semilogy(deltas, linewidth=1.5)
-    ax.axhline(1e-6, color="red", linestyle="--", alpha=0.5, label="threshold")
-    ax.axvline(conv["policy_stable_since"], color="green", linestyle="--",
-               alpha=0.5, label=f"policy stable (iter {conv['policy_stable_since']})")
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("max |V_new - V|")
-    ax.set_title(f"{label} Regimes")
-    ax.legend(fontsize=8)
+# Isolated: plot deltas (using stored deltas from first regime / noise)
+ax = axes2[0]
+deltas = iso_data["convergence_deltas"]
+conv = iso_data["convergence"]
+ax.semilogy(deltas, linewidth=1.5)
+ax.axhline(1e-8, color="red", linestyle="--", alpha=0.5, label="threshold")
+ax.axvline(conv["policy_stable_since"], color="green", linestyle="--",
+           alpha=0.5, label=f"policy stable (iter {conv['policy_stable_since']})")
+ax.set_xlabel("Iteration")
+ax.set_ylabel("max |V_new - V|")
+ax.set_title("Isolated (Noise)")
+ax.legend(fontsize=8)
+
+# Mixed
+ax = axes2[1]
+deltas = mix_data["convergence_deltas"]
+conv = mix_data["convergence"]
+ax.semilogy(deltas, linewidth=1.5)
+ax.axhline(1e-8, color="red", linestyle="--", alpha=0.5, label="threshold")
+ax.axvline(conv["policy_stable_since"], color="green", linestyle="--",
+           alpha=0.5, label=f"policy stable (iter {conv['policy_stable_since']})")
+ax.set_xlabel("Iteration")
+ax.set_ylabel("max |V_new - V|")
+ax.set_title("Mixed Regimes")
+ax.legend(fontsize=8)
 
 plt.tight_layout()
 save_fig(fig2, "vi_convergence.png", script_file=__file__)
 
-# ── Plot 3: Cumulative reward trajectories ──
-iso_traj = eval_data["isolated_trajectories"]
-mix_traj = eval_data["mixed_trajectories"]
-mix_vi_traj = eval_data["mixed_vi"]
-n_eval = eval_data["n_eval"]
-
-fig3, axes3 = plt.subplots(1, 4, figsize=(20, 5))
-fig3.suptitle("VI Oracle — Cumulative Reward Trajectories",
-              fontsize=14, fontweight="bold")
-
-# Panels 1-3: per locked regime (isolated VI)
-for r, name in enumerate(["Noise", "Bull", "Bear"]):
-    ax = axes3[r]
-    color = REGIME_COLORS[r]
-
-    iso = iso_traj[name]
-    iso_mean = np.array(iso["cumulative_reward_mean"])
-    iso_sem = np.array(iso["cumulative_reward_std"]) / np.sqrt(n_eval)
-    steps = np.arange(len(iso_mean))
-
-    ax.plot(steps, iso_mean, color=color, linewidth=1.5, label="Isolated VI")
-    ax.fill_between(steps, iso_mean - iso_sem, iso_mean + iso_sem,
-                    color=color, alpha=0.2)
-
-    ax.set_title(f"{name} (locked)")
-    ax.set_xlabel("Step")
-    if r == 0:
-        ax.set_ylabel("Cumulative reward")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-
-# Panel 4: mixed VI on unlocked (switching) regimes
-ax = axes3[3]
-if "cumulative_reward_mean" in mix_vi_traj:
-    mv_mean = np.array(mix_vi_traj["cumulative_reward_mean"])
-    mv_sem = np.array(mix_vi_traj["cumulative_reward_std"]) / np.sqrt(n_eval)
-    steps = np.arange(len(mv_mean))
-    ax.plot(steps, mv_mean, color="#7B1FA2", linewidth=1.5, label="Mixed VI")
-    ax.fill_between(steps, mv_mean - mv_sem, mv_mean + mv_sem,
-                    color="#7B1FA2", alpha=0.2)
-    ax.set_title("Mixed (switching)")
-    ax.set_xlabel("Step")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-else:
-    ax.set_visible(False)
-
-plt.tight_layout()
-save_fig(fig3, "vi_trajectories.png", script_file=__file__)
-
 # ── Print eval summary ──
+mix_vi_traj = eval_data["mixed_vi"]
 print("\nEvaluation summary (from vi_eval.json):")
 print(f"  Mixed VI oracle:  {mix_vi_traj['mean_reward']:.2f} "
       f"(std={mix_vi_traj['std_reward']:.2f})")

@@ -73,119 +73,151 @@ def evaluate_oracle(sim_config: SimConfig, rng_key, n_episodes=50,
 
 # ── VI oracle (inventory-aware) ─────────────────────────────────
 
-def _mc_estimate(sim_config, rng_key, n_mc_episodes):
-    """Collect per-(regime, action) MC statistics for VI.
+def _mc_estimate(sim_config, rng_key, n_mc_episodes, horizon=30):
+    """Collect per-(regime, inventory, action) MC statistics for VI.
 
-    Reward = spread_capture + inventory * Δmid (no penalty term).
-    We decompose into inventory-independent spread capture and Δmid,
-    then reconstruct R[r, i, a] = sc[r,a] + i * Δmid[r,a].
+    Uses multi-step rollouts (same methodology as reward_landscape.py):
+    at each (regime, inv, action), runs n_mc_episodes trials of HORIZON steps
+    spamming the same action, and records the mean per-step reward and the
+    inventory transition over the full horizon.
 
     Returns (reward_table, trans_probs) that can be reused across different
     transition matrices.
     """
     max_inv = sim_config.max_inventory
     n_inv = 2 * max_inv + 1
-    n_steps = sim_config.max_steps
+    inv_grid = np.arange(n_inv) - max_inv
 
-    mean_sc = np.zeros((N_REGIMES, N_ACTIONS))
-    mean_dmid = np.zeros((N_REGIMES, N_ACTIONS))
-    max_dinv = 3
-    n_dinv = 2 * max_dinv + 1
-    dinv_hist = np.zeros((N_REGIMES, N_ACTIONS, n_dinv))
+    reward_table = np.zeros((N_REGIMES, n_inv, N_ACTIONS))
+    trans_probs = np.zeros((N_REGIMES, n_inv, N_ACTIONS, n_inv))
 
-    print("    MC estimation ", end="", flush=True)
+    print(f"    MC estimation (horizon={horizon}) ", end="", flush=True)
     for regime in range(N_REGIMES):
-        rng_key, k_regime = jax.random.split(rng_key)
-        keys = jax.random.split(k_regime, n_mc_episodes)
+        step_fn = make_step_fn(sim_config, locked_regime=regime)
 
-        def _run_one(key, actions_arr):
-            return run_episode(sim_config, key, actions_arr,
-                               locked_regime=regime)
-        vmapped = jax.vmap(_run_one, in_axes=(0, None))
+        def _multi_step(inv_f32, action_i32, rng_key):
+            state = init_state(sim_config, rng_key)
+            state = state._replace(inventory=inv_f32)
+            actions = jnp.full((horizon,), action_i32, dtype=jnp.int32)
+
+            def step(s, a):
+                new_s, out = step_fn(s, a)
+                return new_s, out["reward"]
+
+            final_state, rewards = jax.lax.scan(step, state, actions)
+            return rewards.mean(), final_state.inventory
+
+        batched = jax.jit(jax.vmap(_multi_step, in_axes=(None, None, 0)))
 
         for action_idx in range(N_ACTIONS):
-            actions_arr = jnp.full(n_steps, action_idx, dtype=jnp.int32)
-            _, outputs = vmapped(keys, actions_arr)
+            for i_idx, inv in enumerate(inv_grid):
+                rng_key, k = jax.random.split(rng_key)
+                keys = jax.random.split(k, n_mc_episodes)
+                mean_rewards, final_invs = batched(
+                    jnp.float32(inv), jnp.int32(action_idx), keys)
 
-            inv = np.array(outputs["inventory"])
-            rew = np.array(outputs["reward"])
-            mid = np.array(outputs["mid_price"])
-            done = np.array(outputs["done"])
+                reward_table[regime, i_idx, action_idx] = float(
+                    jnp.mean(mean_rewards))
 
-            inv_before = np.concatenate(
-                [np.zeros((n_mc_episodes, 1)), inv[:, :-1]], axis=1)
-            mid_before = np.concatenate(
-                [np.full((n_mc_episodes, 1), 100.0), mid[:, :-1]], axis=1)
-
-            was_done = np.concatenate(
-                [np.zeros((n_mc_episodes, 1), dtype=bool), done[:, :-1]],
-                axis=1)
-            unclamped = np.abs(inv_before) < max_inv
-            valid = ~was_done & unclamped
-
-            d_inv = inv - inv_before
-            d_mid = mid - mid_before
-            # Extract spread capture: reward - inventory * Δmid
-            sc = rew - inv_before * d_mid
-
-            v_sc = sc[valid]
-            v_dmid = d_mid[valid]
-            v_dinv = d_inv[valid]
-
-            n_valid = v_sc.shape[0]
-            if n_valid > 0:
-                mean_sc[regime, action_idx] = np.mean(v_sc)
-                mean_dmid[regime, action_idx] = np.mean(v_dmid)
-
-                dinv_rounded = np.clip(np.round(v_dinv).astype(int),
-                                       -max_dinv, max_dinv)
-                for d in range(-max_dinv, max_dinv + 1):
-                    dinv_hist[regime, action_idx, d + max_dinv] = \
-                        np.sum(dinv_rounded == d)
-                dinv_hist[regime, action_idx] /= n_valid
+                # Inventory transition: where does the agent end up after
+                # HORIZON steps? Bin into inventory grid.
+                final_inv_idx = np.clip(
+                    np.round(np.array(final_invs)).astype(int) + max_inv,
+                    0, n_inv - 1)
+                for j in range(n_inv):
+                    count = np.sum(final_inv_idx == j)
+                    if count > 0:
+                        trans_probs[regime, i_idx, action_idx, j] = (
+                            count / n_mc_episodes)
 
             print(".", end="", flush=True)
     print(" done", flush=True)
 
-    # ── Build reward and transition tables ──
-    inv_grid = np.arange(n_inv) - max_inv
-
-    reward_table = np.zeros((N_REGIMES, n_inv, N_ACTIONS))
-    for r in range(N_REGIMES):
-        for a in range(N_ACTIONS):
-            for i_idx in range(n_inv):
-                reward_table[r, i_idx, a] = (
-                    mean_sc[r, a] + inv_grid[i_idx] * mean_dmid[r, a]
-                )
-
-    trans_probs = np.zeros((N_REGIMES, n_inv, N_ACTIONS, n_inv))
-    for r in range(N_REGIMES):
-        for a in range(N_ACTIONS):
-            for d in range(-max_dinv, max_dinv + 1):
-                prob = dinv_hist[r, a, d + max_dinv]
-                if prob > 0:
-                    for i in range(n_inv):
-                        j = i + d
-                        if 0 <= j < n_inv:
-                            trans_probs[r, i, a, j] += prob
-                        else:
-                            trans_probs[r, i, a, np.clip(j, 0, n_inv - 1)] += prob
-
     return reward_table, trans_probs
 
 
-def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99,
-                     verbose=True):
-    """Run value iteration given pre-computed reward/transition tables.
+def _vi_isolated(reward_table, trans_probs, regime, gamma=0.99, verbose=True):
+    """Value iteration for a single isolated regime.
+
+    Solves a 1D MDP over inventory only (no regime transitions).
+    Uses Gauss-Seidel (in-place) updates for faster convergence.
 
     Args:
         reward_table: (N_REGIMES, n_inv, N_ACTIONS)
         trans_probs: (N_REGIMES, n_inv, N_ACTIONS, n_inv)
-        transition_matrix: (N_REGIMES, N_REGIMES) — row-stochastic
+        regime: int — which regime to solve for
         gamma: discount factor
-        verbose: print convergence info
 
-    Returns (policy, values, info) where info contains convergence data.
+    Returns (policy, values, Q, info)
+        policy: (n_inv,) int — optimal action per inventory
+        values: (n_inv,) float — state values
+        Q: (n_inv, N_ACTIONS) float — Q-values
+    """
+    r = regime
+    n_inv = reward_table.shape[1]
+    R = reward_table[r]     # (n_inv, N_ACTIONS)
+    T = trans_probs[r]      # (n_inv, N_ACTIONS, n_inv)
+
+    V = np.zeros(n_inv)
+    policy = np.zeros(n_inv, dtype=int)
+    deltas = []
+    policy_stable_since = 0
+
+    for iteration in range(5000):
+        max_delta = 0.0
+        for i in range(n_inv):
+            q_vals = np.zeros(N_ACTIONS)
+            for a in range(N_ACTIONS):
+                q_vals[a] = R[i, a] + gamma * np.dot(T[i, a, :], V)
+            v_new = np.max(q_vals)
+            max_delta = max(max_delta, abs(v_new - V[i]))
+            V[i] = v_new  # Gauss-Seidel: update in-place
+
+        policy_new = np.zeros(n_inv, dtype=int)
+        Q = np.zeros((n_inv, N_ACTIONS))
+        for i in range(n_inv):
+            for a in range(N_ACTIONS):
+                Q[i, a] = R[i, a] + gamma * np.dot(T[i, a, :], V)
+            policy_new[i] = np.argmax(Q[i])
+
+        deltas.append(float(max_delta))
+        if not np.array_equal(policy_new, policy):
+            policy_stable_since = iteration
+        policy = policy_new
+
+        if max_delta < 1e-8:
+            if verbose:
+                print(f"converged at iter {iteration} "
+                      f"(policy stable since {policy_stable_since})",
+                      flush=True)
+            break
+    else:
+        if verbose:
+            print(f"max iterations (delta={max_delta:.2e})", flush=True)
+
+    # Compute Bellman residual: max |V - max_a Q(s,a)|
+    bellman_residual = max(abs(V[i] - np.max(Q[i])) for i in range(n_inv))
+
+    info = {
+        "n_iterations": min(iteration + 1, 5000),
+        "final_delta": deltas[-1],
+        "policy_stable_since": policy_stable_since,
+        "max_bellman_residual": bellman_residual,
+        "deltas": deltas,
+    }
+    return policy, V, Q, info
+
+
+def _vi_mixed(reward_table, trans_probs, transition_matrix, gamma=0.99,
+              verbose=True):
+    """Value iteration under regime switching (mixed).
+
+    Full (regime, inventory) state space with Gauss-Seidel updates.
+
+    Returns (policy, values, Q, info)
+        policy: (N_REGIMES, n_inv) int
+        values: (N_REGIMES, n_inv) float
+        Q: (N_REGIMES, n_inv, N_ACTIONS) float
     """
     n_inv = reward_table.shape[1]
     tm = np.array(transition_matrix)
@@ -195,177 +227,161 @@ def _value_iteration(reward_table, trans_probs, transition_matrix, gamma=0.99,
     deltas = []
     policy_stable_since = 0
 
-    for iteration in range(2000):
-        Q = np.zeros((N_ACTIONS, N_REGIMES, n_inv))
+    for iteration in range(5000):
+        max_delta = 0.0
+        for r in range(N_REGIMES):
+            for i in range(n_inv):
+                q_vals = np.zeros(N_ACTIONS)
+                for a in range(N_ACTIONS):
+                    for rp in range(N_REGIMES):
+                        q_vals[a] += tm[r, rp] * (
+                            reward_table[rp, i, a]
+                            + gamma * np.dot(trans_probs[rp, i, a, :], V[rp]))
+                v_new = np.max(q_vals)
+                max_delta = max(max_delta, abs(v_new - V[r, i]))
+                V[r, i] = v_new
 
-        for a in range(N_ACTIONS):
-            for r in range(N_REGIMES):
-                q_ri = np.zeros(n_inv)
-                for rp in range(N_REGIMES):
-                    R = reward_table[rp, :, a]
-                    T = trans_probs[rp, :, a, :]
-                    q_ri += tm[r, rp] * (R + gamma * (T @ V[rp]))
-                Q[a, r] = q_ri
+        # Recompute Q and policy from converged V
+        Q = np.zeros((N_REGIMES, n_inv, N_ACTIONS))
+        policy_new = np.zeros((N_REGIMES, n_inv), dtype=int)
+        for r in range(N_REGIMES):
+            for i in range(n_inv):
+                for a in range(N_ACTIONS):
+                    for rp in range(N_REGIMES):
+                        Q[r, i, a] += tm[r, rp] * (
+                            reward_table[rp, i, a]
+                            + gamma * np.dot(trans_probs[rp, i, a, :], V[rp]))
+                policy_new[r, i] = np.argmax(Q[r, i])
 
-        V_new = np.max(Q, axis=0)
-        new_policy = np.argmax(Q, axis=0)
-
-        delta = np.max(np.abs(V_new - V))
-        deltas.append(float(delta))
-
-        if not np.array_equal(new_policy, policy):
+        deltas.append(float(max_delta))
+        if not np.array_equal(policy_new, policy):
             policy_stable_since = iteration
+        policy = policy_new
 
-        if delta < 1e-6:
+        if max_delta < 1e-8:
             if verbose:
-                print(f"converged at iteration {iteration} "
-                      f"(policy stable since {policy_stable_since})", flush=True)
+                print(f"converged at iter {iteration} "
+                      f"(policy stable since {policy_stable_since})",
+                      flush=True)
             break
-        V = V_new
-        policy = new_policy
     else:
         if verbose:
-            print(f"max iterations (delta={delta:.2e})", flush=True)
+            print(f"max iterations (delta={max_delta:.2e})", flush=True)
 
-    # Compute Bellman residual for final policy as sanity check
-    bellman_residual = np.zeros((N_REGIMES, n_inv))
+    bellman_residual = 0.0
     for r in range(N_REGIMES):
         for i in range(n_inv):
-            a = policy[r, i]
-            q = 0.0
-            for rp in range(N_REGIMES):
-                R = reward_table[rp, i, a]
-                future = gamma * np.dot(trans_probs[rp, i, a, :], V[rp])
-                q += tm[r, rp] * (R + future)
-            bellman_residual[r, i] = abs(q - V[r, i])
+            bellman_residual = max(bellman_residual,
+                                  abs(V[r, i] - np.max(Q[r, i])))
 
     info = {
-        "n_iterations": min(iteration + 1, 2000),
+        "n_iterations": min(iteration + 1, 5000),
         "final_delta": deltas[-1],
         "policy_stable_since": policy_stable_since,
-        "max_bellman_residual": float(np.max(bellman_residual)),
+        "max_bellman_residual": bellman_residual,
         "deltas": deltas,
     }
-
-    return policy, V, info
-
-
-def compute_vi_policy(sim_config: SimConfig, rng_key, gamma=0.99,
-                      n_mc_episodes=100, transition_matrix=None):
-    """Compute optimal policy via value iteration over (regime, inventory).
-
-    Args:
-        transition_matrix: optional override. Defaults to TRANSITION_MATRIX.
-            Use np.eye(N_REGIMES) for isolated-regime policies.
-
-    Returns (policy, values):
-      policy : int array (N_REGIMES, n_inv) — optimal action per state
-      values : float array (N_REGIMES, n_inv) — state values
-    """
-    if transition_matrix is None:
-        transition_matrix = TRANSITION_MATRIX
-
-    reward_table, trans_probs = _mc_estimate(sim_config, rng_key,
-                                             n_mc_episodes)
-
-    print("    Value iteration ... ", end="", flush=True)
-    policy, V, info = _value_iteration(reward_table, trans_probs,
-                                       transition_matrix, gamma)
-    return policy, V, info
+    return policy, V, Q, info
 
 
 def compute_vi_isolated_and_mixed(sim_config: SimConfig, rng_key, gamma=0.99,
-                                  n_mc_episodes=100, max_doublings=4):
-    """Compute both isolated-regime and mixed-regime VI policies.
+                                  n_mc_episodes=4000, horizon=30):
+    """Compute 4 optimal policies: 3 isolated (one per regime) + 1 mixed.
 
-    Verifies MC convergence: runs estimation with two independent seeds
-    and checks that policies agree. If not, doubles n_mc and retries
-    (up to max_doublings times).
+    Uses multi-step MC rollouts (horizon steps per trial) matching
+    reward_landscape.py methodology. Runs two seeds and reports
+    disagreements. Uses seed 1 for the final policies.
 
     Returns:
-        isolated: (policy, values, info) with np.eye(3) transition matrix
-        mixed: (policy, values, info) with TRANSITION_MATRIX
+        iso_results: list of 3 tuples (policy, values, Q, info)
+            policy: (n_inv,) int — optimal action per inventory for this regime
+            Q: (n_inv, N_ACTIONS) float
+        mix_result: (policy, values, Q, info)
+            policy: (N_REGIMES, n_inv) int
+            Q: (N_REGIMES, n_inv, N_ACTIONS) float
     """
-    n_mc = n_mc_episodes
     max_inv = sim_config.max_inventory
-
-    # Display range for convergence reporting (skip boundary)
+    n_inv = 2 * max_inv + 1
     display_lo = 5
-    display_hi = 2 * max_inv + 1 - 5
+    display_hi = n_inv - 5
+    regime_names = ["Noise", "Bull", "Bear"]
 
-    for attempt in range(max_doublings + 1):
-        k1, k2, rng_key = jax.random.split(rng_key, 3)
+    k1, k2 = jax.random.split(rng_key)
 
-        print(f"\n  MC convergence check (n_mc={n_mc}, attempt {attempt+1})")
+    print(f"\n  Seed 1 (n_mc={n_mc_episodes}, horizon={horizon}):")
+    rt1, tp1 = _mc_estimate(sim_config, k1, n_mc_episodes, horizon=horizon)
 
-        print(f"    Seed A:")
-        rt_a, tp_a = _mc_estimate(sim_config, k1, n_mc)
-        print(f"    Seed B:")
-        rt_b, tp_b = _mc_estimate(sim_config, k2, n_mc)
+    print(f"  Seed 2 (n_mc={n_mc_episodes}, horizon={horizon}):")
+    rt2, tp2 = _mc_estimate(sim_config, k2, n_mc_episodes, horizon=horizon)
 
-        # Average the two estimates for the final tables
-        reward_table = (rt_a + rt_b) / 2
-        trans_probs = (tp_a + tp_b) / 2
+    # ── Compute 3 isolated policies from seed 1 ──
+    iso_results = []
+    for r in range(N_REGIMES):
+        print(f"  VI isolated {regime_names[r]} (seed 1) ... ", end="",
+              flush=True)
+        policy, V, Q, info = _vi_isolated(rt1, tp1, r, gamma)
+        iso_results.append((policy, V, Q, info))
 
-        # Compute policies from each seed independently
-        iso_a, _, _ = _value_iteration(rt_a, tp_a, np.eye(N_REGIMES), gamma,
-                                       verbose=False)
-        iso_b, _, _ = _value_iteration(rt_b, tp_b, np.eye(N_REGIMES), gamma,
-                                       verbose=False)
-        mix_a, _, _ = _value_iteration(rt_a, tp_a, TRANSITION_MATRIX, gamma,
-                                       verbose=False)
-        mix_b, _, _ = _value_iteration(rt_b, tp_b, TRANSITION_MATRIX, gamma,
-                                       verbose=False)
+    # ── Compute mixed policy from seed 1 ──
+    print("  VI mixed (seed 1) ... ", end="", flush=True)
+    mix_policy, mix_V, mix_Q, mix_info = _vi_mixed(
+        rt1, tp1, TRANSITION_MATRIX, gamma)
 
-        # Check agreement in display range (skip boundary artifacts)
-        n_cells = iso_a[:, display_lo:display_hi].size
-        # Allow up to max_disagree cells to differ — these are at transition
-        # points where two actions have near-identical Q-values.
-        max_disagree = max(1, n_cells // 30)  # ~3% tolerance
+    # ── Seed 2 for convergence check ──
+    iso2_policies = []
+    for r in range(N_REGIMES):
+        p2, _, _, _ = _vi_isolated(rt2, tp2, r, gamma, verbose=False)
+        iso2_policies.append(p2)
 
-        iso_diff = int(np.sum(iso_a[:, display_lo:display_hi]
-                              != iso_b[:, display_lo:display_hi]))
-        mix_diff = int(np.sum(mix_a[:, display_lo:display_hi]
-                              != mix_b[:, display_lo:display_hi]))
+    mix2_policy, _, _, _ = _vi_mixed(rt2, tp2, TRANSITION_MATRIX, gamma,
+                                      verbose=False)
 
-        iso_ok = iso_diff <= max_disagree
-        mix_ok = mix_diff <= max_disagree
+    # ── Report disagreements ──
+    print(f"\n  Convergence check (excluding boundary ±5):")
+    for r in range(N_REGIMES):
+        p1 = iso_results[r][0][display_lo:display_hi]
+        p2 = iso2_policies[r][display_lo:display_hi]
+        diff = int(np.sum(p1 != p2))
+        status = "CONVERGED" if diff == 0 else "NOT CONVERGED"
+        print(f"    Isolated {regime_names[r]:>5s}: {diff} disagreements "
+              f"({status})")
+        iso_results[r][3]["mc_converged"] = diff == 0
+        iso_results[r][3]["mc_seed_disagreements"] = diff
 
-        print(f"    Isolated policy: {n_cells - iso_diff}/{n_cells} agree "
-              f"({'CONVERGED' if iso_ok else f'{iso_diff} differ'})")
-        print(f"    Mixed policy:    {n_cells - mix_diff}/{n_cells} agree "
-              f"({'CONVERGED' if mix_ok else f'{mix_diff} differ'})")
-        print(f"    (tolerance: {max_disagree} cells)")
-
-        if iso_ok and mix_ok:
-            break
-
-        if attempt < max_doublings:
-            n_mc *= 2
-            print(f"    Doubling to n_mc={n_mc}...")
-        else:
-            print(f"    WARNING: MC not fully converged after {max_doublings} "
-                  f"doublings (n_mc={n_mc}). Using averaged estimates.")
-
-    # Final VI from averaged tables
-    print(f"\n    Final VI from averaged MC estimates (n_mc={n_mc} × 2 seeds):")
-    print("    VI (isolated regimes) ... ", end="", flush=True)
-    iso_policy, iso_values, iso_info = _value_iteration(
-        reward_table, trans_probs, np.eye(N_REGIMES), gamma)
-
-    print("    VI (mixed regimes) ... ", end="", flush=True)
-    mix_policy, mix_values, mix_info = _value_iteration(
-        reward_table, trans_probs, TRANSITION_MATRIX, gamma)
-
-    # Store MC convergence metadata
-    iso_info["n_mc_final"] = n_mc
-    iso_info["mc_converged"] = bool(iso_ok)
-    iso_info["mc_seed_disagreements"] = iso_diff
-    mix_info["n_mc_final"] = n_mc
-    mix_info["mc_converged"] = bool(mix_ok)
+    mix_diff = int(np.sum(
+        mix_policy[:, display_lo:display_hi]
+        != mix2_policy[:, display_lo:display_hi]))
+    print(f"    Mixed:           {mix_diff} disagreements "
+          f"({'CONVERGED' if mix_diff == 0 else 'NOT CONVERGED'})")
+    mix_info["mc_converged"] = mix_diff == 0
     mix_info["mc_seed_disagreements"] = mix_diff
 
-    return (iso_policy, iso_values, iso_info), (mix_policy, mix_values, mix_info)
+    # ── Assemble iso_policy in (N_REGIMES, n_inv) shape for backward compat ──
+    iso_policy = np.stack([iso_results[r][0] for r in range(N_REGIMES)])
+    iso_values = np.stack([iso_results[r][1] for r in range(N_REGIMES)])
+    iso_Q = np.stack([iso_results[r][2] for r in range(N_REGIMES)])
+
+    # Merge info from all 3 isolated runs
+    iso_info = {
+        "Q": iso_Q,
+        "per_regime": [iso_results[r][3] for r in range(N_REGIMES)],
+        # Summary: worst-case convergence stats
+        "n_iterations": max(iso_results[r][3]["n_iterations"]
+                           for r in range(N_REGIMES)),
+        "final_delta": max(iso_results[r][3]["final_delta"]
+                          for r in range(N_REGIMES)),
+        "policy_stable_since": max(iso_results[r][3]["policy_stable_since"]
+                                   for r in range(N_REGIMES)),
+        "max_bellman_residual": max(iso_results[r][3].get(
+            "max_bellman_residual", iso_results[r][3]["final_delta"])
+            for r in range(N_REGIMES)),
+        "deltas": iso_results[0][3]["deltas"],  # just use noise for plot
+    }
+
+    mix_info["Q"] = mix_Q
+
+    return ((iso_policy, iso_values, iso_info),
+            (mix_policy, mix_V, mix_info))
 
 
 def _results_path(filename):

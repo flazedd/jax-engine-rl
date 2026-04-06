@@ -11,6 +11,6 @@ from lob_sim.regime import (
     transition_regime, get_regime_params,
 )
 from lob_sim.actions import (
-    ACTION_TABLE, N_ACTIONS, BID_TICKS, ASK_TICKS,
+    ACTION_TABLE, N_ACTIONS,
     action_index_to_offsets, offsets_to_action_index,
 )

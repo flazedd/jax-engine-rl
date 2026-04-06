@@ -11,14 +11,14 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from lob_sim.actions import ACTION_TABLE, N_ACTIONS, BID_TICKS, ASK_TICKS
+from lob_sim.actions import ACTION_TABLE, N_ACTIONS
 from lob_sim.config import SimConfig
 from lob_sim.regime import N_REGIMES
 from lob_sim.step import run_episode
 
-from plot_style import (apply_style, action_heatmap, mark_optimal,
+from plot_style import (apply_style, action_bar, mark_optimal_bar,
                         save_fig, REGIME_NAMES as _RNAMES,
-                        N_BID, N_ASK)
+                        ACTION_LABELS)
 
 apply_style()
 
@@ -167,26 +167,18 @@ def main():
               f"2nd {action_str(int(second_idx))} = {mean_matrix[second_idx, r]:+.2f}, "
               f"gap = {gap:.2f}, SE = {se:.2f} ({ratio:.1f}% of gap)")
 
-    # ── Step 6: Heatmaps ──
-    reshaped = mean_matrix.reshape(N_BID, N_ASK, N_REGIMES)
-    se_reshaped = se_matrix.reshape(N_BID, N_ASK, N_REGIMES)
-    vmin = mean_matrix.min()
-    vmax = mean_matrix.max()
-
+    # ── Step 6: Bar charts ──
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     for r in range(N_REGIMES):
         ax = axes[r]
-        im = action_heatmap(ax, reshaped[:, :, r],
-                            f"{REGIME_NAMES[r]} Regime",
-                            kind="reward", vmin=vmin, vmax=vmax,
-                            se_matrix=se_reshaped[:, :, r])
-        mark_optimal(ax, int(mean_matrix[:, r].argmax()), origin="lower")
+        action_bar(ax, mean_matrix[:, r],
+                   f"{REGIME_NAMES[r]} Regime",
+                   kind="reward", se_values=se_matrix[:, r])
+        mark_optimal_bar(ax, int(mean_matrix[:, r].argmax()))
 
     fig.suptitle(f"Policy Divergence: Mean Reward by Action & Regime "
                  f"(N={N_EPISODES}, T={T_STEPS}, {N_SEEDS} seeds)")
-    fig.tight_layout(rect=[0, 0, 0.92, 0.95])
-    cbar_ax = fig.add_axes([0.93, 0.15, 0.02, 0.7])
-    fig.colorbar(im, cax=cbar_ax, label="Mean Total Reward")
+    fig.tight_layout()
     save_fig(fig, "divergence.png", script_file=__file__)
 
     # Save MC optimal actions for use by train.py

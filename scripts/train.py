@@ -22,7 +22,7 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 
 from lob_sim.agents import available_agents, make_agent
-from lob_sim.actions import N_ACTIONS, BID_TICKS, ASK_TICKS
+from lob_sim.actions import N_ACTIONS, ACTION_TABLE
 from lob_sim.config import SimConfig
 from lob_sim.obs import observe
 from lob_sim.state import init_state
@@ -35,8 +35,8 @@ from lob_sim.training.rollout import collect_rollout_batch
 from lob_sim.training.trainer import compute_gae, create_optimizer, ppo_update
 
 from plot_style import (
-    apply_style, action_heatmap, mark_optimal, save_fig,
-    REGIME_NAMES, REGIME_COLORS, MIXED_COLOR, N_BID, N_ASK,
+    apply_style, action_bar, mark_optimal_bar, save_fig,
+    REGIME_NAMES, REGIME_COLORS, MIXED_COLOR, ACTION_LABELS,
 )
 
 apply_style()
@@ -84,10 +84,9 @@ if os.path.exists(_mc_path):
         _mc = json.load(_f)
     MC_OPTIMAL = _mc["optimal_actions"]  # [noise_idx, bull_idx, bear_idx]
     print(f"  MC optimal actions loaded from {_mc_path}")
-    from lob_sim.actions import ACTION_TABLE as _AT
     for _r, _a in enumerate(MC_OPTIMAL):
         print(f"    {REGIME_NAMES[_r]}: action {_a} = "
-              f"({int(_AT[_a][0])},{int(_AT[_a][1])})")
+              f"({int(ACTION_TABLE[_a][0])},{int(ACTION_TABLE[_a][1])})")
 else:
     MC_OPTIMAL = None
     print(f"  WARNING: {_mc_path} not found — run plot_divergence.py first")
@@ -129,8 +128,8 @@ def collect_eval_actions(agent, sim_config, rng_key, n_episodes, locked_regime):
     return all_actions, all_masks
 
 
-def action_freq_matrix(actions, mask=None):
-    """Flat action array → (N_BID, N_ASK) frequency matrix.
+def action_freq_vector(actions, mask=None):
+    """Flat action array → (N_ACTIONS,) frequency vector.
 
     If mask is provided, only count actions where mask is True (live steps).
     """
@@ -139,16 +138,13 @@ def action_freq_matrix(actions, mask=None):
         flat_mask = np.array(mask).reshape(-1).astype(bool)
         flat_actions = flat_actions[flat_mask]
     if len(flat_actions) == 0:
-        return np.zeros((N_BID, N_ASK))
+        return np.zeros(N_ACTIONS)
     counts = np.bincount(flat_actions, minlength=N_ACTIONS)
-    return (counts / counts.sum()).reshape(N_BID, N_ASK)
+    return counts / counts.sum()
 
 
-def freq_heatmap(ax, freq_matrix, title, vmax=None):
-    if vmax is None:
-        vmax = max(0.4, freq_matrix.max() * 1.1)
-    return action_heatmap(ax, freq_matrix, title,
-                          kind="frequency", vmin=0, vmax=vmax)
+def freq_bar(ax, freq_vec, title):
+    return action_bar(ax, freq_vec, title, kind="frequency")
 
 
 # ── Training loop (agent-agnostic) ──────────────────────────────
@@ -308,7 +304,7 @@ if RUN_PER_REGIME:
         actions, mask = collect_eval_actions(agent, SIM_CFG, key_eval,
                                             n_episodes=N_EVAL_EPISODES,
                                             locked_regime=regime_idx)
-        per_regime_freqs[regime_idx] = action_freq_matrix(actions, mask)
+        per_regime_freqs[regime_idx] = action_freq_vector(actions, mask)
 
     # Plot
     plt.close("all")
@@ -339,9 +335,9 @@ if RUN_PER_REGIME:
         ax.set_xlim(0, max(iters)); ax.grid(True)
 
         ax = fig1.add_subplot(gs1[row, 2])
-        freq_heatmap(ax, per_regime_freqs[regime_idx], f"{name} — Actions")
+        freq_bar(ax, per_regime_freqs[regime_idx], f"{name} — Actions")
         _opt = MC_OPTIMAL[regime_idx] if MC_OPTIMAL else int(np.argmax(per_regime_freqs[regime_idx]))
-        mark_optimal(ax, _opt, origin="upper")
+        mark_optimal_bar(ax, _opt)
 
     fig1.suptitle(f"{AGENT_NAME.upper()} Trained Per-Regime",
                   fontweight="bold", y=0.98)
@@ -363,7 +359,7 @@ if RUN_MIXED:
         actions, mask = collect_eval_actions(agent_mixed, SIM_CFG, key_eval,
                                             n_episodes=N_EVAL_EPISODES,
                                             locked_regime=regime_idx)
-        mixed_freqs[regime_idx] = action_freq_matrix(actions, mask)
+        mixed_freqs[regime_idx] = action_freq_vector(actions, mask)
 
     # Plot
     fig2 = plt.figure(figsize=(16, 10))
@@ -387,13 +383,12 @@ if RUN_MIXED:
     ax.set_title("Entropy")
     ax.set_xlabel("Iteration"); ax.set_ylabel("Entropy"); ax.grid(True)
 
-    vmax_global = max(max(f.max() for f in mixed_freqs.values()) * 1.1, 0.4)
     for regime_idx in range(3):
         ax = fig2.add_subplot(gs2[1, regime_idx])
-        freq_heatmap(ax, mixed_freqs[regime_idx],
-                     f"Eval on {REGIME_NAMES[regime_idx]}", vmax=vmax_global)
+        freq_bar(ax, mixed_freqs[regime_idx],
+                 f"Eval on {REGIME_NAMES[regime_idx]}")
         _opt = MC_OPTIMAL[regime_idx] if MC_OPTIMAL else int(np.argmax(mixed_freqs[regime_idx]))
-        mark_optimal(ax, _opt, origin="upper")
+        mark_optimal_bar(ax, _opt)
 
     fig2.suptitle(f"{AGENT_NAME.upper()} on Mixed Regimes — Action Distribution per Regime\n"
                   "(blue squares = Monte Carlo optimal action per regime)",
@@ -407,13 +402,14 @@ print("\n" + "=" * 60)
 print("  SUMMARY")
 print("=" * 60)
 
+_at = np.array(ACTION_TABLE)
+
 if per_regime_freqs:
     print(f"\nPer-regime trained {AGENT_NAME.upper()} — most frequent action:")
     for regime_idx in RUN_PER_REGIME:
         freq = per_regime_freqs[regime_idx]
         best = np.argmax(freq)
-        bid = BID_TICKS[best // len(ASK_TICKS)]
-        ask = ASK_TICKS[best % len(ASK_TICKS)]
+        bid, ask = int(_at[best][0]), int(_at[best][1])
         print(f"  {REGIME_NAMES[regime_idx]:6s}: bid={bid}, ask={ask}  "
               f"({freq.max()*100:.1f}% of actions)")
 
@@ -422,8 +418,7 @@ if RUN_MIXED:
     for regime_idx in range(3):
         freq = mixed_freqs[regime_idx]
         best = np.argmax(freq)
-        bid = BID_TICKS[best // len(ASK_TICKS)]
-        ask = ASK_TICKS[best % len(ASK_TICKS)]
+        bid, ask = int(_at[best][0]), int(_at[best][1])
         print(f"  {REGIME_NAMES[regime_idx]:6s}: bid={bid}, ask={ask}  "
               f"({freq.max()*100:.1f}% of actions)")
 

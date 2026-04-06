@@ -76,12 +76,12 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
             # Apply price drift
             mid = mid + regime_params.price_drift
         else:
-            # Phase 1-2: continuous (2,) action, no regime system
+            # Phase 1-2: continuous (2,) action, use noise regime params
             key, k1 = jax.random.split(state.rng_key)
             bid_level = jnp.clip(action[0].astype(jnp.int32), 0, n - 1)
             ask_level = jnp.clip(action[1].astype(jnp.int32), 0, n - 1)
             new_regime = state.regime
-            regime_params = None
+            regime_params = get_regime_params(jnp.int32(0))  # NOISE defaults
 
         # 1. Place agent orders
         bids = state.bid_volumes.at[bid_level].add(agent_size)
@@ -175,11 +175,17 @@ def make_step_fn(config: SimConfig, locked_regime=-1):
             rng_key=key,
         )
 
-        # Spread capture + mark-to-market on existing inventory
+        # Spread capture + mark-to-market on existing inventory - inventory penalty
         bid_edge = (bid_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
         ask_edge = (ask_level.astype(jnp.float32) + hs.astype(jnp.float32)) * tick
         mtm = state.inventory * (mid2 - state.mid_price)
-        reward = bid_fill * bid_edge + ask_fill * ask_edge + mtm
+        inv_thresh = regime_params.inventory_penalty_threshold.astype(jnp.float32)
+        excess_old = jnp.maximum(jnp.abs(state.inventory) - inv_thresh, 0.0)
+        excess_new = jnp.maximum(jnp.abs(new_inventory) - inv_thresh, 0.0)
+        penalty = regime_params.inventory_penalty * (excess_new ** 2 - excess_old ** 2)
+        round_trip = jnp.minimum(bid_fill, ask_fill)
+        spread_bonus = regime_params.spread_capture_bonus * round_trip * (bid_edge + ask_edge)
+        reward = bid_fill * bid_edge + ask_fill * ask_edge + mtm - penalty + spread_bonus
 
         return new_state, {
             'reward': reward,

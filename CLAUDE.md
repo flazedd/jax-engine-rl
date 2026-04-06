@@ -11,19 +11,19 @@ Discrete state/action spaces → exact Bellman equation solutions via value iter
 No simulation or Monte Carlo needed — all transition/reward tables are closed-form.
 
 ## Problem Structure
-- **State**: (regime, inventory) — 3 regimes × 31 inventory levels = 93 states
-- **Actions**: 3 discrete (bid_offset, ask_offset) pairs with equal total offset (6 ticks)
-  - a0=(3,3): symmetric — spread capture
-  - a1=(1,5): tight bid, wide ask — go long
-  - a2=(5,1): wide bid, tight ask — go short
+- **State**: (regime, inventory) — 3 regimes × 21 inventory levels = 63 states
+- **Actions**: 3 discrete (bid_offset, ask_offset) pairs
+  - a0=(2,2): tight symmetric — best spread capture (total offset 4)
+  - a1=(1,7): aggressive long — strong directional (total offset 8)
+  - a2=(7,1): aggressive short — strong directional (total offset 8)
 - **Fill model**: p_fill(δ) = arrival_rate(regime) × exp(-κ(δ-1)), κ=0.3
 - **Reward**: spread_capture + inventory×drift − φ×inventory²
 - **HMM**: Noise/Bull/Bear with persistent transitions (90-92% self-transition)
-- **Key calibration**: Subtle fill asymmetry (~1.7x ratio) makes regime hard to observe from fills alone, while large drift (±0.40) makes playing the wrong action very costly → ~23% value-of-information gap
+- **Key calibration**: a0 has lower total offset → genuinely better spread capture, creating a wide "a0 zone" in Noise. Subtle fill asymmetry (~1.7x ratio) makes regime hard to observe, while large drift (±0.40) makes wrong actions costly → ~30% value-of-information gap
 
 ## Solvers
-1. **Full-info VI**: Regime observed → 93-state MDP, solves in ~3ms
-2. **POMDP belief-state VI**: Regime hidden → discretized simplex, ~8s
+1. **Full-info VI**: Regime observed → 63-state MDP, solves in ~2ms
+2. **POMDP belief-state VI**: Regime hidden → discretized simplex, ~3s
 
 ## Architecture
 ```

@@ -8,14 +8,15 @@ State: (regime, inventory)
   - inventory ∈ {-Q_max, ..., +Q_max}
 
 Actions: discrete (bid_offset, ask_offset) tick pairs
-  - Action 0: (2,2) symmetric moderate — pure spread capture
-  - Action 1: (1,3) tight bid, wide ask — go long (bull strategy)
-  - Action 2: (3,1) wide bid, tight ask — go short (bear strategy)
+  - Action 0: (2,2) tight symmetric — best spread capture (total offset 4)
+  - Action 1: (1,7) aggressive long — strong directional (total offset 8)
+  - Action 2: (7,1) aggressive short — strong directional (total offset 8)
 
-All actions have the same total offset (bid+ask=4), so spread capture at zero
-inventory is similar. Differentiation comes from directional inventory flow
-interacting with regime-dependent drift — exactly the tradeoff in Avellaneda-
-Stoikov market making.
+a0 has a lower total offset → genuinely better spread capture. Directional
+actions sacrifice spread for inventory flow. This creates a wide "a0 zone"
+in Noise (where spread capture dominates) while Bull/Bear play pure
+directional. The tradeoff is the Avellaneda-Stoikov insight: tighter quotes
+capture more spread but expose you to adverse inventory in trending markets.
 
 Fill model:
   p_fill(δ, regime) = arrival_rate(regime) * exp(-κ * (δ - 1))
@@ -54,9 +55,9 @@ TRANSITION_MATRIX = np.array([
 # ---------------------------------------------------------------------------
 
 ACTION_TABLE_ANALYTICAL = np.array([
-    [3, 3],   # symmetric wide — pure spread capture
-    [1, 5],   # tight bid, wide ask — go long (bull strategy)
-    [5, 1],   # wide bid, tight ask — go short (bear strategy)
+    [2, 2],   # tight symmetric — best spread capture
+    [1, 7],   # aggressive long — strong directional (bull)
+    [7, 1],   # aggressive short — strong directional (bear)
 ])
 N_ACTIONS_ANALYTICAL = len(ACTION_TABLE_ANALYTICAL)
 
@@ -72,17 +73,17 @@ class MDPConfig(NamedTuple):
     penalty are comparable in magnitude — producing policies that
     meaningfully differ across regimes.
 
-    The wide action offsets (3,3)/(1,5)/(5,1) with low κ=0.3 create a
-    regime where playing the wrong action incurs a large penalty: tight
-    quotes in the wrong direction fill frequently against adverse drift,
-    while wide quotes miss profitable flow. Combined with very asymmetric
-    arrival rates and persistent regimes, this produces a value-of-
-    information gap of 15-25% — giving an RL agent a meaningful target.
+    Three actions: tight symmetric (2,2) with total offset 4, and
+    aggressive directional (1,7)/(7,1) with total offset 8. The lower
+    total offset gives a0 genuinely better spread capture, creating a
+    wide "a0 zone" in Noise. Subtle fill asymmetry (~1.7x ratio) makes
+    the regime hard to observe, while large drift (±0.40) makes playing
+    the wrong action very costly → ~30% value-of-information gap.
     """
-    max_inv: int = 15
+    max_inv: int = 10
     tick_size: float = 0.05
     half_spread_ticks: int = 2
-    gamma: float = 0.95
+    gamma: float = 0.90
     fill_decay: float = 0.30          # κ in exp(-κ * (δ - 1))
     # Per-regime arrival rates: (noise, bull, bear)
     # Market sells hit our bid; market buys hit our ask
@@ -92,7 +93,7 @@ class MDPConfig(NamedTuple):
     # Per-regime mid-price drift (large — wrong-side inventory is very costly)
     drift: tuple = (0.0, 0.40, -0.40)
     # Quadratic inventory penalty coefficient
-    inv_penalty: float = 0.003
+    inv_penalty: float = 0.001
     # HMM transition matrix (row = from, col = to); None = use default
     transition_matrix: tuple | None = None
     # Action table as flat tuple; None = use default ACTION_TABLE_ANALYTICAL

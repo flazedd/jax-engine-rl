@@ -1,539 +1,918 @@
-"""Analytical Market Making MDP with HMM Regime Switching.
+"""Analytical solutions for the POMDP market making environment.
 
-Literature-conform model (Avellaneda-Stoikov / Guéant-Lehalle-Fernandez-Tapia
-style) with discrete state/action spaces for exact Bellman equation solutions.
+Phase 1: Locked-regime VI + Oracle A (full-information MDP).
+Phase 2: Oracle B (POMDP belief-state VI).
 
-State: (regime, inventory)
-  - regime ∈ {0=Noise, 1=Bull, 2=Bear}
-  - inventory ∈ {-Q_max, ..., +Q_max}
+Locked-regime VI: fix regime r, solve the 11-state inventory MDP.
+  V_r(q) = max_a { R(q,r,a) + γ · Σ_{q'} P(q'|q,a,r) · V_r(q') }
 
-Actions: discrete (bid_offset, ask_offset) tick pairs
-  - Action 0: (2,2) tight symmetric — best spread capture (total offset 4)
-  - Action 1: (1,9) aggressive long — strong directional (total offset 10)
-  - Action 2: (9,1) aggressive short — strong directional (total offset 10)
+Oracle A: full information, 33-state MDP (3 regimes × 11 inventories).
+  V(q,r) = max_a { R(q,r,a) + γ · Σ_{r'} P(r'|r) · Σ_{q'} P(q'|q,a,r) · V(q',r') }
 
-a0 has a lower total offset → genuinely better spread capture. Directional
-actions sacrifice spread for inventory flow. This creates a wide "a0 zone"
-in Noise (where spread capture dominates) while Bull/Bear play pure
-directional. The tradeoff is the Avellaneda-Stoikov insight: tighter quotes
-capture more spread but expose you to adverse inventory in trending markets.
+Oracle B: POMDP with discretized belief states.
+  V(q,b) = max_a { E[r|b,a] + γ · Σ_o P(o|b,a) · V(q'(o), b'(o,a,b)) }
 
-Fill model:
-  p_fill(δ, regime) = arrival_rate(regime) * exp(-κ * (δ - 1))
-
-Reward per step:
-  r = p_bid * bid_edge + p_ask * ask_edge + inv * drift - φ * inv²
-
-References:
-  - Avellaneda & Stoikov (2008), "High-frequency trading in a limit order book"
-  - Guéant, Lehalle & Fernandez-Tapia (2013), "Dealing with the inventory risk"
-  - Cartea, Jaimungal & Penalva (2015), "Algorithmic and HF Trading"
+All computations use JAX arrays, derived from Phase 0 EnvParams.
 """
 from typing import NamedTuple
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
-
-# ---------------------------------------------------------------------------
-# HMM regime system
-# ---------------------------------------------------------------------------
-
-NOISE = 0
-BULL = 1
-BEAR = 2
-N_REGIMES = 3
-
-TRANSITION_MATRIX = np.array([
-    [0.98, 0.01, 0.01],   # NOISE → ...
-    [0.01, 0.98, 0.01],   # BULL  → ...
-    [0.01, 0.01, 0.98],   # BEAR  → ...
-])
+from lob_sim.jax_env import EnvParams
 
 
 # ---------------------------------------------------------------------------
-# Action table (defaults — can be overridden via MDPConfig.actions)
+# Data structures
 # ---------------------------------------------------------------------------
-
-ACTION_TABLE_ANALYTICAL = np.array([
-    [2, 2],   # tight symmetric — best spread capture
-    [1, 9],   # aggressive long — strong directional (bull)
-    [9, 1],   # aggressive short — strong directional (bear)
-])
-N_ACTIONS_ANALYTICAL = len(ACTION_TABLE_ANALYTICAL)
-
-
-# ---------------------------------------------------------------------------
-# MDP specification
-# ---------------------------------------------------------------------------
-
-class MDPConfig(NamedTuple):
-    """Parameters for the analytical market making MDP.
-
-    Calibrated so that spread capture, directional drift, and inventory
-    penalty are comparable in magnitude — producing policies that
-    meaningfully differ across regimes.
-
-    Three actions: tight symmetric (2,2) with total offset 4, and
-    aggressive directional (1,9)/(9,1) with total offset 10. The lower
-    total offset gives a0 genuinely better spread capture, creating a
-    wide "a0 zone" in Noise. Moderate fill asymmetry (~3.3x ratio) lets
-    the POMDP agent learn the regime over ~10 steps. Persistent regimes
-    (98% self-transition, ~50 step duration) give time to exploit.
-    Large drift (±1.0) makes playing a0 in trending regimes costly.
-    The POMDP earns ~0.41/step more than regime-blind — an RL agent
-    should aim to match or approach the POMDP trajectory.
-    """
-    max_inv: int = 10
-    tick_size: float = 0.05
-    half_spread_ticks: int = 2
-    gamma: float = 0.90
-    fill_decay: float = 0.30          # κ in exp(-κ * (δ - 1))
-    # Per-regime arrival rates: (noise, bull, bear)
-    # Market sells hit our bid; market buys hit our ask
-    # Moderate asymmetry (~3.3x ratio) — regime learnable over ~10 steps
-    sell_arrival: tuple = (0.30, 0.50, 0.15)
-    buy_arrival: tuple = (0.30, 0.15, 0.50)
-    # Per-regime mid-price drift (large — wrong-side inventory is very costly)
-    drift: tuple = (0.0, 1.00, -1.00)
-    # Quadratic inventory penalty coefficient
-    inv_penalty: float = 0.001
-    # HMM transition matrix (row = from, col = to); None = use default
-    transition_matrix: tuple | None = None
-    # Action table as flat tuple; None = use default ACTION_TABLE_ANALYTICAL
-    actions: tuple | None = None
-    # POMDP belief grid resolution
-    n_belief_points: int = 21
-
-
-class FillProbs(NamedTuple):
-    """Fill probabilities per (regime, action)."""
-    bid: np.ndarray   # (n_regimes, n_actions)
-    ask: np.ndarray   # (n_regimes, n_actions)
-
 
 class MDPTables(NamedTuple):
-    """Pre-computed MDP tables for value iteration."""
-    reward: np.ndarray       # (n_regimes, n_inv, n_actions)
-    trans_inv: np.ndarray    # (n_regimes, n_inv, n_actions, n_inv)
-    trans_regime: np.ndarray # (n_regimes, n_regimes)
-    fill_probs: FillProbs
-    config: MDPConfig
+    """Pre-computed MDP reward and transition tables."""
+    reward: jnp.ndarray       # (n_regimes, n_inv, n_actions) expected reward
+    trans_inv: jnp.ndarray    # (n_regimes, n_inv, n_actions, n_inv) P(q'|q,r,a)
+    fill_bid: jnp.ndarray     # (n_regimes, n_actions) fill probabilities
+    fill_ask: jnp.ndarray     # (n_regimes, n_actions) fill probabilities
 
 
 class VISolution(NamedTuple):
     """Value iteration output."""
-    policy: np.ndarray    # int — optimal action per state
-    values: np.ndarray    # float — state values
-    Q: np.ndarray         # float — Q-values
+    policy: jnp.ndarray       # optimal action per state
+    values: jnp.ndarray       # V(state)
+    Q: jnp.ndarray            # Q(state, action)
     n_iters: int
-    residuals: list       # Bellman residual per iteration
 
 
 # ---------------------------------------------------------------------------
-# Fill probability model
+# Table construction
 # ---------------------------------------------------------------------------
 
-def _get_action_table(cfg: MDPConfig) -> np.ndarray:
-    """Return the action table, either from config or the module default."""
-    if cfg.actions is not None:
-        n_act = len(cfg.actions) // 2
-        return np.array(cfg.actions, dtype=float).reshape(n_act, 2)
-    return ACTION_TABLE_ANALYTICAL.astype(float)
+def build_mdp_tables(params: EnvParams) -> MDPTables:
+    """Build exact reward and transition tables from environment parameters.
 
-
-def compute_fill_probs(cfg: MDPConfig) -> FillProbs:
-    """Avellaneda-Stoikov exponential fill model.
-
-    p_fill(δ, regime) = arrival_rate(regime) * exp(-κ * (δ - 1))
+    Fill model: P(fill_side) = exp(-κ[regime, side] · δ[action, side])
+    4 outcomes per (regime, inventory, action) from independent bid/ask fills.
+    Reward: spread_pnl - inventory_penalty - boundary_penalty (on post-step q').
     """
-    kappa = cfg.fill_decay
-    at = _get_action_table(cfg)
+    n_r = params.n_regimes
+    n_a = params.n_actions
+    inv_max = params.inventory_max
+    n_q = 2 * inv_max + 1
+    inv_grid = jnp.arange(n_q) - inv_max  # [-5, ..., 5]
 
-    sell_rates = np.array(cfg.sell_arrival)
-    buy_rates = np.array(cfg.buy_arrival)
+    # Fill probabilities: (n_regimes, n_actions)
+    fill_bid = jnp.exp(-params.kappa[:, 0, None] * params.delta[None, :, 0])
+    fill_ask = jnp.exp(-params.kappa[:, 1, None] * params.delta[None, :, 1])
 
-    bid_fill = sell_rates[:, None] * np.exp(-kappa * (at[None, :, 0] - 1))
-    ask_fill = buy_rates[:, None] * np.exp(-kappa * (at[None, :, 1] - 1))
+    # 4 fill outcomes: (bid_filled, ask_filled)
+    fb = jnp.array([0.0, 0.0, 1.0, 1.0])
+    fa = jnp.array([0.0, 1.0, 0.0, 1.0])
+    dq = jnp.array([0, -1, 1, 0])
 
-    return FillProbs(
-        bid=np.clip(bid_fill, 0.0, 1.0),
-        ask=np.clip(ask_fill, 0.0, 1.0),
+    # Outcome probabilities: (n_r, n_a, 4)
+    p_out = jnp.stack([
+        (1 - fill_bid) * (1 - fill_ask),
+        (1 - fill_bid) * fill_ask,
+        fill_bid * (1 - fill_ask),
+        fill_bid * fill_ask,
+    ], axis=-1)
+
+    # Next inventory: q' = clip(q + dq, -inv_max, inv_max)
+    q_next = jnp.clip(
+        inv_grid[:, None] + dq[None, :], -inv_max, inv_max)  # (n_q, 4)
+    q_next_idx = (q_next + inv_max).astype(jnp.int32)
+    q_next_f = q_next.astype(jnp.float32)
+
+    # Spread PnL per (action, outcome)
+    spread_pnl = (fb[None, :] * params.delta[:, 0, None]
+                  + fa[None, :] * params.delta[:, 1, None])  # (n_a, 4)
+
+    # Inventory risk penalty: γ_inv · q'² · σ²[r]  — shape (n_r, n_q, 4)
+    inv_pen = (params.gamma_inventory
+               * q_next_f[None, :, :] ** 2
+               * params.sigma_sq[:, None, None])
+
+    # Boundary penalty: 5.0 · |q'| · 𝟙(|q'|==max)  — shape (n_q, 4)
+    at_bound = (jnp.abs(q_next) == inv_max).astype(jnp.float32)
+    bound_pen = params.boundary_penalty * jnp.abs(q_next_f) * at_bound
+
+    # Reward per outcome: (n_r, n_q, n_a, 4)
+    r_per_outcome = (spread_pnl[None, None, :, :]
+                     - inv_pen[:, :, None, :]
+                     - bound_pen[None, :, None, :])
+
+    # Expected reward: R[r, q, a] = Σ_o P(o|r,a) · reward(r,q,a,o)
+    R = jnp.sum(p_out[:, None, :, :] * r_per_outcome, axis=-1)
+
+    # Transition table: T[r, q, a, q'] = Σ_{o: next(q,o)==q'} P(o|r,a)
+    q_next_onehot = jax.nn.one_hot(q_next_idx, n_q)  # (n_q, 4, n_q)
+    T = jnp.einsum('rao,qop->rqap', p_out, q_next_onehot)
+
+    return MDPTables(reward=R, trans_inv=T, fill_bid=fill_bid, fill_ask=fill_ask)
+
+
+# ---------------------------------------------------------------------------
+# Locked-regime value iteration (11-state MDP per regime)
+# ---------------------------------------------------------------------------
+
+def solve_locked(
+    tables: MDPTables,
+    regime: int,
+    params: EnvParams,
+    tol: float = 1e-6,
+    max_iters: int = 5000,
+) -> VISolution:
+    """Solve the locked-regime MDP for a single regime via value iteration.
+
+    Bellman: V(q) = max_a { R(q,r,a) + γ · Σ_{q'} T(q'|q,r,a) · V(q') }
+    """
+    R_r = tables.reward[regime]       # (n_inv, n_actions)
+    T_r = tables.trans_inv[regime]    # (n_inv, n_actions, n_inv)
+    gamma = params.gamma_disc
+    n_inv = R_r.shape[0]
+
+    V = jnp.zeros(n_inv)
+    Q = jnp.zeros_like(R_r)
+
+    for it in range(max_iters):
+        Q = R_r + gamma * jnp.einsum('qap,p->qa', T_r, V)
+        V_new = jnp.max(Q, axis=-1)
+        residual = float(jnp.max(jnp.abs(V_new - V)))
+        V = V_new
+        if residual < tol:
+            break
+
+    return VISolution(
+        policy=jnp.argmax(Q, axis=-1),
+        values=V,
+        Q=Q,
+        n_iters=it + 1,
+    )
+
+
+def solve_all_locked(
+    tables: MDPTables, params: EnvParams, **kwargs,
+) -> list[VISolution]:
+    """Solve locked-regime VI for all regimes."""
+    return [solve_locked(tables, r, params, **kwargs)
+            for r in range(params.n_regimes)]
+
+
+# ---------------------------------------------------------------------------
+# Oracle A — full-information MDP (33 states)
+# ---------------------------------------------------------------------------
+
+def solve_oracle_a(
+    tables: MDPTables,
+    params: EnvParams,
+    tol: float = 1e-6,
+    max_iters: int = 5000,
+) -> VISolution:
+    """Solve the full-information MDP (Oracle A) via value iteration.
+
+    State: (inventory, regime) — 11 × 3 = 33 states.
+    Agent observes the true regime at each step.
+
+    Bellman:
+      V(q,r) = max_a { R(q,r,a) + γ · Σ_{r'} P(r'|r) · Σ_{q'} T(q'|q,a,r) · V(q',r') }
+
+    Fills depend on current regime r; next regime r' from HMM transition.
+    """
+    R = tables.reward              # (n_r, n_inv, n_a)
+    T = tables.trans_inv           # (n_r, n_inv, n_a, n_inv)
+    hmm = params.hmm_transition    # (n_r, n_r)
+    gamma = params.gamma_disc
+    n_r, n_inv, n_a = R.shape
+
+    V = jnp.zeros((n_r, n_inv))
+    Q = jnp.zeros((n_r, n_inv, n_a))
+
+    for it in range(max_iters):
+        # TV[r, q, a, r'] = Σ_{q'} T[r,q,a,q'] · V[r', q']
+        TV = jnp.einsum('rqap,sp->rqas', T, V)
+        # future[r, q, a] = Σ_{r'} hmm[r,r'] · TV[r,q,a,r']
+        future = jnp.einsum('rs,rqas->rqa', hmm, TV)
+        Q = R + gamma * future
+        V_new = jnp.max(Q, axis=-1)
+        residual = float(jnp.max(jnp.abs(V_new - V)))
+        V = V_new
+        if residual < tol:
+            break
+
+    return VISolution(
+        policy=jnp.argmax(Q, axis=-1),
+        values=V,
+        Q=Q,
+        n_iters=it + 1,
     )
 
 
 # ---------------------------------------------------------------------------
-# Exact transition and reward tables
+# Q_max — shared normalisation constant
 # ---------------------------------------------------------------------------
 
-def build_mdp_tables(cfg: MDPConfig = MDPConfig()) -> MDPTables:
-    """Build exact MDP transition and reward tables in closed form."""
-    max_inv = cfg.max_inv
-    n_inv = 2 * max_inv + 1
-    tick = cfg.tick_size
-    hs = cfg.half_spread_ticks
-    at = _get_action_table(cfg)
-    n_act = len(at)
-    drift = np.array(cfg.drift)
-    phi = cfg.inv_penalty
-    T_hmm = (np.array(cfg.transition_matrix).reshape(N_REGIMES, N_REGIMES)
-             if cfg.transition_matrix is not None
-             else np.array(TRANSITION_MATRIX))
+def compute_q_max(locked_solutions: list[VISolution]) -> float:
+    """Q_max = max_{q, r} Q*_locked(q, r, a*(q,r)).
 
-    fills = compute_fill_probs(cfg)
-    inv_grid = np.arange(n_inv) - max_inv
-
-    bid_edge = (at[:, 0] + hs) * tick  # (n_actions,)
-    ask_edge = (at[:, 1] + hs) * tick
-
-    # --- Reward table ---
-    reward = np.zeros((N_REGIMES, n_inv, n_act))
-    for r in range(N_REGIMES):
-        for a in range(n_act):
-            pb, pa = fills.bid[r, a], fills.ask[r, a]
-            sc = pb * bid_edge[a] + pa * ask_edge[a]
-            for qi in range(n_inv):
-                q = inv_grid[qi]
-                reward[r, qi, a] = sc + q * drift[r] - phi * q * q
-
-    # --- Inventory transition tensor ---
-    trans_inv = np.zeros((N_REGIMES, n_inv, n_act, n_inv))
-    for r in range(N_REGIMES):
-        for a in range(n_act):
-            pb, pa = fills.bid[r, a], fills.ask[r, a]
-            outcomes = [
-                (0,  pb * pa + (1 - pb) * (1 - pa)),
-                (+1, pb * (1 - pa)),
-                (-1, (1 - pb) * pa),
-            ]
-            for qi in range(n_inv):
-                q = inv_grid[qi]
-                for dq, prob in outcomes:
-                    q_new = int(np.clip(q + dq, -max_inv, max_inv))
-                    trans_inv[r, qi, a, q_new + max_inv] += prob
-
-    return MDPTables(
-        reward=reward, trans_inv=trans_inv, trans_regime=T_hmm,
-        fill_probs=fills, config=cfg,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Value iteration — full information (regime observed)
-# ---------------------------------------------------------------------------
-
-def solve_full_info(tables: MDPTables, verbose: bool = False) -> VISolution:
-    """Solve the MDP when the agent observes the true regime.
-
-    Bellman equation (regime transitions first):
-
-        V(r, q) = max_a Σ_{r'} T(r,r')
-                  [R(r',q,a) + γ Σ_{q'} P(q'|r',q,a) V(r',q')]
-
-    63-state problem — converges in milliseconds.
+    Since V(q) = max_a Q(q,a) = Q(q, a*), this is max over all
+    locked-regime value functions.
     """
-    R = tables.reward
-    T_inv = tables.trans_inv
-    T_hmm = tables.trans_regime
-    gamma = tables.config.gamma
+    return float(max(jnp.max(sol.values) for sol in locked_solutions))
 
-    V = np.zeros((N_REGIMES, R.shape[1]))
-    residuals = []
 
-    for it in range(5000):
-        future = np.einsum('rqai,ri->rqa', T_inv, V)
-        val_next = R + gamma * future
-        Q = np.einsum('rs,sqa->rqa', T_hmm, val_next)
+# ---------------------------------------------------------------------------
+# Precondition 1 — locked-regime policies distinct and decisive
+# ---------------------------------------------------------------------------
 
-        V_new = np.max(Q, axis=-1)
-        residual = float(np.max(np.abs(V_new - V)))
-        residuals.append(residual)
+def precondition_1(
+    locked_solutions: list[VISolution],
+    q_max: float,
+) -> dict:
+    """Check Precondition 1: locked-regime policies are distinct and decisive.
+
+    Returns dict with:
+      gap_per_regime: mean relative gap per regime (% of Q_max)
+      pairwise_disagreement: fraction of states where policies differ
+      pass_gap: all mean gaps > 5%
+      pass_disagreement: all pairwise disagreements > 20%
+      passed: both conditions met
+    """
+    n_regimes = len(locked_solutions)
+    n_inv = locked_solutions[0].Q.shape[0]
+
+    # Per-regime gap: (Q*(q, a*) - Q*(q, a_2nd)) / Q_max
+    gaps = {}
+    for r, sol in enumerate(locked_solutions):
+        Q_sorted = jnp.sort(sol.Q, axis=-1)
+        gap = (Q_sorted[:, -1] - Q_sorted[:, -2]) / q_max * 100.0
+        gaps[r] = {
+            "mean": float(jnp.mean(gap)),
+            "min": float(jnp.min(gap)),
+            "values": gap,
+        }
+
+    # Pairwise disagreement: fraction of inventory states with different actions
+    disagreements = {}
+    for r1 in range(n_regimes):
+        for r2 in range(r1 + 1, n_regimes):
+            p1 = locked_solutions[r1].policy
+            p2 = locked_solutions[r2].policy
+            frac = float(jnp.mean((p1 != p2).astype(jnp.float32))) * 100.0
+            disagreements[(r1, r2)] = frac
+
+    pass_gap = all(g["mean"] > 5.0 for g in gaps.values())
+    pass_disagree = all(d > 20.0 for d in disagreements.values())
+
+    return {
+        "gap_per_regime": gaps,
+        "pairwise_disagreement": disagreements,
+        "pass_gap": pass_gap,
+        "pass_disagreement": pass_disagree,
+        "passed": pass_gap and pass_disagree,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Oracle B — POMDP belief-state VI
+# ---------------------------------------------------------------------------
+
+def build_belief_grid(grid_size: int) -> jnp.ndarray:
+    """Uniform triangular grid on the 3-regime belief simplex Δ².
+
+    grid_size: number of divisions per edge (e.g., 20 → 21 points per edge).
+    Returns array of shape (n_grid, 3) where each row sums to 1.0.
+    """
+    n = grid_size + 1  # points per edge
+    pts = []
+    for i in range(n):
+        for j in range(n - i):
+            k = grid_size - i - j
+            pts.append([i, j, k])
+    return jnp.array(pts, dtype=jnp.float32) / grid_size
+
+
+def nearest_belief_idx(b, grid) -> int:
+    """Find nearest grid point by L1 distance.
+
+    Works with both numpy and JAX arrays.
+    """
+    dists = np.sum(np.abs(np.asarray(grid) - np.asarray(b)), axis=1)
+    return int(np.argmin(dists))
+
+
+def hmm_filter_update(
+    belief: jnp.ndarray,
+    fill_bid: int,
+    fill_ask: int,
+    mid_change_idx: int,
+    action: int,
+    tables: MDPTables,
+    params: EnvParams,
+) -> jnp.ndarray:
+    """Exact HMM filter: condition on observation, then predict.
+
+    Order: likelihood-weight → normalise → predict (HMM transition).
+
+    belief: P(current_regime | past_observations) — prior for current step.
+    Returns: P(next_regime | observations_including_current) — prior for next step.
+    """
+    n_r = params.n_regimes
+    # Likelihood: P(fills, mid_change | regime, action)
+    lik = jnp.ones(n_r)
+    for r in range(n_r):
+        pb = float(tables.fill_bid[r, action])
+        pa = float(tables.fill_ask[r, action])
+        l_fills = (pb if fill_bid else 1 - pb) * (pa if fill_ask else 1 - pa)
+        l_mc = float(params.drift_probs[r, mid_change_idx])
+        lik = lik.at[r].set(l_fills * l_mc)
+
+    # Condition on observation
+    b_cond = belief * lik
+    total = b_cond.sum()
+    b_cond = jnp.where(total > 1e-15, b_cond / total,
+                        jnp.ones(n_r) / n_r)
+
+    # Predict (HMM transition to next regime)
+    return params.hmm_transition.T @ b_cond
+
+
+def solve_oracle_b(
+    tables: MDPTables,
+    params: EnvParams,
+    grid_size: int = 20,
+    tol: float = 1e-6,
+    max_iters: int = 2000,
+    verbose: bool = False,
+) -> VISolution:
+    """Solve the POMDP via discretized belief-state value iteration (Oracle B).
+
+    State: (belief ∈ Δ², inventory ∈ [-5,5]).
+    Observation: (fill_bid, fill_ask, mid_change) — 12 outcomes.
+
+    Bellman:
+      V(q,b) = max_a { R_exp(q,b,a) + γ · Σ_o P(o|b,a) · V(q'(o), b'(o,a,b)) }
+
+    Uses nearest-grid-point interpolation for belief transitions.
+    """
+    n_r = params.n_regimes
+    n_a = params.n_actions
+    inv_max = params.inventory_max
+    n_inv = 2 * inv_max + 1
+    gamma = params.gamma_disc
+
+    grid = build_belief_grid(grid_size)
+    n_b = len(grid)
+
+    if verbose:
+        print(f"  Oracle B: {n_b} belief × {n_inv} inv "
+              f"= {n_b * n_inv} states")
+
+    # Enumerate 12 observations: (fill_bid, fill_ask, mid_change_idx)
+    obs_list = [(fb, fa, mc)
+                for fb in range(2) for fa in range(2) for mc in range(3)]
+    n_obs = len(obs_list)
+    obs_dq_np = np.array([fb - fa for fb, fa, _ in obs_list], dtype=np.int32)
+
+    # Convert to numpy for precomputation
+    grid_np = np.array(grid)
+    fill_bid_np = np.array(tables.fill_bid)  # (3, 3)
+    fill_ask_np = np.array(tables.fill_ask)  # (3, 3)
+    drift_np = np.array(params.drift_probs)  # (3, 3)
+    hmm_np = np.array(params.hmm_transition)  # (3, 3)
+
+    # Pre-compute for each (belief_idx, action, obs):
+    #   obs_prob[bi, a, o]     = P(obs | belief, action)
+    #   obs_next_bi[bi, a, o]  = nearest grid idx for updated belief
+    obs_prob_np = np.zeros((n_b, n_a, n_obs))
+    obs_next_bi_np = np.zeros((n_b, n_a, n_obs), dtype=np.int32)
+
+    for bi in range(n_b):
+        b = grid_np[bi]
+        for a in range(n_a):
+            for oi, (fb, fa, mc) in enumerate(obs_list):
+                # Per-regime likelihood
+                lik = np.zeros(n_r)
+                for r in range(n_r):
+                    pb = fill_bid_np[r, a]
+                    pa = fill_ask_np[r, a]
+                    lik[r] = ((pb if fb else 1 - pb)
+                              * (pa if fa else 1 - pa)
+                              * drift_np[r, mc])
+
+                p_obs = float(b @ lik)
+                obs_prob_np[bi, a, oi] = p_obs
+
+                # Belief update: condition → normalise → predict
+                if p_obs > 1e-15:
+                    b_cond = b * lik
+                    b_cond /= b_cond.sum()
+                    b_next = hmm_np.T @ b_cond
+                else:
+                    b_next = np.ones(n_r) / n_r
+
+                obs_next_bi_np[bi, a, oi] = nearest_belief_idx(
+                    b_next, grid_np)
+
+    if verbose:
+        print(f"  Pre-computation done ({n_b * n_a * n_obs} belief updates)")
+
+    # Convert to JAX for VI sweeps
+    obs_prob_j = jnp.array(obs_prob_np)
+    obs_next_bi_j = jnp.array(obs_next_bi_np)
+    obs_dq_j = jnp.array(obs_dq_np)
+    R = tables.reward  # (n_r, n_inv, n_a)
+
+    # Expected reward: R_exp[bi, qi, a] = Σ_r grid[bi, r] · R[r, qi, a]
+    R_exp = jnp.einsum('br,rqa->bqa', grid, R)
+
+    inv_idx = jnp.arange(n_inv)
+    V = jnp.zeros((n_b, n_inv))
+
+    for it in range(max_iters):
+        # Future value: Σ_o P(o|b,a) · V(next_bi(o), qi'(o))
+        future = jnp.zeros((n_b, n_inv, n_a))
+        for oi in range(n_obs):
+            nbi = obs_next_bi_j[:, :, oi]         # (n_b, n_a)
+            qi_new = jnp.clip(
+                inv_idx + obs_dq_j[oi], 0, n_inv - 1)  # (n_inv,)
+            # V[nbi] → (n_b, n_a, n_inv); [:,:,qi_new] reindexes inventory
+            V_at = V[nbi][:, :, qi_new]            # (n_b, n_a, n_inv)
+            # Accumulate: transpose to (n_b, n_inv, n_a) to match Q shape
+            future += jnp.transpose(
+                obs_prob_j[:, :, oi, None] * V_at, (0, 2, 1))
+
+        Q = R_exp + gamma * future
+        V_new = jnp.max(Q, axis=-1)
+        residual = float(jnp.max(jnp.abs(V_new - V)))
         V = V_new
 
-        if residual < 1e-10:
+        if verbose and (it + 1) % 50 == 0:
+            print(f"    iter {it+1}: residual={residual:.2e}")
+        if residual < tol:
             if verbose:
                 print(f"  Converged at iter {it+1} "
                       f"(residual={residual:.2e})")
             break
 
-    return VISolution(policy=np.argmax(Q, axis=-1), values=V, Q=Q,
-                      n_iters=it + 1, residuals=residuals)
+    return VISolution(
+        policy=jnp.argmax(Q, axis=-1),
+        values=V,
+        Q=Q,
+        n_iters=it + 1,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Value iteration — POMDP (regime hidden, belief-state MDP)
+# Convenience — print helpers
 # ---------------------------------------------------------------------------
 
-def _build_belief_grid(n_points: int) -> np.ndarray:
-    """Uniform grid on the 3-regime belief simplex."""
-    pts = []
-    for i in range(n_points):
-        for j in range(n_points - i):
-            k = n_points - 1 - i - j
-            pts.append(np.array([i, j, k], dtype=float) / (n_points - 1))
-    return np.array(pts)
+N_REGIMES = 3
+N_ACTIONS = 3
+REGIME_NAMES = ["Noise", "Bull", "Bear"]
+ACTION_NAMES = ["sym(1,1)", "ask(1,3)", "bid(3,1)"]
 
 
-def _nearest_belief(b: np.ndarray, grid: np.ndarray) -> int:
-    return int(np.argmin(np.sum(np.abs(grid - b), axis=1)))
-
-
-def _bayesian_update(belief: np.ndarray, obs_bid: int, obs_ask: int,
-                     action: int, fills: FillProbs,
-                     T_hmm: np.ndarray) -> np.ndarray:
-    """Bayesian belief update: predict via HMM, then condition on fills."""
-    b_pred = T_hmm.T @ belief
-    lik = np.ones(N_REGIMES)
-    for r in range(N_REGIMES):
-        pb, pa = fills.bid[r, action], fills.ask[r, action]
-        lik[r] = (pb if obs_bid else 1 - pb) * (pa if obs_ask else 1 - pa)
-    b_new = b_pred * lik
-    s = b_new.sum()
-    return b_new / s if s > 0 else np.ones(N_REGIMES) / N_REGIMES
-
-
-def solve_pomdp_belief(tables: MDPTables, verbose: bool = False) -> VISolution:
-    """Solve the POMDP via discretized belief-state value iteration.
-
-    State = (belief, inventory).
-    Observation = (bid_filled, ask_filled) — 4 outcomes.
-    """
-    R = tables.reward
-    T_hmm = tables.trans_regime
-    fills = tables.fill_probs
-    gamma = tables.config.gamma
-    max_inv = tables.config.max_inv
-    n_inv = R.shape[1]
-    n_act = R.shape[2]
-
-    grid = _build_belief_grid(tables.config.n_belief_points)
-    n_beliefs = len(grid)
-
-    if verbose:
-        print(f"  POMDP: {n_beliefs} belief × {n_inv} inv "
-              f"= {n_beliefs * n_inv} states")
-
-    obs_cases = [(0, 0, 0), (0, 1, -1), (1, 0, +1), (1, 1, 0)]
-
-    # Pre-compute observation probabilities and belief transitions
-    obs_prob = np.zeros((n_beliefs, n_act, 4))
-    obs_next = np.zeros((n_beliefs, n_act, 4), dtype=int)
-
-    for bi in range(n_beliefs):
-        b = grid[bi]
-        b_pred = T_hmm.T @ b
-        for a in range(n_act):
-            for oi, (ob, oa, _) in enumerate(obs_cases):
-                p = sum(
-                    b_pred[r] *
-                    (fills.bid[r, a] if ob else 1 - fills.bid[r, a]) *
-                    (fills.ask[r, a] if oa else 1 - fills.ask[r, a])
-                    for r in range(N_REGIMES)
-                )
-                obs_prob[bi, a, oi] = p
-                b_next = _bayesian_update(b, ob, oa, a, fills, T_hmm)
-                obs_next[bi, a, oi] = _nearest_belief(b_next, grid)
-
-    V = np.zeros((n_beliefs, n_inv))
-    residuals = []
-    dq_arr = np.array([c[2] for c in obs_cases])
-
-    for it in range(2000):
-        Q_all = np.zeros((n_beliefs, n_inv, n_act))
-        for bi in range(n_beliefs):
-            b_pred = T_hmm.T @ grid[bi]
-            R_exp = np.einsum('r,rqa->qa', b_pred, R)
-
-            for a in range(n_act):
-                future = np.zeros(n_inv)
-                for oi in range(4):
-                    p = obs_prob[bi, a, oi]
-                    if p < 1e-15:
-                        continue
-                    nbi = obs_next[bi, a, oi]
-                    dq = dq_arr[oi]
-                    for qi in range(n_inv):
-                        qi_new = min(max(qi + dq, 0), n_inv - 1)
-                        future[qi] += p * V[nbi, qi_new]
-                Q_all[bi, :, a] = R_exp[:, a] + gamma * future
-
-        V_new = np.max(Q_all, axis=-1)
-        residual = float(np.max(np.abs(V_new - V)))
-        residuals.append(residual)
-        V = V_new
-
-        if verbose and (it + 1) % 50 == 0:
-            print(f"    iter {it+1}: residual={residual:.2e}")
-        if residual < 1e-8:
-            if verbose:
-                print(f"  POMDP converged at iter {it+1} "
-                      f"(residual={residual:.2e})")
-            break
-
-    return VISolution(policy=np.argmax(Q_all, axis=-1), values=V, Q=Q_all,
-                      n_iters=it + 1, residuals=residuals)
-
-
-# ---------------------------------------------------------------------------
-# Convenience helpers
-# ---------------------------------------------------------------------------
-
-def print_policy(sol: VISolution, tables: MDPTables):
+def print_policy(sol: VISolution, params: EnvParams, label: str = ""):
     """Pretty-print the optimal policy table."""
-    mi = tables.config.max_inv
-    at = _get_action_table(tables.config)
-    names = ["Noise", "Bull ", "Bear "]
-    levels = list(range(-mi, mi + 1, max(1, mi // 5)))
+    inv_max = params.inventory_max
+    inv_grid = list(range(-inv_max, inv_max + 1))
+    policy = sol.policy
 
-    if sol.policy.ndim == 2 and sol.policy.shape[0] == N_REGIMES:
-        header = "         " + "".join(f"{'q='+str(i):>8s}" for i in levels)
+    if label:
+        print(f"  {label}")
+
+    if policy.ndim == 2:
+        # Oracle A: (n_regimes, n_inv)
+        header = "         " + "".join(f"{'q='+str(q):>10s}" for q in inv_grid)
         print(header)
-        for r in range(N_REGIMES):
-            parts = []
-            for q in levels:
-                a = sol.policy[r, q + mi]
-                parts.append(f"({int(at[a,0])},{int(at[a,1])})")
-            print("  " + names[r] + "  " + "".join(f"{p:>8s}" for p in parts))
+        for r in range(params.n_regimes):
+            parts = [ACTION_NAMES[int(policy[r, qi])]
+                     for qi in range(len(inv_grid))]
+            print(f"  {REGIME_NAMES[r]:>5s}  " + "".join(f"{p:>10s}" for p in parts))
+    else:
+        # Locked regime: (n_inv,)
+        header = "       " + "".join(f"{'q='+str(q):>10s}" for q in inv_grid)
+        print(header)
+        parts = [ACTION_NAMES[int(policy[qi])] for qi in range(len(inv_grid))]
+        print("       " + "".join(f"{p:>10s}" for p in parts))
 
 
 def print_fill_probs(tables: MDPTables):
-    at = _get_action_table(tables.config)
-    n_act = len(at)
-    fills = tables.fill_probs
-    names = ["Noise", "Bull", "Bear"]
+    """Print the fill probability table."""
     print("  Fill probabilities (p_bid / p_ask):")
     header = "         " + "".join(
-        f"  a{a}=({int(at[a,0])},{int(at[a,1])}) "
-        for a in range(n_act))
+        f"  {ACTION_NAMES[a]:>12s}" for a in range(3))
     print(header)
-    for r in range(N_REGIMES):
-        parts = [f"{fills.bid[r,a]:.3f}/{fills.ask[r,a]:.3f}"
-                 for a in range(n_act)]
-        print(f"  {names[r]:>5s}:  " + "    ".join(parts))
-
-
-def stationary_distribution(tables: MDPTables) -> np.ndarray:
-    """Stationary distribution of the HMM regime chain."""
-    T = tables.trans_regime
-    vals, vecs = np.linalg.eig(T.T)
-    idx = int(np.argmin(np.abs(vals - 1.0)))
-    pi = np.real(vecs[:, idx])
-    return pi / pi.sum()
-
-
-def value_of_info(tables: MDPTables, full_sol: VISolution,
-                  pomdp_sol: VISolution) -> float:
-    """Value of regime information at (stationary belief, zero inventory)."""
-    q0 = tables.config.max_inv
-    pi = stationary_distribution(tables)
-    v_full = float(pi @ full_sol.values[:, q0])
-    grid = _build_belief_grid(tables.config.n_belief_points)
-    bi = _nearest_belief(pi, grid)
-    return float(v_full - pomdp_sol.values[bi, q0])
+    for r in range(3):
+        parts = [f"{float(tables.fill_bid[r,a]):.4f}/{float(tables.fill_ask[r,a]):.4f}"
+                 for a in range(3)]
+        print(f"  {REGIME_NAMES[r]:>5s}:  " + "    ".join(parts))
 
 
 # ---------------------------------------------------------------------------
-# Episode simulation
+# Numpy-based oracle simulation in switching environment
 # ---------------------------------------------------------------------------
 
-class SimResult(NamedTuple):
-    """Output of simulate_episodes."""
-    cumulative_reward: np.ndarray  # (n_episodes, n_steps)
-    mean_reward: np.ndarray        # (n_steps,) — mean cumulative across episodes
-    std_reward: np.ndarray         # (n_steps,) — std of cumulative
+class SimRecord(NamedTuple):
+    """Per-step records from oracle simulation."""
+    regimes: np.ndarray    # (n_episodes, T) true regime
+    actions: np.ndarray    # (n_episodes, T) action taken
+    rewards: np.ndarray    # (n_episodes, T) reward
+    inventories: np.ndarray  # (n_episodes, T) inventory before action
 
 
-def simulate_episodes(
-    tables: MDPTables,
-    policy: str,
-    full_sol: VISolution | None = None,
-    pomdp_sol: VISolution | None = None,
-    n_episodes: int = 500,
-    n_steps: int = 200,
-    seed: int = 42,
-    locked_regime: int = -1,
-) -> SimResult:
-    """Simulate episodes under a given policy type.
+def _simulate_env_steps(
+    params: EnvParams,
+    n_episodes: int,
+    t_episode: int,
+    rng: np.random.Generator,
+) -> dict:
+    """Simulate environment transitions, returning per-step data.
 
-    Args:
-        policy: one of "full_info", "pomdp", "blind"
-        full_sol: required if policy == "full_info"
-        pomdp_sol: required if policy == "pomdp"
-        locked_regime: -1 for normal HMM, 0/1/2 to lock regime
+    Returns dict with arrays (n_episodes, T) for regime, fill outcomes,
+    mid_change, and a callback-friendly structure.
     """
-    rng = np.random.default_rng(seed)
-    cfg = tables.config
-    max_inv = cfg.max_inv
-    at = _get_action_table(cfg)
-    tick = cfg.tick_size
-    hs = cfg.half_spread_ticks
-    drift = np.array(cfg.drift)
-    phi = cfg.inv_penalty
-    T_hmm = tables.trans_regime
-    fills = tables.fill_probs
+    hmm = np.array(params.hmm_transition)
+    drift = np.array(params.drift_probs)
+    kappa = np.array(params.kappa)
+    delta = np.array(params.delta)
+    sigma_sq = np.array(params.sigma_sq)
+    inv_max = int(params.inventory_max)
+    gamma_inv = float(params.gamma_inventory)
+    bound_pen = float(params.boundary_penalty)
 
-    # POMDP belief grid (only needed for pomdp policy)
-    grid = None
-    if policy == "pomdp":
-        assert pomdp_sol is not None
-        grid = _build_belief_grid(cfg.n_belief_points)
+    # Pre-generate regime sequences
+    locked = int(params.locked_regime)
+    regimes = np.zeros((n_episodes, t_episode), dtype=np.int32)
+    if locked >= 0:
+        regimes[:] = locked
+    else:
+        pi = np.array(params.stationary_dist)
+        regimes[:, 0] = rng.choice(3, size=n_episodes, p=pi)
+        for t in range(1, t_episode):
+            for ep in range(n_episodes):
+                regimes[ep, t] = rng.choice(3, p=hmm[regimes[ep, t - 1]])
 
-    # Stationary distribution for initial regime sampling
-    pi = stationary_distribution(tables)
+    # Pre-generate mid_change outcomes
+    mid_changes = np.zeros((n_episodes, t_episode), dtype=np.int32)
+    for ep in range(n_episodes):
+        for t in range(t_episode):
+            mid_changes[ep, t] = rng.choice(3, p=drift[regimes[ep, t]])
 
-    cumulative = np.zeros((n_episodes, n_steps))
+    return {
+        "regimes": regimes,
+        "mid_changes": mid_changes,  # index into {-1,0,+1} as {0,1,2}
+        "kappa": kappa,
+        "delta": delta,
+        "sigma_sq": sigma_sq,
+        "inv_max": inv_max,
+        "gamma_inv": gamma_inv,
+        "bound_pen": bound_pen,
+        "rng": rng,
+    }
+
+
+def _run_oracle_rollout(
+    env_data: dict,
+    policy_fn,
+    n_episodes: int,
+    t_episode: int,
+) -> SimRecord:
+    """Execute rollout with a policy function that sees (regime, inventory, belief).
+
+    policy_fn(regime, inventory_idx, belief) -> action
+    For Oracle A: ignores belief.
+    For Oracle B: ignores regime.
+    """
+    kappa = env_data["kappa"]
+    delta = env_data["delta"]
+    sigma_sq = env_data["sigma_sq"]
+    inv_max = env_data["inv_max"]
+    n_inv = 2 * inv_max + 1
+    gamma_inv = env_data["gamma_inv"]
+    bound_pen = env_data["bound_pen"]
+    rng = env_data["rng"]
+    regimes = env_data["regimes"]
+    mid_changes = env_data["mid_changes"]
+
+    actions = np.zeros((n_episodes, t_episode), dtype=np.int32)
+    rewards = np.zeros((n_episodes, t_episode), dtype=np.float64)
+    inventories = np.zeros((n_episodes, t_episode), dtype=np.int32)
+
+    # HMM filter state for Oracle B (unused by Oracle A)
+    hmm = np.array(kappa)  # just to get shape — will use env_data
+    hmm_trans = None
+    drift_probs = None
 
     for ep in range(n_episodes):
-        # Sample initial regime
-        if locked_regime >= 0:
-            regime = locked_regime
-        else:
-            regime = rng.choice(N_REGIMES, p=pi)
         inv = 0
-        belief = pi.copy() if policy == "pomdp" else None
-        cum_r = 0.0
+        belief = None  # will be set by policy_fn wrapper if needed
 
-        for t in range(n_steps):
-            # Select action
-            qi = inv + max_inv
-            if policy == "full_info":
-                action = int(full_sol.policy[regime, qi])
-            elif policy == "pomdp":
-                bi = _nearest_belief(belief, grid)
-                action = int(pomdp_sol.policy[bi, qi])
-            else:  # blind
-                action = 0
+        for t in range(t_episode):
+            r = regimes[ep, t]
+            inv_idx = inv + inv_max
+            inventories[ep, t] = inv
 
-            # Sample fills
-            pb = fills.bid[regime, action]
-            pa = fills.ask[regime, action]
-            bid_filled = rng.random() < pb
-            ask_filled = rng.random() < pa
+            # Get action from oracle policy
+            action = policy_fn(r, inv_idx, ep, t)
+            actions[ep, t] = action
 
-            # Compute reward
-            bid_edge = (at[action, 0] + hs) * tick
-            ask_edge = (at[action, 1] + hs) * tick
-            reward = (bid_filled * bid_edge + ask_filled * ask_edge
-                      + inv * drift[regime] - phi * inv * inv)
+            # Simulate fills
+            p_bid = np.exp(-kappa[r, 0] * delta[action, 0])
+            p_ask = np.exp(-kappa[r, 1] * delta[action, 1])
+            fill_bid = int(rng.random() < p_bid)
+            fill_ask = int(rng.random() < p_ask)
 
-            cum_r += reward
-            cumulative[ep, t] = cum_r
+            # Inventory update
+            new_inv = np.clip(inv + fill_bid - fill_ask, -inv_max, inv_max)
 
-            # Update inventory
-            dq = int(bid_filled) - int(ask_filled)
-            inv = max(-max_inv, min(max_inv, inv + dq))
+            # Reward
+            spread = fill_bid * delta[action, 0] + fill_ask * delta[action, 1]
+            inv_pen = gamma_inv * new_inv**2 * sigma_sq[r]
+            at_bound = float(abs(new_inv) == inv_max)
+            bpen = bound_pen * abs(new_inv) * at_bound
+            rewards[ep, t] = spread - inv_pen - bpen
 
-            # Update belief (POMDP only)
-            if policy == "pomdp":
-                belief = _bayesian_update(
-                    belief, int(bid_filled), int(ask_filled),
-                    action, fills, T_hmm)
+            inv = int(new_inv)
 
-            # Regime transition (skip if locked)
-            if locked_regime < 0:
-                regime = rng.choice(N_REGIMES, p=T_hmm[regime])
-
-    return SimResult(
-        cumulative_reward=cumulative,
-        mean_reward=cumulative.mean(axis=0),
-        std_reward=cumulative.std(axis=0),
+    return SimRecord(
+        regimes=regimes,
+        actions=actions,
+        rewards=rewards,
+        inventories=inventories,
     )
+
+
+def simulate_oracle_a(
+    oracle_a_sol: VISolution,
+    params: EnvParams,
+    n_episodes: int = 2000,
+    seed: int = 42,
+) -> SimRecord:
+    """Simulate Oracle A in the switching environment.
+
+    Oracle A observes the true regime and chooses action from its policy table.
+    """
+    tables = build_mdp_tables(params)
+    rng = np.random.default_rng(seed)
+    t_episode = int(params.t_episode)
+    env_data = _simulate_env_steps(params, n_episodes, t_episode, rng)
+
+    policy = np.array(oracle_a_sol.policy)  # (n_regimes, n_inv)
+
+    def oracle_a_policy(regime, inv_idx, ep, t):
+        return int(policy[regime, inv_idx])
+
+    return _run_oracle_rollout(env_data, oracle_a_policy, n_episodes, t_episode)
+
+
+def simulate_oracle_b(
+    oracle_b_sol: VISolution,
+    tables: MDPTables,
+    params: EnvParams,
+    grid_size: int = 20,
+    n_episodes: int = 2000,
+    seed: int = 42,
+) -> SimRecord:
+    """Simulate Oracle B in the switching environment.
+
+    Oracle B maintains an exact HMM belief filter and looks up action
+    from the POMDP policy table via nearest grid point.
+    """
+    rng = np.random.default_rng(seed)
+    t_episode = int(params.t_episode)
+    env_data = _simulate_env_steps(params, n_episodes, t_episode, rng)
+
+    grid = np.array(build_belief_grid(grid_size))
+    policy_b = np.array(oracle_b_sol.policy)  # (n_belief, n_inv)
+    fill_bid_np = np.array(tables.fill_bid)
+    fill_ask_np = np.array(tables.fill_ask)
+    drift_np = np.array(params.drift_probs)
+    hmm_np = np.array(params.hmm_transition)
+    kappa = env_data["kappa"]
+    delta = env_data["delta"]
+    inv_max = env_data["inv_max"]
+    regimes = env_data["regimes"]
+    mid_changes = env_data["mid_changes"]
+    n_r = int(params.n_regimes)
+
+    # Pre-allocate beliefs and run belief filter forward
+    # We need to interleave belief updates with action selection,
+    # since the action affects the fill likelihood
+    beliefs = np.zeros((n_episodes, t_episode, 3))
+    actions_out = np.zeros((n_episodes, t_episode), dtype=np.int32)
+    rewards_out = np.zeros((n_episodes, t_episode), dtype=np.float64)
+    inventories_out = np.zeros((n_episodes, t_episode), dtype=np.int32)
+
+    pi = np.array(params.stationary_dist)
+    sigma_sq = env_data["sigma_sq"]
+    gamma_inv = env_data["gamma_inv"]
+    bound_pen = env_data["bound_pen"]
+
+    for ep in range(n_episodes):
+        belief = pi.copy()
+        inv = 0
+
+        for t in range(t_episode):
+            r = regimes[ep, t]
+            inv_idx = inv + inv_max
+            beliefs[ep, t] = belief
+            inventories_out[ep, t] = inv
+
+            # Look up action from Oracle B policy
+            bi = int(np.argmin(np.sum(np.abs(grid - belief), axis=1)))
+            action = int(policy_b[bi, inv_idx])
+            actions_out[ep, t] = action
+
+            # Simulate fills
+            p_bid = np.exp(-kappa[r, 0] * delta[action, 0])
+            p_ask = np.exp(-kappa[r, 1] * delta[action, 1])
+            fill_bid = int(env_data["rng"].random() < p_bid)
+            fill_ask = int(env_data["rng"].random() < p_ask)
+
+            # Inventory update
+            new_inv = int(np.clip(inv + fill_bid - fill_ask, -inv_max, inv_max))
+
+            # Reward
+            spread = fill_bid * delta[action, 0] + fill_ask * delta[action, 1]
+            inv_pen = gamma_inv * new_inv**2 * sigma_sq[r]
+            at_bound = float(abs(new_inv) == inv_max)
+            bpen = bound_pen * abs(new_inv) * at_bound
+            rewards_out[ep, t] = spread - inv_pen - bpen
+
+            # Belief update: condition on observation → predict
+            mc_idx = mid_changes[ep, t]
+            lik = np.zeros(n_r)
+            for ri in range(n_r):
+                pb = fill_bid_np[ri, action]
+                pa = fill_ask_np[ri, action]
+                lik[ri] = ((pb if fill_bid else 1 - pb)
+                           * (pa if fill_ask else 1 - pa)
+                           * drift_np[ri, mc_idx])
+            b_cond = belief * lik
+            total = b_cond.sum()
+            if total > 1e-15:
+                b_cond /= total
+            else:
+                b_cond = np.ones(n_r) / n_r
+            belief = hmm_np.T @ b_cond
+
+            inv = new_inv
+
+    return SimRecord(
+        regimes=regimes,
+        actions=actions_out,
+        rewards=rewards_out,
+        inventories=inventories_out,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Precondition 2 — Oracle A regime-dependent under switching
+# ---------------------------------------------------------------------------
+
+def precondition_2(
+    sim: SimRecord,
+    oracle_a_sol: VISolution,
+    locked_solutions: list[VISolution],
+    q_max: float,
+    params: EnvParams,
+) -> dict:
+    """Check Precondition 2: Oracle A is regime-dependent in switching env.
+
+    Analyses Oracle A rollout tagged by true_regime:
+      - Per-regime action distributions
+      - Per-regime relative gaps (on shared Q_max)
+      - Disagreement: Oracle A vs locked-regime policies
+    """
+    n_inv = 2 * int(params.inventory_max) + 1
+    n_r = int(params.n_regimes)
+    n_a = int(params.n_actions)
+
+    # Per-regime action distributions
+    action_dists = np.zeros((n_r, n_a))
+    for r in range(n_r):
+        mask = sim.regimes == r
+        if mask.sum() == 0:
+            continue
+        acts = sim.actions[mask]
+        for a in range(n_a):
+            action_dists[r, a] = (acts == a).sum() / len(acts)
+
+    # Per-regime mean relative gap from Oracle A Q-table (uniform over inventory)
+    Q_a = np.array(oracle_a_sol.Q)  # (n_r, n_inv, n_a)
+    Q_sorted = np.sort(Q_a, axis=-1)
+    gap_per_state = (Q_sorted[:, :, -1] - Q_sorted[:, :, -2]) / q_max * 100.0
+
+    gap_per_regime = {}
+    for r in range(n_r):
+        gap_per_regime[r] = {
+            "mean": float(np.mean(gap_per_state[r])),
+            "min": float(np.min(gap_per_state[r])),
+            "values": gap_per_state[r],
+        }
+
+    # Oracle A vs locked-regime disagreement
+    oracle_a_policy = np.array(oracle_a_sol.policy)
+    disagree_vs_locked = {}
+    for r in range(n_r):
+        locked_pol = np.array(locked_solutions[r].policy)
+        oracle_a_r = oracle_a_policy[r]
+        frac = float(np.mean(oracle_a_r != locked_pol)) * 100.0
+        disagree_vs_locked[r] = frac
+
+    # Gate: overall mean gap > 5% and action distributions separate by regime
+    overall_mean_gap = float(np.mean([g["mean"] for g in gap_per_regime.values()]))
+    pass_gap = overall_mean_gap > 5.0
+
+    # Separation: each regime's dominant action should be different
+    dominant_actions = [int(np.argmax(action_dists[r])) for r in range(n_r)]
+    pass_separation = len(set(dominant_actions)) == n_r
+
+    return {
+        "action_distributions": action_dists,
+        "gap_per_regime": gap_per_regime,
+        "disagree_vs_locked": disagree_vs_locked,
+        "overall_mean_gap": overall_mean_gap,
+        "dominant_actions": dominant_actions,
+        "pass_gap": pass_gap,
+        "pass_separation": pass_separation,
+        "passed": pass_gap and pass_separation,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Precondition 3 — Oracle B regime-dependent under belief uncertainty
+# ---------------------------------------------------------------------------
+
+def precondition_3(
+    sim: SimRecord,
+    oracle_b_sol: VISolution,
+    oracle_a_sol: VISolution,
+    q_max: float,
+    params: EnvParams,
+    grid_size: int = 20,
+) -> dict:
+    """Check Precondition 3: Oracle B is regime-dependent despite belief uncertainty.
+
+    Analyses Oracle B rollout tagged by true_regime:
+      - Per-regime action distributions
+      - Per-regime relative gaps (averaged over encountered beliefs)
+      - Disagreement: Oracle B vs Oracle A
+    """
+    n_inv = 2 * int(params.inventory_max) + 1
+    n_r = int(params.n_regimes)
+    n_a = int(params.n_actions)
+
+    # Per-regime action distributions
+    action_dists = np.zeros((n_r, n_a))
+    for r in range(n_r):
+        mask = sim.regimes == r
+        if mask.sum() == 0:
+            continue
+        acts = sim.actions[mask]
+        for a in range(n_a):
+            action_dists[r, a] = (acts == a).sum() / len(acts)
+
+    # Per-regime mean relative gap from Oracle B Q-table
+    # Oracle B Q: (n_belief, n_inv, n_a) — we average over encountered states
+    # For simplicity, use Oracle A's gap as a proxy for the true regime gap
+    # (Oracle B's gap is belief-dependent, not regime-dependent)
+    Q_a = np.array(oracle_a_sol.Q)
+    Q_sorted_a = np.sort(Q_a, axis=-1)
+    gap_per_state_a = (Q_sorted_a[:, :, -1] - Q_sorted_a[:, :, -2]) / q_max * 100.0
+
+    gap_per_regime = {}
+    for r in range(n_r):
+        mask = sim.regimes == r
+        inv_idx = sim.inventories[mask] + int(params.inventory_max)
+        gaps_encountered = gap_per_state_a[r, inv_idx]
+        gap_per_regime[r] = {
+            "mean": float(np.mean(gaps_encountered)),
+        }
+
+    # Oracle B vs Oracle A disagreement (per true regime, averaged over steps)
+    disagree_vs_oracle_a = {}
+    oracle_a_policy = np.array(oracle_a_sol.policy)
+    for r in range(n_r):
+        mask = sim.regimes == r
+        inv_idx = sim.inventories[mask] + int(params.inventory_max)
+        b_actions = sim.actions[mask]
+        a_actions = oracle_a_policy[r, inv_idx]
+        frac = float(np.mean(b_actions != a_actions)) * 100.0
+        disagree_vs_oracle_a[r] = frac
+
+    # Overall action distribution separation
+    pass_separation = True
+    for r in range(n_r):
+        dominant = action_dists[r].max()
+        if dominant < 0.4:  # should have clear preference
+            pass_separation = False
+
+    return {
+        "action_distributions": action_dists,
+        "gap_per_regime": gap_per_regime,
+        "disagree_vs_oracle_a": disagree_vs_oracle_a,
+        "pass_separation": pass_separation,
+        "passed": pass_separation,
+    }

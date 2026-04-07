@@ -212,16 +212,6 @@ def evaluate_returns(key, model, params, n_episodes):
     return episode_returns
 
 
-def compute_baseline_returns(key, params, n_episodes):
-    """Compute random (action=0) baseline episode returns."""
-    def random_policy(k, obs):
-        return jnp.int32(0)
-
-    keys = jax.random.split(key, n_episodes)
-    traj = jax.vmap(rollout_episode, in_axes=(0, None, None))(
-        keys, random_policy, params)
-    return jnp.sum(traj["rewards"], axis=1)
-
 
 def compute_oracle_a_returns(key, params, oracle_a_policy, n_episodes):
     """Simulate Oracle A using full-episode rollouts.
@@ -387,25 +377,19 @@ def compute_oracle_b_episode_returns(params, n_episodes):
 
 
 def compute_baselines(params, regime, n_episodes=256):
-    """Compute random and Oracle A returns for a given regime setting."""
+    """Compute Oracle A (and Oracle B for mixed) returns for a given regime."""
     env_params = params._replace(locked_regime=regime)
     regime_name = REGIME_NAMES[regime]
 
     key = jax.random.PRNGKey(9999)
-    k_rand, k_oracle = jax.random.split(key)
-
-    # Random baseline
-    rand_returns = compute_baseline_returns(k_rand, env_params, n_episodes)
-    random_mean = float(jnp.mean(rand_returns))
 
     # Oracle A
     oracle_a_returns = compute_oracle_a_returns(
-        k_oracle, env_params, None, n_episodes)
+        key, env_params, None, n_episodes)
     oracle_a_mean = float(np.mean(oracle_a_returns))
 
     result = {
         "regime": regime_name,
-        "random_mean_return": random_mean,
         "oracle_a_mean_return": oracle_a_mean,
         "oracle_a_std_return": float(np.std(oracle_a_returns)),
     }
@@ -594,8 +578,7 @@ def main():
         ob_str = ""
         if "oracle_b_mean_return" in bl:
             ob_str = f"  oracle_b={bl['oracle_b_mean_return']:.1f}"
-        print(f"    {name:>6s}: random={bl['random_mean_return']:.1f}  "
-              f"oracle_a={bl['oracle_a_mean_return']:.1f}{ob_str}  "
+        print(f"    {name:>6s}: oracle_a={bl['oracle_a_mean_return']:.1f}{ob_str}  "
               f"({time.time()-t0:.1f}s)")
 
     # --- Train ---
@@ -626,8 +609,7 @@ def main():
                   f"({result['train_time']:.0f}s)")
 
     # --- Gate check (locked regimes must converge near Oracle A) ---
-    # Uses (PPO - random) / (Oracle_A - random) > 0.8 for locked regimes.
-    # This works for both positive and negative Oracle A returns.
+    # Uses reward/step ratio: PPO_rps / Oracle_A_rps > 0.8 for locked regimes.
     print("\n" + "=" * 60)
     gate_pass = True
     for name, rid in regimes:
@@ -635,20 +617,14 @@ def main():
             continue  # mixed doesn't need to match Oracle A
         runs = [r for r in all_results if r["regime"] == name]
         bl = baselines[name]
-        denom = bl["oracle_a_mean_return"] - bl["random_mean_return"]
-        finals = []
-        for r in runs:
-            final = r["mean_returns"][-1]
-            frac = (final - bl["random_mean_return"]) / denom if denom > 0 else 0
-            finals.append(frac)
-        mean_frac = np.mean(finals)
-        passed = mean_frac > 0.8
+        oracle_rps = bl["oracle_a_mean_return"] / t_ep
+        mean_rps = np.mean([r["mean_returns"][-1] / t_ep for r in runs])
+        frac = mean_rps / oracle_rps if oracle_rps > 0 else 0
+        passed = frac > 0.8
         gate_pass = gate_pass and passed
         status = "PASS" if passed else "FAIL"
-        mean_rps = np.mean([r["mean_returns"][-1] / t_ep for r in runs])
-        oracle_rps = bl["oracle_a_mean_return"] / t_ep
         print(f"  {name:>6s}: reward/step = {mean_rps:.4f}  "
-              f"(oracle_a = {oracle_rps:.4f}, convergence = {mean_frac:.3f})  [{status}]")
+              f"(oracle_a = {oracle_rps:.4f}, convergence = {frac:.3f})  [{status}]")
 
     print(f"\n  GATE: {'PASS' if gate_pass else 'FAIL'}")
     if not gate_pass:

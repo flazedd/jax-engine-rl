@@ -3,27 +3,23 @@
   "baselines": {
     "noise": {
       "regime": "noise",
-      "random_mean_return": -710.6194458007812,
-      "oracle_a_mean_return": 31.146875,
-      "oracle_a_std_return": 10.647428074862727
+      "oracle_a_mean_return": 31.31640625,
+      "oracle_a_std_return": 9.876902722891472
     },
     "bull": {
       "regime": "bull",
-      "random_mean_return": -4453.71875,
-      "oracle_a_mean_return": -137.9453125,
-      "oracle_a_std_return": 284.5639775547449
+      "oracle_a_mean_return": -171.59843750000002,
+      "oracle_a_std_return": 367.2553990379972
     },
     "bear": {
       "regime": "bear",
-      "random_mean_return": -4490.4375,
-      "oracle_a_mean_return": -186.9296875,
-      "oracle_a_std_return": 387.09212946891256
+      "oracle_a_mean_return": -101.721875,
+      "oracle_a_std_return": 245.78734200571515
     },
     "mixed": {
       "regime": "mixed",
-      "random_mean_return": -1256.427978515625,
-      "oracle_a_mean_return": 41.848437499999996,
-      "oracle_a_std_return": 28.06247072485945,
+      "oracle_a_mean_return": 40.457812499999996,
+      "oracle_a_std_return": 22.88302150809293,
       "oracle_b_mean_return": 30.018750049115624,
       "oracle_b_std_return": 31.1573594627363
     }
@@ -62,7 +58,7 @@
       ],
       "n_iters": 30,
       "converged": false,
-      "train_time": 12.589207172393799
+      "train_time": 11.719651937484741
     },
     {
       "seed": 1367864807,
@@ -97,7 +93,7 @@
       ],
       "n_iters": 30,
       "converged": false,
-      "train_time": 11.478439807891846
+      "train_time": 10.793115854263306
     },
     {
       "seed": 1097657232,
@@ -132,7 +128,7 @@
       ],
       "n_iters": 30,
       "converged": false,
-      "train_time": 11.519021034240723
+      "train_time": 10.857614040374756
     },
     {
       "seed": 579362556,
@@ -167,8 +163,8 @@
       ],
       "n_iters": 30,
       "converged": false,
-      "train_time": 12.282587051391602
+      "train_time": 11.635895013809204
     }
   ],
-  "gate_passed": true
+  "gate_passed": false
 }

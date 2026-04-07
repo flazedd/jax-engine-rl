@@ -33,9 +33,9 @@ PPO+LSTM → PPO MLP              value of any memory at all
 ```
 
 **Primary metrics:**
-- **Normalised return:** `(agent - random) / (Oracle_B - random)`. Y-axis [-0.2, 1.1]. Oracle A sits above 1.0 as dashed reference.
-- **AULC (Area Under Learning Curve):** integral of normalised return over training steps, divided by total steps. Range [0,1]. Primary sample efficiency metric — captures both speed and asymptotic level. Wilcoxon signed-rank across 8 seeds.
-- **Steps to 0.8 × Oracle_B_return:** secondary threshold metric. Agents that never reach → "did not reach."
+- **Mean reward per step:** raw metric, no normalisation. Y-axis in reward/step units. Reference lines for Oracle A, Oracle B, PPO MLP asymptotic. All agents compared on the same scale.
+- **AULC (Area Under Learning Curve):** integral of mean reward/step over training steps, divided by total steps. Primary sample efficiency metric — captures both speed and asymptotic level. Wilcoxon signed-rank across 8 seeds.
+- **Steps to 0.8 × Oracle_B reward/step:** secondary threshold metric. Agents that never reach → "did not reach."
 - **Per-regime action distributions** (Figure 6) — tests genuine regime-appropriate behaviour vs better compromise.
 - **Wilcoxon signed-rank + Cohen's d** between each adjacent agent pair across 8 seeds.
 
@@ -57,7 +57,7 @@ At regular checkpoints, freeze encoder, extract latent representations over **he
 
 ## RQ3 — Inference-Performance Timing (exploratory)
 
-Per agent per seed, identify: `t_infer` = step where probe accuracy first > 60%; `t_perf` = step where normalised return first > 0.6. Compute `t_infer - t_perf` across seeds. Sign test against zero.
+Per agent per seed, identify: `t_infer` = step where probe accuracy first > 60%; `t_perf` = step where mean reward/step first > 0.8 × Oracle_B reward/step. Compute `t_infer - t_perf` across seeds. Sign test against zero.
 
 If `t_infer < t_perf` consistently → inference leads performance (causal support). If non-significant → co-development is the defensible conclusion. Framed as exploratory — thesis stands on RQ2 regardless.
 
@@ -70,10 +70,13 @@ If `t_infer < t_perf` consistently → inference leads performance (causal suppo
 ### Regimes & HMM
 ```
 3 regimes: noise(0), bull(1), bear(2)
-HMM = [[0.95, 0.03, 0.02],
-        [0.08, 0.90, 0.02],
-        [0.08, 0.02, 0.90]]
-Expected regime duration: ~12 steps. ~10 regime visits per T=200 episode.
+HMM = [[0.90, 0.05, 0.05],
+        [0.10, 0.80, 0.10],
+        [0.10, 0.10, 0.80]]
+Expected regime duration: noise ~10 steps, bull/bear ~5 steps.
+Shorter trending regimes force fast inference — reactive inventory-based
+detection (~5 steps lag) arrives too late; Bayesian agents that use
+fill + drift signals can identify within 2–3 steps and still exploit.
 ```
 
 ### Actions
@@ -97,9 +100,12 @@ fills are independent per side
 ### Mid-Price Drift
 ```
 mid_change ~ Categorical({-1, 0, +1})
-drift_probs = [[0.15, 0.70, 0.15],  # noise — zero mean
-               [0.05, 0.50, 0.45],  # bull  — positive drift
-               [0.45, 0.50, 0.05]]  # bear  — negative drift
+drift_probs = [[0.20, 0.60, 0.20],  # noise — zero mean
+               [0.12, 0.50, 0.38],  # bull  — positive drift
+               [0.38, 0.50, 0.12]]  # bear  — negative drift
+
+Per-step drift likelihood ratio ~1.9× (reduced from 3×) to force
+evidence accumulation over multiple steps for confident regime ID.
 ```
 
 ### Inventory & Reward
@@ -110,6 +116,12 @@ q' = clip(q + fill_bid - fill_ask, -5, 5)     # 11 levels
 r_t = fill_bid·δ_bid + fill_ask·δ_ask          # spread PnL (both sides earn)
       - 0.1 · q'² · σ²_regime                  # inventory risk (post-step q')
       - 5.0 · |q'| · 1(|q'|==5)               # boundary penalty
+      + 1.0 · q · mid_change                    # mark-to-market (pre-step q)
+
+Mark-to-market rewards holding inventory in the direction of the
+regime drift. Requires regime foresight — reactive agents can only
+chase after observing confirmatory signals, losing the first steps
+of each regime visit. E[MTM|bull,q] = q·0.26, E[MTM|noise,q] = 0.
 
 γ_disc = 0.99, T_episode = 200
 ```
@@ -240,17 +252,18 @@ Row 3: Oracle B actions by true regime. Row 4: Oracle B relative gain.
 Below: Oracle A vs locked disagreement; Oracle B vs Oracle A disagreement; pairwise disagreement comparison.
 
 ### Figure 3 — PPO Validation ★ IMPLEMENTATION CHECK
-Learning curves. PPO locked-noise/bull/bear → ~1.0. PPO mixed → ~0.3–0.5.
-Shading: 25th–75th percentile, 8 seeds. Reference: Oracle B=1.0, Oracle A>1.0, random=0.
+Learning curves (reward/step). PPO locked regimes converge near Oracle A for that regime.
+PPO mixed converges well below Oracle A/B — memoryless baseline cannot fully exploit regime structure.
+Shading: 25th–75th percentile, 8 seeds. Reference lines: Oracle A, Oracle B (reward/step).
 
 ### Figure 4 — Agent Ladder (RQ2)
-Learning curves for all 5 RL agents. Reference lines for Oracle A, Oracle B, random.
+Learning curves (reward/step) for all 5 RL agents. Reference lines for Oracle A, Oracle B, PPO MLP asymptotic.
 Gap annotations (labeled brackets) per decomposition table.
-Inset: AULC bar chart + threshold-crossing bars (steps to 0.8×Oracle_B).
+Inset: AULC bar chart + threshold-crossing bars (steps to 0.8×Oracle_B reward/step).
 
 ### Figure 5 — Regime Inference Over Training (RQ1 + RQ3)
-One panel per probed agent (RL², RL²+HN, VariBAD). Dual y-axis: probe accuracy (left), normalised return (right).
-Threshold lines: 60% (t_infer), 0.6 (t_perf). Per-seed tick marks.
+One panel per probed agent (RL², RL²+HN, VariBAD). Dual y-axis: probe accuracy (left), reward/step (right).
+Threshold lines: 60% (t_infer), 0.8×Oracle_B reward/step (t_perf). Per-seed tick marks.
 Below: distribution of t_infer − t_perf with sign test p-value. Framed as exploratory.
 
 ### Figure 6 — Per-Regime Action Distributions (RQ1 + RQ2)
@@ -272,7 +285,7 @@ Pairwise L2 centroid distances reported numerically.
 - Fills: two independent `jax.random.bernoulli`
 - Inventory: `jnp.clip(q + fill_bid - fill_ask, -5, 5)`
 - Mid-price: draw `mid_change` from `drift_probs[regime]`
-- Reward: spread PnL + inventory penalty + boundary (post-step q')
+- Reward: spread PnL - inventory penalty - boundary (post-step q') + MTM (pre-step q × mid_change)
 - `get_obs(state, mid_change)` → 4D
 - `lax.scan` rollout returning `(obs, actions, rewards, true_regimes)`
 - Multi-episode trial wrapper: 4 consecutive episodes (800 steps), HMM continuous across episodes, optional hidden-state reset flag per agent type
@@ -301,8 +314,8 @@ Pairwise L2 centroid distances reported numerically.
 - MLP policy + value network. Input: o_t only
 - GAE via `lax.scan`
 - Locked-regime runs (3) + mixed-regime run
-- Normalised return → Figure 3
-- **Gate:** locked curves must reach ~1.0
+- Reward/step learning curves → Figure 3
+- **Gate:** locked curves must converge near respective Oracle A reward/step
 
 ### Phase 5 — PPO+LSTM
 - LSTM policy, hidden state across episode via `lax.scan`
@@ -338,7 +351,7 @@ Pairwise L2 centroid distances reported numerically.
 
 ### Phase 10 — Evaluation & Figures
 - 8 seeds per agent; all agents evaluated on same env seeds
-- Normalised return curves → Figure 4
+- Reward/step learning curves → Figure 4
 - AULC computation (primary) + threshold-crossing (secondary)
 - Wilcoxon + Cohen's d between adjacent pairs
 - Logistic probe at each checkpoint: 256 held-out eval episodes, stratified 80/20 split, report test accuracy only → Figure 5
@@ -359,10 +372,10 @@ T_EPISODE         = 200
 GAMMA_DISC        = 0.99
 EPISODES_PER_TRIAL = 4            # for meta-learning agents
 
-# HMM
-HMM_TRANSITION    = [[0.95, 0.03, 0.02],
-                      [0.08, 0.90, 0.02],
-                      [0.08, 0.02, 0.90]]
+# HMM (faster switching — trending regimes ~5 steps)
+HMM_TRANSITION    = [[0.90, 0.05, 0.05],
+                      [0.10, 0.80, 0.10],
+                      [0.10, 0.10, 0.80]]
 
 # Fill model
 KAPPA             = [[2.0, 2.0],   # noise
@@ -374,15 +387,16 @@ DELTA             = [[1.0, 1.0],   # symmetric
                      [1.0, 3.0],   # lean-ask
                      [3.0, 1.0]]   # lean-bid
 
-# Mid-price drift
-DRIFT_PROBS       = [[0.15, 0.70, 0.15],
-                     [0.05, 0.50, 0.45],
-                     [0.45, 0.50, 0.05]]
+# Mid-price drift (reduced informativeness per step)
+DRIFT_PROBS       = [[0.20, 0.60, 0.20],
+                     [0.12, 0.50, 0.38],
+                     [0.38, 0.50, 0.12]]
 
 # Volatility & reward
 SIGMA_SQ          = [0.5, 1.5, 1.5]
 GAMMA_INVENTORY   = 0.1
 BOUNDARY_PENALTY  = 5.0
+MTM_WEIGHT        = 1.0           # mark-to-market: mtm_weight · q_pre · mid_change
 
 # Oracle B
 BELIEF_GRID_SIZE  = 20
@@ -397,7 +411,7 @@ HN_POLICY_HIDDEN  = 64           # generated policy MLP hidden size
 
 # Training & evaluation
 N_SEEDS           = 8
-SAMPLE_EFF_TARGET = 0.8          # threshold fraction of Oracle_B return
+SAMPLE_EFF_TARGET = 0.8          # threshold fraction of Oracle_B reward/step
 N_EVAL_EPISODES   = 256          # for probe at each checkpoint
 PROBE_TRAIN_FRAC  = 0.8          # stratified by regime
 ```

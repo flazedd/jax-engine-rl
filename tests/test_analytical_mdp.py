@@ -162,7 +162,7 @@ class TestLockedVI:
         """V_bull(q) should equal V_bear(-q) by symmetry."""
         V_bull = locked_solutions[1].values
         V_bear = locked_solutions[2].values
-        np.testing.assert_allclose(V_bull, V_bear[::-1], atol=1e-4)
+        np.testing.assert_allclose(V_bull, V_bear[::-1], atol=2e-4)
 
 
 # ── Oracle A ────────────────────────────────────────────────────

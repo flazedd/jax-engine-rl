@@ -45,6 +45,7 @@ class EnvParams(NamedTuple):
     gamma_disc: float = 0.99
     gamma_inventory: float = 0.1
     boundary_penalty: float = 5.0
+    mtm_weight: float = 1.0
     inventory_max: int = 5
     t_episode: int = 200
     n_regimes: int = 3
@@ -54,9 +55,9 @@ class EnvParams(NamedTuple):
     @staticmethod
     def default():
         """Build default params from CLAUDE.md specification."""
-        hmm = jnp.array([[0.95, 0.03, 0.02],
-                          [0.08, 0.90, 0.02],
-                          [0.08, 0.02, 0.90]])
+        hmm = jnp.array([[0.90, 0.05, 0.05],
+                          [0.10, 0.80, 0.10],
+                          [0.10, 0.10, 0.80]])
         pi = _stationary_distribution(hmm)
         return EnvParams(
             kappa=jnp.array([[2.0, 2.0],    # noise — symmetric
@@ -65,9 +66,9 @@ class EnvParams(NamedTuple):
             delta=jnp.array([[1.0, 1.0],    # symmetric
                              [1.0, 3.0],    # lean-ask
                              [3.0, 1.0]]),  # lean-bid
-            drift_probs=jnp.array([[0.15, 0.70, 0.15],   # noise — zero mean
-                                   [0.05, 0.50, 0.45],   # bull  — positive
-                                   [0.45, 0.50, 0.05]]), # bear  — negative
+            drift_probs=jnp.array([[0.20, 0.60, 0.20],   # noise — zero mean
+                                   [0.12, 0.50, 0.38],   # bull  — positive
+                                   [0.38, 0.50, 0.12]]), # bear  — negative
             sigma_sq=jnp.array([0.5, 1.5, 1.5]),
             hmm_transition=hmm,
             stationary_dist=pi,
@@ -187,8 +188,11 @@ def env_step(
     # Boundary penalty: 5.0 · |q'| when |q'| == inventory_max
     at_boundary = (jnp.abs(new_inv) == params.inventory_max).astype(jnp.float32)
     boundary = params.boundary_penalty * jnp.abs(q_f) * at_boundary
+    # Mark-to-market: reward for holding inventory in the right direction
+    q_pre = state.inventory.astype(jnp.float32)
+    mtm = params.mtm_weight * q_pre * mid_change
 
-    reward = spread_pnl - inv_penalty - boundary
+    reward = spread_pnl - inv_penalty - boundary + mtm
 
     # --- Regime transition ---
     new_regime_sampled = jax.random.categorical(

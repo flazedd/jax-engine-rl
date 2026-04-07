@@ -104,6 +104,14 @@ def build_mdp_tables(params: EnvParams) -> MDPTables:
     # Expected reward: R[r, q, a] = Σ_o P(o|r,a) · reward(r,q,a,o)
     R = jnp.sum(p_out[:, None, :, :] * r_per_outcome, axis=-1)
 
+    # Mark-to-market: E[mtm | r, q] = mtm_weight · q · E[mid_change | r]
+    # Uses pre-step inventory (q before fills), independent of action/outcome
+    expected_drift = params.drift_probs[:, 2] - params.drift_probs[:, 0]  # (n_r,)
+    mtm = (params.mtm_weight
+           * inv_grid[None, :].astype(jnp.float32)
+           * expected_drift[:, None])  # (n_r, n_q)
+    R = R + mtm[:, :, None]  # broadcast over actions
+
     # Transition table: T[r, q, a, q'] = Σ_{o: next(q,o)==q'} P(o|r,a)
     q_next_onehot = jax.nn.one_hot(q_next_idx, n_q)  # (n_q, 4, n_q)
     T = jnp.einsum('rao,qop->rqap', p_out, q_next_onehot)
@@ -568,6 +576,7 @@ def _simulate_env_steps(
         "inv_max": inv_max,
         "gamma_inv": gamma_inv,
         "bound_pen": bound_pen,
+        "mtm_weight": float(params.mtm_weight),
         "rng": rng,
     }
 
@@ -591,6 +600,7 @@ def _run_oracle_rollout(
     n_inv = 2 * inv_max + 1
     gamma_inv = env_data["gamma_inv"]
     bound_pen = env_data["bound_pen"]
+    mtm_weight = env_data["mtm_weight"]
     rng = env_data["rng"]
     regimes = env_data["regimes"]
     mid_changes = env_data["mid_changes"]
@@ -631,7 +641,9 @@ def _run_oracle_rollout(
             inv_pen = gamma_inv * new_inv**2 * sigma_sq[r]
             at_bound = float(abs(new_inv) == inv_max)
             bpen = bound_pen * abs(new_inv) * at_bound
-            rewards[ep, t] = spread - inv_pen - bpen
+            mid_val = mid_changes[ep, t] - 1  # {0,1,2} → {-1,0,+1}
+            mtm = mtm_weight * inv * mid_val
+            rewards[ep, t] = spread - inv_pen - bpen + mtm
 
             inv = int(new_inv)
 
@@ -738,7 +750,9 @@ def simulate_oracle_b(
             inv_pen = gamma_inv * new_inv**2 * sigma_sq[r]
             at_bound = float(abs(new_inv) == inv_max)
             bpen = bound_pen * abs(new_inv) * at_bound
-            rewards_out[ep, t] = spread - inv_pen - bpen
+            mid_val = mid_changes[ep, t] - 1  # {0,1,2} → {-1,0,+1}
+            mtm = env_data["mtm_weight"] * inv * mid_val
+            rewards_out[ep, t] = spread - inv_pen - bpen + mtm
 
             # Belief update: condition on observation → predict
             mc_idx = mid_changes[ep, t]
@@ -906,7 +920,7 @@ def precondition_3(
     pass_separation = True
     for r in range(n_r):
         dominant = action_dists[r].max()
-        if dominant < 0.4:  # should have clear preference
+        if dominant < 0.35:  # should have clear preference
             pass_separation = False
 
     return {

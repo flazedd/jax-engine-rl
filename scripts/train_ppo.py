@@ -5,14 +5,14 @@ Trains PPO with a feedforward actor-critic on:
   - 3 locked-regime environments (noise, bull, bear)
   - 1 mixed-regime (HMM switching) environment
 
-Multiple seeds per regime. Computes normalised returns, generates Figure 3,
-and runs the gate check (locked curves must reach ~1.0).
+Multiple seeds per regime. Computes reward/step metrics, generates Figure 3,
+and runs the gate check (locked curves must converge near Oracle A reward/step).
 
 Uses Equinox for actor-critic, Optax for optimization, JAX-native env
 for fully jit-compiled rollouts + updates.
 
 Outputs:
-  results/ppo_phase4.json           — all metrics, baselines, normalised returns
+  results/ppo_phase4.json           — all metrics, baselines, reward/step
   plots/figure3_ppo_validation.png  — Figure 3
 
 Usage:
@@ -426,8 +426,8 @@ def compute_baselines(params, regime, n_episodes=256):
 def plot_figure3(all_results, baselines, t_episode=200):
     """Figure 3: Learning curves for PPO locked + mixed.
 
-    Locked panels: normalised return (Oracle A = 1.0, random = 0).
-    Mixed panel: raw per-step reward with Oracle B / Oracle A reference lines.
+    All panels: reward/step with Oracle A reference lines.
+    Mixed panel: additional Oracle B reference line.
     Shading: 25th-75th percentile across seeds.
     """
     import matplotlib.pyplot as plt
@@ -562,8 +562,8 @@ def main():
 
     # Defaults based on --fast
     if args.fast:
-        n_seeds = args.n_seeds or 2
-        n_iters = args.n_iters or 60
+        n_seeds = args.n_seeds or 1
+        n_iters = args.n_iters or 30
         n_eval = 16
         eval_every = 5
     else:
@@ -625,29 +625,34 @@ def main():
             print(f"    seed {seed_idx} done: reward/step={final/t_ep:.4f}  "
                   f"({result['train_time']:.0f}s)")
 
-    # --- Gate check ---
+    # --- Gate check (locked regimes must converge near Oracle A) ---
+    # Uses (PPO - random) / (Oracle_A - random) > 0.8 for locked regimes.
+    # This works for both positive and negative Oracle A returns.
     print("\n" + "=" * 60)
     gate_pass = True
     for name, rid in regimes:
         if rid == -1:
-            continue  # mixed doesn't need to reach 1.0
+            continue  # mixed doesn't need to match Oracle A
         runs = [r for r in all_results if r["regime"] == name]
         bl = baselines[name]
         denom = bl["oracle_a_mean_return"] - bl["random_mean_return"]
         finals = []
         for r in runs:
             final = r["mean_returns"][-1]
-            norm = (final - bl["random_mean_return"]) / denom if denom > 0 else 0
-            finals.append(norm)
-        mean_norm = np.mean(finals)
-        passed = mean_norm > 0.8
+            frac = (final - bl["random_mean_return"]) / denom if denom > 0 else 0
+            finals.append(frac)
+        mean_frac = np.mean(finals)
+        passed = mean_frac > 0.8
         gate_pass = gate_pass and passed
         status = "PASS" if passed else "FAIL"
-        print(f"  {name:>6s}: mean normalised = {mean_norm:.3f}  [{status}]")
+        mean_rps = np.mean([r["mean_returns"][-1] / t_ep for r in runs])
+        oracle_rps = bl["oracle_a_mean_return"] / t_ep
+        print(f"  {name:>6s}: reward/step = {mean_rps:.4f}  "
+              f"(oracle_a = {oracle_rps:.4f}, convergence = {mean_frac:.3f})  [{status}]")
 
     print(f"\n  GATE: {'PASS' if gate_pass else 'FAIL'}")
     if not gate_pass:
-        print("  WARNING: locked curves did not reach ~1.0!")
+        print("  WARNING: locked curves did not converge near Oracle A!")
     print("=" * 60)
 
     # --- Save results ---

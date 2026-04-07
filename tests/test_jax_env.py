@@ -273,15 +273,17 @@ class TestReward:
         assert np.mean(rewards_at_boundary) < np.mean(rewards_at_zero)
 
     def test_inventory_penalty_quadratic(self, params):
-        """Higher |inventory| → higher penalty."""
-        state, _ = env_reset(jax.random.PRNGKey(0), params)
+        """Higher |inventory| → higher penalty (in noise regime where MTM=0)."""
+        # Use noise regime to isolate inventory penalty from MTM directional bias
+        noise_params = params._replace(locked_regime=0)
+        state, _ = env_reset(jax.random.PRNGKey(0), noise_params)
         mean_rewards = {}
         for q in [0, 2, 4]:
             s = state._replace(inventory=jnp.int32(q))
             rs = []
             for seed in range(200):
                 _, _, r, _, _ = env_step(
-                    jax.random.PRNGKey(seed), s, jnp.int32(0), params)
+                    jax.random.PRNGKey(seed), s, jnp.int32(0), noise_params)
                 rs.append(float(r))
             mean_rewards[q] = np.mean(rs)
         assert mean_rewards[0] > mean_rewards[2] > mean_rewards[4]

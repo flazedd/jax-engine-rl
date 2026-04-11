@@ -6,7 +6,7 @@
 
 ## Thesis Framing
 
-POMDP market-making environment with analytically tractable optimal policies as performance ceilings. Environment characterised analytically before any RL training — locked-regime and mixed-regime oracles computed, policies separated by true regime, value of optimal action selection quantified. This foundation validates the environment and establishes targets.
+POMDP market-making environment with analytically tractable optimal policies as performance ceilings. Fixed regime per episode — each episode samples one regime and holds it constant. Agents must infer the regime from within-episode observations. Inventory resets between episodes. This is the textbook VariBAD setup: clean task identification over a meta-trial of 4 episodes. Per-regime optimal policies computed via locked-regime VI and verified to be distinct before any RL training.
 
 **Research questions (RQ2 is the centerpiece):**
 
@@ -20,22 +20,21 @@ POMDP market-making environment with analytically tractable optimal policies as 
 
 ## RQ2 — Policy Quality Decomposition (centerpiece)
 
-Train the full agent ladder on the mixed-regime environment. The seven-gap decomposition is the central result:
+Train the full agent ladder on the fixed-regime-per-episode environment. The six-gap decomposition is the central result:
 
 ```
-Oracle A → Oracle B             cost of partial observability (env property)
-Oracle B → Belief-PPO           cost of learning vs planning (approx policy opt)
-Belief-PPO → VariBAD            cost of approximate vs exact Bayesian inference
-VariBAD → RL²+HN                value of explicit posterior vs implicit HN conditioning
+Oracle → Belief-PPO            cost of partial observability (inference transient)
+Belief-PPO → VariBAD           cost of approximate vs exact Bayesian inference
+VariBAD → RL²+HN               value of explicit posterior vs implicit HN conditioning
 RL²+HN → RL²                   value of hypernetwork architecture (Beck et al. 2023)
 RL² → PPO+LSTM                  value of meta-learning (multi-episode trials)
 PPO+LSTM → PPO MLP              value of any memory at all
 ```
 
 **Primary metrics:**
-- **Mean reward per step:** raw metric, no normalisation. Y-axis in reward/step units. Reference lines for Oracle A, Oracle B, PPO MLP asymptotic. All agents compared on the same scale.
+- **Mean reward per step:** raw metric, no normalisation. Y-axis in reward/step units. Reference line for Oracle (locked-regime), PPO MLP asymptotic. All agents compared on the same scale.
 - **AULC (Area Under Learning Curve):** integral of mean reward/step over training steps, divided by total steps. Primary sample efficiency metric — captures both speed and asymptotic level. Wilcoxon signed-rank across 8 seeds.
-- **Steps to 0.8 × Oracle_B reward/step:** secondary threshold metric. Agents that never reach → "did not reach."
+- **Steps to 0.8 × Oracle reward/step:** secondary threshold metric. Agents that never reach → "did not reach."
 - **Per-regime action distributions** (Figure 6) — tests genuine regime-appropriate behaviour vs better compromise.
 - **Wilcoxon signed-rank + Cohen's d** between each adjacent agent pair across 8 seeds.
 
@@ -57,7 +56,7 @@ At regular checkpoints, freeze encoder, extract latent representations over **he
 
 ## RQ3 — Inference-Performance Timing (exploratory)
 
-Per agent per seed, identify: `t_infer` = step where probe accuracy first > 60%; `t_perf` = step where mean reward/step first > 0.8 × Oracle_B reward/step. Compute `t_infer - t_perf` across seeds. Sign test against zero.
+Per agent per seed, identify: `t_infer` = step where probe accuracy first > 60%; `t_perf` = step where mean reward/step first > 0.8 × Oracle reward/step. Compute `t_infer - t_perf` across seeds. Sign test against zero.
 
 If `t_infer < t_perf` consistently → inference leads performance (causal support). If non-significant → co-development is the defensible conclusion. Framed as exploratory — thesis stands on RQ2 regardless.
 
@@ -67,16 +66,13 @@ If `t_infer < t_perf` consistently → inference leads performance (causal suppo
 
 ## Environment Specification
 
-### Regimes & HMM
+### Regimes (fixed per episode)
 ```
 3 regimes: noise(0), bull(1), bear(2)
-HMM = [[0.90, 0.05, 0.05],
-        [0.10, 0.80, 0.10],
-        [0.10, 0.10, 0.80]]
-Expected regime duration: noise ~10 steps, bull/bear ~5 steps.
-Shorter trending regimes force fast inference — reactive inventory-based
-detection (~5 steps lag) arrives too late; Bayesian agents that use
-fill + drift signals can identify within 2–3 steps and still exploit.
+Regime sampled uniformly at episode start, held fixed for the entire episode.
+Inventory resets to 0 at each episode boundary.
+In a 4-episode meta-trial, each episode independently samples its regime.
+Agents must infer the regime from within-episode observations (fills, drift).
 ```
 
 ### Actions
@@ -114,14 +110,15 @@ q' = clip(q + fill_bid - fill_ask, -5, 5)     # 11 levels
 σ² = [0.5, 1.5, 1.5]                           # noise, bull, bear
 
 r_t = fill_bid·δ_bid + fill_ask·δ_ask          # spread PnL (both sides earn)
-      - 0.1 · q'² · σ²_regime                  # inventory risk (post-step q')
+      - 0.04 · q'² · σ²_regime                 # inventory risk (post-step q')
       - 5.0 · |q'| · 1(|q'|==5)               # boundary penalty
       + 1.0 · q · mid_change                    # mark-to-market (pre-step q)
 
-Mark-to-market rewards holding inventory in the direction of the
-regime drift. Requires regime foresight — reactive agents can only
-chase after observing confirmatory signals, losing the first steps
-of each regime visit. E[MTM|bull,q] = q·0.26, E[MTM|noise,q] = 0.
+Low inventory penalty (0.04) lets regime exploitation dominate at most
+inventory levels. Mark-to-market rewards holding inventory in the
+direction of the regime drift. E[MTM|bull,q] = q·0.26, E[MTM|noise,q] = 0.
+Agents that identify the regime early can accumulate directional inventory
+and profit from the drift for the remainder of the episode.
 
 γ_disc = 0.99, T_episode = 200
 ```
@@ -145,12 +142,11 @@ All recurrent + Belief-PPO: (o_t, a_{t-1}, r_{t-1})
 | RL² | `(o_t, a_{t-1}, r_{t-1})` | GRU, h persists across episodes in trial | Multi-episode trial (4 eps) | End-to-end meta-RL |
 | RL²+HN | `(o_t, a_{t-1}, r_{t-1})` | GRU → HyperNet → policy MLP; state re-conditioned | Multi-episode trial (4 eps) | Recurrent hypernetwork (Beck et al. 2023) |
 | VariBAD | `(o_t, a_{t-1}, r_{t-1})` | GRU encoder → VAE posterior; policy on `(o_t, μ_t, σ_t)` | Multi-episode trial (4 eps) | Explicit approximate Bayesian inference |
-| Belief-PPO | `(o_t, b_t)` | MLP + exact HMM filter (true params) | Multi-episode trial (4 eps) | Perfect inference ablation |
-| Oracle B | `(q, b)` | VI + exact HMM filter | — | POMDP optimality ceiling |
-| Oracle A | `(q, r)` | VI lookup | — | Full-information upper bound |
+| Belief-PPO | `(o_t, b_t)` | MLP + exact Bayesian filter (true params) | Multi-episode trial (4 eps) | Perfect inference ablation |
+| Oracle | `(q, r)` | VI lookup (locked-regime) | — | Full-information upper bound |
 
 ### Multi-Episode Trial Structure
-RL², RL²+HN, VariBAD, Belief-PPO all train on **4-episode trials** (800 steps). HMM initial regime sampled from stationary distribution at trial start, then runs normally. Hidden states persist across episode boundaries within a trial. PPO+LSTM also evaluated on 4-episode trials but its hidden state resets every episode — it cannot exploit cross-episode information.
+RL², RL²+HN, VariBAD, Belief-PPO all train on **4-episode trials** (800 steps). Each episode independently samples a regime (uniform) and holds it fixed. Inventory resets to 0 at each episode boundary. Hidden states persist across episode boundaries within a trial — enabling cross-episode meta-learning. PPO+LSTM also evaluated on 4-episode trials but its hidden state resets every episode — it cannot exploit cross-episode information.
 
 ### RL²+HN Architecture (Beck et al. 2023)
 ```
@@ -185,90 +181,60 @@ Isolates: value of perfect Bayesian inference given learned policy.
 
 ## Oracle Specification
 
-### Shared Q_max
+### Oracle — Locked-Regime VI (11 states per regime)
 ```
-Q_max = max_{q, r} Q*_locked(q, r, a*(q,r))
-```
-Computed once from locked-regime VI. Single denominator for all relative gain (%) computations across all figures.
-
-### Oracle A — Full-Information MDP (33 states)
-```
-V(q,r) = max_a { E[r(a,q,r)] + γ · Σ_{r'} P(r'|r) · Σ_{q'} P(q'|q,a,r) · V(q',r') }
+Per regime r, solve the 11-state MDP (inventory q ∈ [-5, 5]):
+V_r(q) = max_a { E[r(a,q,r)] + γ · Σ_{q'} P(q'|q,a,r) · V_r(q') }
 P(q'|q,a,r): 4 outcomes from independent fills, then clip.
-vmap over 33 states per sweep. Converge: max|V_new - V_old| < 1e-6.
-Output: π*_A(q,r), Q*_A(q,r,a)
-```
+Converge: max|V_new - V_old| < 1e-6.
+Output: π*_r(q), Q*_r(q,a) for each regime r.
 
-### Oracle B — POMDP Belief-State (~4400 states)
+Q_max = max_{q, r} Q*_r(q, a*(q,r))
 ```
-20×20 triangular grid over Δ².
-Belief update: predict → likelihood-weight → normalise (exact HMM filter).
-V(q,b) = max_a { E[r(a,q,b)] + γ · Σ_o P(o|a,b) · V(q'(o,a), b'(o,a,b)) }
-Nearest-grid-point interpolation. vmap over all states per sweep.
-Output: π*_B(q,b), Q*_B(q,b,a)
-```
+Single denominator for all relative gain (%) computations. The oracle knows the regime and uses the optimal locked-regime policy from step 1 — the upper bound for any agent.
 
 ---
 
-## Analytical Foundation — Preconditions
+## Analytical Foundation
 
-> Computed before any RL training. Gate: if any precondition fails → retune κ/σ² before proceeding.
+> Computed before any RL training. Gate: if precondition fails → retune κ/σ²/γ_inventory before proceeding.
 
-### Precondition 1 — Locked-regime policies distinct and decisive
+### Precondition — Locked-regime policies distinct and decisive
 VI on each regime independently (11-state MDP). Extract π*_r(q), Q*_r(q,a).
 ```
 gap_r(q) = (Q*_r(q,a*) - Q*_r(q,a_2nd)) / Q_max × 100%
 disagreement(r1, r2) = mean_q[π*_r1(q) ≠ π*_r2(q)]
 Pass: all disagreements > 20%, mean gap > 5% per regime.
 ```
-
-### Precondition 2 — Oracle A regime-dependent under switching
-Roll out Oracle A in switching env. Tag steps by true_regime_t.
-```
-Per true regime: action distribution, gap_A(q,r) on shared Q_max.
-Pass: action distributions clearly separate by true regime; mean gap > 5%.
-```
-
-### Precondition 3 — Oracle B regime-dependent under belief uncertainty
-Roll out Oracle B with exact HMM filter. Tag by true_regime_t.
-```
-Per true regime: action distribution, gap_B(q,r) averaged over encountered beliefs.
-Pass: distributions separate despite uncertain beliefs; mean gap > 5%.
-```
+Output: single figure with 3 heatmaps (noise | bull | bear), x=inventory, y=action, cell=optimal %.
 
 ---
 
 ## Key Figures
 
-### Figure 1 — Locked-Regime Oracle ★ FOUNDATION
-2 rows × 3 cols (noise | bull | bear).
-Row 1: optimal action heatmap per q. Row 2: relative gain bar chart (gap_r(q)).
-Below: pairwise disagreement bars + numerical table (mean/min gap, % with gap>10%).
-
-### Figure 2 — Mixed-Regime Oracles ★ FOUNDATION
-4 rows × 3 cols (true regime).
-Row 1: Oracle A actions by true regime. Row 2: Oracle A relative gain.
-Row 3: Oracle B actions by true regime. Row 4: Oracle B relative gain.
-Below: Oracle A vs locked disagreement; Oracle B vs Oracle A disagreement; pairwise disagreement comparison.
+### Figure 1 — Per-Regime Optimal Policies ★ FOUNDATION
+1 row × 3 cols (noise | bull | bear).
+Each panel: heatmap (x=inventory q, y=action, cell=100% if optimal).
+Pairwise disagreement percentages in title. Gate: PASS/FAIL.
 
 ### Figure 3 — PPO Validation ★ IMPLEMENTATION CHECK
-Learning curves (reward/step). PPO locked regimes converge near Oracle A for that regime.
-PPO mixed converges well below Oracle A/B — memoryless baseline cannot fully exploit regime structure.
-Shading: 25th–75th percentile, 8 seeds. Reference lines: Oracle A, Oracle B (reward/step).
+Learning curves (reward/step). PPO locked regimes converge near Oracle for that regime.
+PPO mixed converges well below Oracle — memoryless baseline cannot exploit regime structure.
+Shading: 25th–75th percentile, 8 seeds. Reference line: Oracle (reward/step).
 
 ### Figure 4 — Agent Ladder (RQ2)
-Learning curves (reward/step) for all 5 RL agents. Reference lines for Oracle A, Oracle B, PPO MLP asymptotic.
+Learning curves (reward/step) for all RL agents. Reference lines for Oracle, PPO MLP asymptotic.
 Gap annotations (labeled brackets) per decomposition table.
-Inset: AULC bar chart + threshold-crossing bars (steps to 0.8×Oracle_B reward/step).
+Inset: AULC bar chart + threshold-crossing bars (steps to 0.8×Oracle reward/step).
 
 ### Figure 5 — Regime Inference Over Training (RQ1 + RQ3)
 One panel per probed agent (RL², RL²+HN, VariBAD). Dual y-axis: probe accuracy (left), reward/step (right).
-Threshold lines: 60% (t_infer), 0.8×Oracle_B reward/step (t_perf). Per-seed tick marks.
+Threshold lines: 60% (t_infer), 0.8×Oracle reward/step (t_perf). Per-seed tick marks.
 Below: distribution of t_infer − t_perf with sign test p-value. Framed as exploratory.
 
 ### Figure 6 — Per-Regime Action Distributions (RQ1 + RQ2)
 3×3 normalised matrix per agent (rows=true regime, cols=action chosen).
-Show Oracle A + all 5 RL agents + Belief-PPO. Visual progression from diagonal (oracle) to uniform (PPO MLP).
+Show Oracle + all RL agents + Belief-PPO. Visual progression from diagonal (oracle) to uniform (PPO MLP).
 
 ### Figure 7 — Latent Space Geometry (RQ1, supplementary)
 2D PCA, one panel per probed agent × early/late training. Color by true regime.
@@ -280,62 +246,51 @@ Pairwise L2 centroid distances reported numerically.
 
 ### Phase 0 — Environment Core
 - `EnvState(NamedTuple)`: `(inventory, regime, mid_price, step)`
-- `EnvParams(NamedTuple)`: all κ, δ, drift_probs, σ², HMM, γ, penalties — frozen
-- HMM step: `jax.random.categorical` on transition row
+- `EnvParams(NamedTuple)`: all κ, δ, drift_probs, σ², γ, penalties — frozen
+- Regime: fixed per episode, sampled uniformly at episode start
 - Fills: two independent `jax.random.bernoulli`
-- Inventory: `jnp.clip(q + fill_bid - fill_ask, -5, 5)`
+- Inventory: `jnp.clip(q + fill_bid - fill_ask, -5, 5)`, resets to 0 between episodes
 - Mid-price: draw `mid_change` from `drift_probs[regime]`
 - Reward: spread PnL - inventory penalty - boundary (post-step q') + MTM (pre-step q × mid_change)
 - `get_obs(state, mid_change)` → 4D
 - `lax.scan` rollout returning `(obs, actions, rewards, true_regimes)`
-- Multi-episode trial wrapper: 4 consecutive episodes (800 steps), HMM continuous across episodes, optional hidden-state reset flag per agent type
+- Multi-episode trial wrapper: 4 consecutive episodes (800 steps), each episode samples regime independently, inventory resets at episode boundary, optional hidden-state reset flag per agent type
 
-### Phase 1 — Locked-Regime VI + Oracle A
-- Locked VI: per regime, fix regime, VI on 11-state MDP
-- Oracle A: full HMM, 33-state MDP
+### Phase 1 — Locked-Regime VI (Oracle)
+- Per regime, fix regime, VI on 11-state MDP
 - `vmap` over states per sweep. Converge: `< 1e-6`
 - Extract Q-tables, policies, shared Q_max
 
-### Phase 2 — Oracle B (POMDP VI)
-- 20×20 triangular belief grid
-- Exact HMM filter: predict, likelihood-weight, normalise
-- Nearest-grid-point interpolation
-- `vmap` over ~4400 states per sweep
-- Extract π*_B, Q*_B
-
-### Phase 3 — Analytical Foundation Figures
-- Compute gap tables → Figure 1
-- Oracle A rollout in switching env, tag by true_regime → Figure 2 rows 1–2
-- Oracle B rollout with HMM filter → Figure 2 rows 3–4
-- Pairwise disagreements, comparison summaries
+### Phase 2 — Analytical Foundation
+- Compute gap tables and pairwise disagreements → Figure 1
 - **Gate:** mean gap < 5% or any disagreement < 20% → halt, retune
 
-### Phase 4 — PPO MLP Baseline
+### Phase 3 — PPO MLP Baseline
 - MLP policy + value network. Input: o_t only
 - GAE via `lax.scan`
 - Locked-regime runs (3) + mixed-regime run
 - Reward/step learning curves → Figure 3
-- **Gate:** locked curves must converge near respective Oracle A reward/step
+- **Gate:** locked curves must converge near respective Oracle reward/step
 
-### Phase 5 — PPO+LSTM
+### Phase 4 — PPO+LSTM
 - LSTM policy, hidden state across episode via `lax.scan`
 - Input: `(o_t, a_{t-1}, r_{t-1})`
 - **Single-episode training** — h resets at every episode boundary
 - Evaluated on 4-episode trials but h still resets each episode
 
-### Phase 6 — RL²
+### Phase 5 — RL²
 - GRU meta-policy, input: `(o_t, a_{t-1}, r_{t-1})`
 - **Multi-episode trials:** 4 episodes per trial, h persists across episode boundaries
 - Policy head on GRU output
 
-### Phase 7 — RL²+HN (Beck et al. 2023)
+### Phase 6 — RL²+HN (Beck et al. 2023)
 - Same GRU as Phase 6
 - HyperNet: `h_t → all weights & biases of policy MLP`
 - Policy MLP receives `o_t` as input (dual conditioning: via h_t through HN + direct)
 - Bias-HyperInit: HN final layer zero weights, non-zero bias
 - Multi-episode trials
 
-### Phase 8 — VariBAD
+### Phase 7 — VariBAD
 - GRU encoder → h_t; MLP posterior → (μ_t, σ_t), latent dim=4
 - MLP decoder: (z_t, o_t, a_t) → (r̂_t, ô_{t+1}) via reparameterisation
 - MLP policy: (o_t, μ_t, σ_t) → action logits
@@ -343,13 +298,13 @@ Pairwise L2 centroid distances reported numerically.
 - Multi-episode trials
 - Log (μ_t, σ_t) at each step for RQ1 probe
 
-### Phase 9 — Belief-PPO (ablation)
-- Exact HMM filter with true env params → b_t ∈ Δ² at each step
+### Phase 8 — Belief-PPO (ablation)
+- Exact Bayesian filter with true env params → b_t ∈ Δ² at each step
 - PPO MLP with input (o_t, b_t), dim=7
 - Multi-episode trials
-- Isolates: if this matches Oracle B → problem is pure policy learning; if VariBAD matches this → approximate inference is sufficient
+- Isolates: if VariBAD matches this → approximate inference is sufficient
 
-### Phase 10 — Evaluation & Figures
+### Phase 9 — Evaluation & Figures
 - 8 seeds per agent; all agents evaluated on same env seeds
 - Reward/step learning curves → Figure 4
 - AULC computation (primary) + threshold-crossing (secondary)
@@ -371,11 +326,7 @@ INVENTORY_BOUNDS  = (-5, 5)       # 11 levels
 T_EPISODE         = 200
 GAMMA_DISC        = 0.99
 EPISODES_PER_TRIAL = 4            # for meta-learning agents
-
-# HMM (faster switching — trending regimes ~5 steps)
-HMM_TRANSITION    = [[0.90, 0.05, 0.05],
-                      [0.10, 0.80, 0.10],
-                      [0.10, 0.10, 0.80]]
+REGIME_SAMPLING   = "uniform"     # each episode samples regime independently
 
 # Fill model
 KAPPA             = [[2.0, 2.0],   # noise
@@ -394,12 +345,9 @@ DRIFT_PROBS       = [[0.20, 0.60, 0.20],
 
 # Volatility & reward
 SIGMA_SQ          = [0.5, 1.5, 1.5]
-GAMMA_INVENTORY   = 0.1
+GAMMA_INVENTORY   = 0.04
 BOUNDARY_PENALTY  = 5.0
 MTM_WEIGHT        = 1.0           # mark-to-market: mtm_weight · q_pre · mid_change
-
-# Oracle B
-BELIEF_GRID_SIZE  = 20
 
 # VariBAD
 VARIBAD_LATENT_DIM = 4
@@ -411,7 +359,7 @@ HN_POLICY_HIDDEN  = 64           # generated policy MLP hidden size
 
 # Training & evaluation
 N_SEEDS           = 8
-SAMPLE_EFF_TARGET = 0.8          # threshold fraction of Oracle_B reward/step
+SAMPLE_EFF_TARGET = 0.8          # threshold fraction of Oracle reward/step
 N_EVAL_EPISODES   = 256          # for probe at each checkpoint
 PROBE_TRAIN_FRAC  = 0.8          # stratified by regime
 ```

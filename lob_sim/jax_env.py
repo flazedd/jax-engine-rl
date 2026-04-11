@@ -43,7 +43,7 @@ class EnvParams(NamedTuple):
     hmm_transition: jnp.ndarray   # (3, 3) regime transition matrix
     stationary_dist: jnp.ndarray  # (3,) precomputed stationary distribution
     gamma_disc: float = 0.99
-    gamma_inventory: float = 0.1
+    gamma_inventory: float = 0.04
     boundary_penalty: float = 5.0
     mtm_weight: float = 1.0
     inventory_max: int = 5

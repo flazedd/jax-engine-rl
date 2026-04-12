@@ -43,8 +43,8 @@ class EnvParams(NamedTuple):
     hmm_transition: jnp.ndarray   # (3, 3) regime transition matrix
     stationary_dist: jnp.ndarray  # (3,) precomputed stationary distribution
     gamma_disc: float = 0.99
-    gamma_inventory: float = 0.04
-    boundary_penalty: float = 5.0
+    gamma_inventory: float = 0.15
+    inv_deadzone: int = 1
     mtm_weight: float = 1.0
     inventory_max: int = 5
     t_episode: int = 200
@@ -128,15 +128,19 @@ def env_reset(
     """Reset environment. Returns (state, obs).
 
     Initial regime sampled from stationary distribution (or locked).
-    Initial observation is all zeros.
+    Initial inventory sampled uniformly from [-inventory_max, inventory_max].
     """
-    sampled = jax.random.categorical(key, jnp.log(params.stationary_dist))
+    k_regime, k_inv = jax.random.split(key)
+    sampled = jax.random.categorical(k_regime, jnp.log(params.stationary_dist))
     regime = jnp.where(
         params.locked_regime >= 0, params.locked_regime, sampled,
     ).astype(jnp.int32)
 
+    n_inv = 2 * params.inventory_max + 1
+    inv = jax.random.randint(k_inv, (), 0, n_inv) - params.inventory_max
+
     state = EnvState(
-        inventory=jnp.int32(0),
+        inventory=jnp.int32(inv),
         regime=regime,
         mid_price=jnp.float32(0.0),
         step=jnp.int32(0),
@@ -158,7 +162,7 @@ def env_step(
 
     Returns (new_state, obs, reward, done, info).
     """
-    k_bid, k_ask, k_mid, k_regime = jax.random.split(key, 4)
+    k_bid, k_ask, k_mid = jax.random.split(key, 3)
     r = state.regime
     a = action
 
@@ -182,24 +186,18 @@ def env_step(
     # --- Reward ---
     # Spread PnL: both sides earn their delta on fill
     spread_pnl = fill_bid * params.delta[a, 0] + fill_ask * params.delta[a, 1]
-    # Inventory risk penalty: 0.1 · q'² · σ²[regime]  (post-step q')
+    # Inventory risk penalty: γ_inv · q'² · σ²[regime]  (post-step q')
     q_f = new_inv.astype(jnp.float32)
-    inv_penalty = params.gamma_inventory * q_f * q_f * params.sigma_sq[r]
-    # Boundary penalty: 5.0 · |q'| when |q'| == inventory_max
-    at_boundary = (jnp.abs(new_inv) == params.inventory_max).astype(jnp.float32)
-    boundary = params.boundary_penalty * jnp.abs(q_f) * at_boundary
+    q_eff = jnp.maximum(jnp.abs(q_f) - params.inv_deadzone, 0.0)
+    inv_penalty = params.gamma_inventory * q_eff * q_eff * params.sigma_sq[r]
     # Mark-to-market: reward for holding inventory in the right direction
     q_pre = state.inventory.astype(jnp.float32)
     mtm = params.mtm_weight * q_pre * mid_change
 
-    reward = spread_pnl - inv_penalty - boundary + mtm
+    reward = spread_pnl - inv_penalty + mtm
 
-    # --- Regime transition ---
-    new_regime_sampled = jax.random.categorical(
-        k_regime, jnp.log(params.hmm_transition[r]))
-    new_regime = jnp.where(
-        params.locked_regime >= 0, r, new_regime_sampled,
-    ).astype(jnp.int32)
+    # --- Regime: fixed for entire episode (changes only at env_reset) ---
+    new_regime = r
 
     # --- New state ---
     new_step = state.step + 1

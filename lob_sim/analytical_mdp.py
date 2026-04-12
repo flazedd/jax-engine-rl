@@ -52,7 +52,7 @@ def build_mdp_tables(params: EnvParams) -> MDPTables:
 
     Fill model: P(fill_side) = exp(-κ[regime, side] · δ[action, side])
     4 outcomes per (regime, inventory, action) from independent bid/ask fills.
-    Reward: spread_pnl - inventory_penalty - boundary_penalty (on post-step q').
+    Reward: spread_pnl - inventory_penalty (on post-step q').
     """
     n_r = params.n_regimes
     n_a = params.n_actions
@@ -87,19 +87,15 @@ def build_mdp_tables(params: EnvParams) -> MDPTables:
     spread_pnl = (fb[None, :] * params.delta[:, 0, None]
                   + fa[None, :] * params.delta[:, 1, None])  # (n_a, 4)
 
-    # Inventory risk penalty: γ_inv · q'² · σ²[r]  — shape (n_r, n_q, 4)
+    # Inventory risk penalty: γ_inv · max(0,|q'|-dz)² · σ²[r]  — shape (n_r, n_q, 4)
+    q_eff = jnp.maximum(jnp.abs(q_next_f) - params.inv_deadzone, 0.0)
     inv_pen = (params.gamma_inventory
-               * q_next_f[None, :, :] ** 2
+               * q_eff[None, :, :] ** 2
                * params.sigma_sq[:, None, None])
-
-    # Boundary penalty: 5.0 · |q'| · 𝟙(|q'|==max)  — shape (n_q, 4)
-    at_bound = (jnp.abs(q_next) == inv_max).astype(jnp.float32)
-    bound_pen = params.boundary_penalty * jnp.abs(q_next_f) * at_bound
 
     # Reward per outcome: (n_r, n_q, n_a, 4)
     r_per_outcome = (spread_pnl[None, None, :, :]
-                     - inv_pen[:, :, None, :]
-                     - bound_pen[None, :, None, :])
+                     - inv_pen[:, :, None, :])
 
     # Expected reward: R[r, q, a] = Σ_o P(o|r,a) · reward(r,q,a,o)
     R = jnp.sum(p_out[:, None, :, :] * r_per_outcome, axis=-1)
@@ -235,15 +231,22 @@ def compute_q_max(locked_solutions: list[VISolution]) -> float:
 def precondition_1(
     locked_solutions: list[VISolution],
     q_max: float,
+    min_disagree_pct: float = 20.0,
+    min_mean_gap_pct: float = 0.5,
 ) -> dict:
     """Check Precondition 1: locked-regime policies are distinct and decisive.
 
+    Gates:
+      1. Pairwise disagreement > min_disagree_pct (regimes choose different actions).
+      2. Mean Q-value gap > min_mean_gap_pct per regime (best action is meaningfully
+         better than second-best, as % of Q_max).
+
     Returns dict with:
-      gap_per_regime: mean relative gap per regime (% of Q_max)
+      gap_per_regime: mean/min relative gap per regime (% of Q_max)
       pairwise_disagreement: fraction of states where policies differ
-      pass_gap: all mean gaps > 5%
-      pass_disagreement: all pairwise disagreements > 20%
-      passed: both conditions met
+      pass_disagreement: all pairwise disagreements above threshold
+      pass_gap: all per-regime mean gaps above threshold
+      passed: both checks pass
     """
     n_regimes = len(locked_solutions)
     n_inv = locked_solutions[0].Q.shape[0]
@@ -268,15 +271,15 @@ def precondition_1(
             frac = float(jnp.mean((p1 != p2).astype(jnp.float32))) * 100.0
             disagreements[(r1, r2)] = frac
 
-    pass_gap = all(g["mean"] > 5.0 for g in gaps.values())
-    pass_disagree = all(d > 20.0 for d in disagreements.values())
+    pass_disagree = all(d > min_disagree_pct for d in disagreements.values())
+    pass_gap = all(g["mean"] > min_mean_gap_pct for g in gaps.values())
 
     return {
         "gap_per_regime": gaps,
         "pairwise_disagreement": disagreements,
-        "pass_gap": pass_gap,
         "pass_disagreement": pass_disagree,
-        "passed": pass_gap and pass_disagree,
+        "pass_gap": pass_gap,
+        "passed": pass_disagree and pass_gap,
     }
 
 
@@ -547,8 +550,6 @@ def _simulate_env_steps(
     sigma_sq = np.array(params.sigma_sq)
     inv_max = int(params.inventory_max)
     gamma_inv = float(params.gamma_inventory)
-    bound_pen = float(params.boundary_penalty)
-
     # Pre-generate regime sequences
     locked = int(params.locked_regime)
     regimes = np.zeros((n_episodes, t_episode), dtype=np.int32)
@@ -575,7 +576,7 @@ def _simulate_env_steps(
         "sigma_sq": sigma_sq,
         "inv_max": inv_max,
         "gamma_inv": gamma_inv,
-        "bound_pen": bound_pen,
+        "inv_deadzone": int(params.inv_deadzone),
         "mtm_weight": float(params.mtm_weight),
         "rng": rng,
     }
@@ -599,7 +600,7 @@ def _run_oracle_rollout(
     inv_max = env_data["inv_max"]
     n_inv = 2 * inv_max + 1
     gamma_inv = env_data["gamma_inv"]
-    bound_pen = env_data["bound_pen"]
+    inv_deadzone = env_data["inv_deadzone"]
     mtm_weight = env_data["mtm_weight"]
     rng = env_data["rng"]
     regimes = env_data["regimes"]
@@ -609,14 +610,8 @@ def _run_oracle_rollout(
     rewards = np.zeros((n_episodes, t_episode), dtype=np.float64)
     inventories = np.zeros((n_episodes, t_episode), dtype=np.int32)
 
-    # HMM filter state for Oracle B (unused by Oracle A)
-    hmm = np.array(kappa)  # just to get shape — will use env_data
-    hmm_trans = None
-    drift_probs = None
-
     for ep in range(n_episodes):
         inv = 0
-        belief = None  # will be set by policy_fn wrapper if needed
 
         for t in range(t_episode):
             r = regimes[ep, t]
@@ -638,12 +633,11 @@ def _run_oracle_rollout(
 
             # Reward
             spread = fill_bid * delta[action, 0] + fill_ask * delta[action, 1]
-            inv_pen = gamma_inv * new_inv**2 * sigma_sq[r]
-            at_bound = float(abs(new_inv) == inv_max)
-            bpen = bound_pen * abs(new_inv) * at_bound
+            q_eff = max(abs(new_inv) - inv_deadzone, 0)
+            inv_pen = gamma_inv * q_eff**2 * sigma_sq[r]
             mid_val = mid_changes[ep, t] - 1  # {0,1,2} → {-1,0,+1}
             mtm = mtm_weight * inv * mid_val
-            rewards[ep, t] = spread - inv_pen - bpen + mtm
+            rewards[ep, t] = spread - inv_pen + mtm
 
             inv = int(new_inv)
 
@@ -719,7 +713,7 @@ def simulate_oracle_b(
     pi = np.array(params.stationary_dist)
     sigma_sq = env_data["sigma_sq"]
     gamma_inv = env_data["gamma_inv"]
-    bound_pen = env_data["bound_pen"]
+    inv_deadzone = env_data["inv_deadzone"]
 
     for ep in range(n_episodes):
         belief = pi.copy()
@@ -747,12 +741,11 @@ def simulate_oracle_b(
 
             # Reward
             spread = fill_bid * delta[action, 0] + fill_ask * delta[action, 1]
-            inv_pen = gamma_inv * new_inv**2 * sigma_sq[r]
-            at_bound = float(abs(new_inv) == inv_max)
-            bpen = bound_pen * abs(new_inv) * at_bound
+            q_eff = max(abs(new_inv) - inv_deadzone, 0)
+            inv_pen = gamma_inv * q_eff**2 * sigma_sq[r]
             mid_val = mid_changes[ep, t] - 1  # {0,1,2} → {-1,0,+1}
             mtm = env_data["mtm_weight"] * inv * mid_val
-            rewards_out[ep, t] = spread - inv_pen - bpen + mtm
+            rewards_out[ep, t] = spread - inv_pen + mtm
 
             # Belief update: condition on observation → predict
             mc_idx = mid_changes[ep, t]

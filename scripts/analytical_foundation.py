@@ -130,8 +130,8 @@ def save_results(pc1, q_max, locked_solutions):
                     pc1["pairwise_disagreement"][(r1, r2)])
                 for r1, r2 in pc1["pairwise_disagreement"]
             },
-            "pass_gap": bool(pc1["pass_gap"]),
             "pass_disagreement": bool(pc1["pass_disagreement"]),
+            "pass_gap": bool(pc1["pass_gap"]),
             "passed": bool(pc1["passed"]),
         },
         "locked_policies": {

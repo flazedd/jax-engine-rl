@@ -160,12 +160,15 @@ def collect_rollout(key, model, params, n_envs, n_steps):
 # ---------------------------------------------------------------------------
 
 def evaluate_returns(key, model, params, n_episodes):
+    """Returns (per_episode_returns, per_episode_regimes)."""
     def policy(k, obs):
         logits, _ = model(obs)
         return jnp.argmax(logits)
     keys = jax.random.split(key, n_episodes)
     traj = jax.vmap(rollout_episode, in_axes=(0, None, None))(keys, policy, params)
-    return jnp.sum(traj["rewards"], axis=1)
+    returns = jnp.sum(traj["rewards"], axis=1)
+    regimes = traj["true_regimes"][:, 0]
+    return returns, regimes
 
 
 def collect_action_fracs(model, params, n_episodes=256):
@@ -196,41 +199,89 @@ def collect_action_fracs(model, params, n_episodes=256):
 
 
 # ---------------------------------------------------------------------------
+# Oracle policy construction + matched evaluation
+# ---------------------------------------------------------------------------
+
+def build_oracle_policy(params, regime):
+    """Build oracle policy array for matched per-episode evaluation.
+
+    Regime is fixed per episode, so the oracle for any regime (including
+    mixed) is just the locked-regime VI policy.
+
+    Returns jnp array:
+        locked regime: shape (n_inv,) — action per inventory
+        mixed (regime=-1): shape (n_regimes, n_inv) — per-regime locked policies
+    """
+    from lob_sim.analytical_mdp import build_mdp_tables, solve_all_locked
+    tables = build_mdp_tables(params)
+    locked = solve_all_locked(tables, params)
+    if regime == -1:
+        # Stack all locked-regime policies: (3, n_inv)
+        return jnp.stack([jnp.array(s.policy, dtype=jnp.int32)
+                          for s in locked])
+    else:
+        return jnp.array(locked[regime].policy, dtype=jnp.int32)  # (n_inv,)
+
+
+def evaluate_oracle(key, oracle_policy, params, regime, n_episodes):
+    """Oracle returns on the same eval keys for matched comparison.
+
+    For mixed (regime=-1), the oracle sees the true regime (from state)
+    and uses the corresponding locked-regime policy.
+    """
+    inv_max = params.inventory_max
+    if regime == -1:
+        # Oracle sees true regime, picks locked-regime action
+        def run_single(ep_key):
+            k_reset, k_steps = jax.random.split(ep_key)
+            state, obs = env_reset(k_reset, params)
+            step_keys = jax.random.split(k_steps, params.t_episode)
+            def scan_step(carry, key_t):
+                state, obs = carry
+                _, k_env = jax.random.split(key_t)
+                action = oracle_policy[
+                    state.regime, jnp.int32(obs[3] + inv_max)]
+                new_state, new_obs, reward, done, _ = env_step(
+                    k_env, state, action, params)
+                return (new_state, new_obs), reward
+            _, rewards = jax.lax.scan(scan_step, (state, obs), step_keys)
+            return jnp.sum(rewards)
+        keys = jax.random.split(key, n_episodes)
+        return jax.vmap(run_single)(keys)
+    else:
+        # Locked regime: oracle is inventory lookup
+        def policy_fn(k, obs):
+            return oracle_policy[jnp.int32(obs[3] + inv_max)]
+        keys = jax.random.split(key, n_episodes)
+        traj = jax.vmap(rollout_episode, in_axes=(0, None, None))(
+            keys, policy_fn, params)
+        return jnp.sum(traj["rewards"], axis=1)
+
+
+# ---------------------------------------------------------------------------
 # Oracle baselines
 # ---------------------------------------------------------------------------
 
 def compute_oracle_rps(params, regime, n_envs=256):
-    """Oracle reward/step for a regime. Locked: locked-VI. Mixed: Oracle A."""
-    if regime == -1:
-        from lob_sim.analytical_mdp import (
-            build_mdp_tables, solve_oracle_a, simulate_oracle_a)
-        tables = build_mdp_tables(params)
-        oracle_a = solve_oracle_a(tables, params)
-        sim = simulate_oracle_a(oracle_a, params, n_episodes=n_envs, seed=42)
-        returns = np.sum(sim.rewards, axis=1)
-        return float(np.mean(returns)) / int(params.t_episode)
-    else:
-        from lob_sim.analytical_mdp import build_mdp_tables, solve_all_locked
-        tables = build_mdp_tables(params)
-        locked = solve_all_locked(tables, params)
-        policy_arr = jnp.array(locked[regime].policy, dtype=jnp.int32)
-        inv_max = int(params.inventory_max)
-        ep = params._replace(locked_regime=regime)
-        def policy_fn(k, obs):
-            return policy_arr[jnp.int32(obs[3] + inv_max)]
-        key = jax.random.PRNGKey(42)
-        traj = batch_rollout(key, policy_fn, ep, n_envs=n_envs)
-        returns = jnp.sum(traj["rewards"], axis=1)
-        return float(jnp.mean(returns)) / int(params.t_episode)
+    """Oracle reward/step for a regime.
+
+    Regime is fixed per episode, so the oracle is always the locked-regime
+    VI policy. For mixed: oracle sees true regime, uses its locked policy.
+    """
+    oracle_pol = build_oracle_policy(params, regime)
+    key = jax.random.PRNGKey(42)
+    ep = params._replace(locked_regime=regime)
+    oracle_rets = evaluate_oracle(key, oracle_pol, ep, regime, n_envs)
+    return float(jnp.mean(oracle_rets)) / int(params.t_episode)
 
 
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 
-def train_single(seed, regime, seed_label=0, n_iters=200, n_envs=128,
-                 n_steps=64, n_epochs=3, minibatch_size=512, lr=3e-4,
-                 eval_every=5, n_eval=64, verbose=True):
+def train_single(seed, regime, oracle_policy, seed_label=0, n_iters=200,
+                 n_envs=128, n_steps=64, n_epochs=3, minibatch_size=512,
+                 lr=3e-4, eval_every=5, n_eval=64, verbose=True):
     """Train PPO MLP. Returns (metrics_dict, final_model)."""
     key = jax.random.PRNGKey(seed)
     env_params = EnvParams.default()._replace(locked_regime=regime)
@@ -288,10 +339,20 @@ def train_single(seed, regime, seed_label=0, n_iters=200, n_envs=128,
                 model, a_opt_st, c_opt_st, _, _ = update(model, a_opt_st, c_opt_st, mb)
 
         if it % eval_every == 0 or it == n_iters - 1:
-            ep_ret = evaluate_returns(k_eval, model, env_params, n_eval)
+            ep_ret, ep_regimes = evaluate_returns(
+                k_eval, model, env_params, n_eval)
+            oracle_ret = evaluate_oracle(
+                k_eval, oracle_policy, env_params, regime, n_eval)
             mean_ret = float(jnp.mean(ep_ret))
             std_ret = float(jnp.std(ep_ret))
-            checkpoints.append((it, mean_ret, std_ret))
+            checkpoints.append({
+                "iter": it,
+                "mean_return": mean_ret,
+                "std_return": std_ret,
+                "episode_returns": np.array(ep_ret).round(4).tolist(),
+                "oracle_episode_returns": np.array(oracle_ret).round(4).tolist(),
+                "episode_regimes": np.array(ep_regimes, dtype=int).tolist(),
+            })
             if verbose:
                 rps = mean_ret / env_params.t_episode
                 print(f"    seed {seed_label} iter {it:4d} | "
@@ -299,9 +360,12 @@ def train_single(seed, regime, seed_label=0, n_iters=200, n_envs=128,
 
     result = {
         "seed": int(seed),
-        "iters": [c[0] for c in checkpoints],
-        "mean_returns": [c[1] for c in checkpoints],
-        "std_returns": [c[2] for c in checkpoints],
+        "iters": [c["iter"] for c in checkpoints],
+        "mean_returns": [c["mean_return"] for c in checkpoints],
+        "std_returns": [c["std_return"] for c in checkpoints],
+        "episode_returns": [c["episode_returns"] for c in checkpoints],
+        "oracle_episode_returns": [c["oracle_episode_returns"] for c in checkpoints],
+        "episode_regimes": [c["episode_regimes"] for c in checkpoints],
         "n_iters": it + 1,
         "train_time": time.time() - t0,
     }
@@ -386,6 +450,7 @@ def main():
         t0 = time.time()
         oracle_rps = compute_oracle_rps(params, rid,
                                         n_envs=64 if args.fast else 256)
+        oracle_pol = build_oracle_policy(params, rid)
         print(f"  Oracle reward/step: {oracle_rps:.4f}  ({time.time()-t0:.1f}s)")
 
         # Train
@@ -395,7 +460,8 @@ def main():
         best_ret, best_model = -np.inf, None
         for si, seed in enumerate(run_seeds):
             result, model = train_single(
-                seed=int(seed), regime=rid, seed_label=si,
+                seed=int(seed), regime=rid, oracle_policy=oracle_pol,
+                seed_label=si,
                 n_iters=n_iters, n_envs=args.n_envs, lr=args.lr,
                 n_eval=n_eval, verbose=True)
             runs.append(result)

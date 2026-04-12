@@ -91,29 +91,52 @@ def draw_heatmap(ax, grid, title, show_ylabel=False):
 # ---------------------------------------------------------------------------
 
 def plot_figure2(ppo_data, optimal):
-    """Top row: optimal policies. Bottom row: PPO learned policies."""
-    present = [r for r in REGIME_ORDER if r in ppo_data]
-    n_cols = len(present)
-    fig, axes = plt.subplots(2, n_cols, figsize=(4.0 * n_cols, 6.0), sharey=True)
-    if n_cols == 1:
-        axes = axes.reshape(2, 1)
+    """3×3 grid: optimal | PPO isolated | PPO mixed (split by regime).
 
-    for i, name in enumerate(present):
-        # Top row: optimal
+    Row 0: Optimal policy per regime (Noise, Bull, Bear).
+    Row 1: PPO trained in isolation on each regime.
+    Row 2: PPO trained on mixed regime, action distribution split by regime.
+    """
+    regime_cols = ["noise", "bull", "bear"]
+    regime_ids = {"noise": 0, "bull": 1, "bear": 2}
+    n_cols = len(regime_cols)
+
+    fig, axes = plt.subplots(3, n_cols, figsize=(4.0 * n_cols, 8.5), sharey=True)
+
+    row_labels = ["Optimal", "PPO Isolated", "PPO Mixed"]
+
+    for i, name in enumerate(regime_cols):
+        rid = regime_ids[name]
+
+        # Row 0: optimal policy
         draw_heatmap(axes[0, i], optimal[name],
                      f"Optimal — {REGIME_TITLES[name]}", show_ylabel=(i == 0))
 
-        # Bottom row: PPO
-        fracs = np.array(ppo_data[name]["action_fracs"])  # (3, N_INV, N_ACTIONS)
-        rid = ppo_data[name]["locked_regime"]
-        if rid == -1:
-            ppo_grid = np.mean(fracs, axis=0).T  # (N_ACTIONS, N_INV)
+        # Row 1: PPO isolated (trained on locked regime)
+        if name in ppo_data:
+            iso_fracs = np.array(ppo_data[name]["action_fracs"])  # (3, N_INV, N_ACTIONS)
+            iso_grid = iso_fracs[rid].T  # (N_ACTIONS, N_INV)
         else:
-            ppo_grid = fracs[rid].T
-        draw_heatmap(axes[1, i], ppo_grid,
-                     f"PPO — {REGIME_TITLES[name]}", show_ylabel=(i == 0))
+            iso_grid = np.zeros((N_ACTIONS, N_INV))
+        draw_heatmap(axes[1, i], iso_grid,
+                     f"PPO Isolated — {REGIME_TITLES[name]}", show_ylabel=(i == 0))
 
-    fig.suptitle("Optimal vs PPO MLP — Action Distributions",
+        # Row 2: PPO mixed, split by regime
+        if "mixed" in ppo_data:
+            mix_fracs = np.array(ppo_data["mixed"]["action_fracs"])  # (3, N_INV, N_ACTIONS)
+            mix_grid = mix_fracs[rid].T  # (N_ACTIONS, N_INV)
+        else:
+            mix_grid = np.zeros((N_ACTIONS, N_INV))
+        draw_heatmap(axes[2, i], mix_grid,
+                     f"PPO Mixed — {REGIME_TITLES[name]}", show_ylabel=(i == 0))
+
+    # Add row labels on the left margin
+    for row, label in enumerate(row_labels):
+        axes[row, 0].annotate(
+            label, xy=(-0.45, 0.5), xycoords="axes fraction",
+            fontsize=11, fontweight="bold", ha="right", va="center", rotation=90)
+
+    fig.suptitle("Per-Regime Action Distributions: Optimal vs PPO Isolated vs PPO Mixed",
                  fontsize=13, fontweight="bold", y=1.01)
     fig.tight_layout()
     path = os.path.join(PLOTS_DIR, "figure2_ppo_policies.png")

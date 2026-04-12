@@ -29,8 +29,7 @@ class TestEnvParams:
 
     def test_default_scalars(self, params):
         assert params.gamma_disc == 0.99
-        assert params.gamma_inventory == 0.1
-        assert params.boundary_penalty == 5.0
+        assert params.gamma_inventory == 0.15
         assert params.inventory_max == 5
         assert params.t_episode == 200
         assert params.n_regimes == 3
@@ -116,16 +115,28 @@ class TestReset:
 
     def test_initial_state_values(self, params):
         state, _ = env_reset(jax.random.PRNGKey(0), params)
-        assert int(state.inventory) == 0
+        assert -params.inventory_max <= int(state.inventory) <= params.inventory_max
         assert float(state.mid_price) == 0.0
         assert int(state.step) == 0
         assert float(state.last_fill_bid) == 0.0
         assert float(state.last_fill_ask) == 0.0
         assert float(state.last_mid_change) == 0.0
 
-    def test_initial_obs_zeros(self, params):
-        _, obs = env_reset(jax.random.PRNGKey(0), params)
-        np.testing.assert_array_equal(obs, [0.0, 0.0, 0.0, 0.0])
+    def test_initial_inventory_coverage(self, params):
+        """Random initial inventory should cover the full range."""
+        inventories = set()
+        for seed in range(200):
+            state, _ = env_reset(jax.random.PRNGKey(seed), params)
+            inventories.add(int(state.inventory))
+        expected = set(range(-params.inventory_max, params.inventory_max + 1))
+        assert inventories == expected
+
+    def test_initial_obs(self, params):
+        state, obs = env_reset(jax.random.PRNGKey(0), params)
+        assert float(obs[0]) == 0.0  # fill_bid
+        assert float(obs[1]) == 0.0  # fill_ask
+        assert float(obs[2]) == 0.0  # mid_change
+        assert float(obs[3]) == float(state.inventory)
 
     def test_regime_valid(self, params):
         for seed in range(20):
@@ -255,23 +266,6 @@ class TestReward:
         # Some rewards should be positive (when fills happen)
         assert max(rewards) > 0
 
-    def test_boundary_penalty_at_max_inv(self, params):
-        """Reward at inventory boundary should include boundary penalty."""
-        state, _ = env_reset(jax.random.PRNGKey(0), params)
-        # At max inventory with no fills: penalty = 5.0 * 5 = 25.0
-        state = state._replace(inventory=jnp.int32(5))
-        rewards_at_boundary = []
-        rewards_at_zero = []
-        state_zero = state._replace(inventory=jnp.int32(0))
-        for seed in range(50):
-            k = jax.random.PRNGKey(seed)
-            _, _, r_b, _, _ = env_step(k, state, jnp.int32(0), params)
-            _, _, r_z, _, _ = env_step(k, state_zero, jnp.int32(0), params)
-            rewards_at_boundary.append(float(r_b))
-            rewards_at_zero.append(float(r_z))
-        # Mean reward at boundary should be much lower
-        assert np.mean(rewards_at_boundary) < np.mean(rewards_at_zero)
-
     def test_inventory_penalty_quadratic(self, params):
         """Higher |inventory| → higher penalty (in noise regime where MTM=0)."""
         # Use noise regime to isolate inventory penalty from MTM directional bias
@@ -281,7 +275,7 @@ class TestReward:
         for q in [0, 2, 4]:
             s = state._replace(inventory=jnp.int32(q))
             rs = []
-            for seed in range(200):
+            for seed in range(2000):
                 _, _, r, _, _ = env_step(
                     jax.random.PRNGKey(seed), s, jnp.int32(0), noise_params)
                 rs.append(float(r))
@@ -308,15 +302,14 @@ class TestHMM:
                     jax.random.PRNGKey(seed), state, jnp.int32(0), p)
                 assert int(state.regime) == locked
 
-    def test_regime_transitions_happen(self, params):
-        """Over many steps, regime should change at least once."""
+    def test_regime_fixed_within_episode(self, params):
+        """Regime stays constant throughout an episode (no HMM transitions)."""
         state, _ = env_reset(jax.random.PRNGKey(0), params)
-        regimes = [int(state.regime)]
+        initial_regime = int(state.regime)
         for seed in range(200):
             state, _, _, _, _ = env_step(
                 jax.random.PRNGKey(seed), state, jnp.int32(0), params)
-            regimes.append(int(state.regime))
-        assert len(set(regimes)) > 1
+            assert int(state.regime) == initial_regime
 
 
 # ── JIT / vmap ──────────────────────────────────────────────────

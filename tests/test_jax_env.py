@@ -55,7 +55,7 @@ class TestEnvParams:
         np.testing.assert_allclose(pi, pi_next, atol=1e-5)
 
     def test_kappa_values(self, params):
-        expected = jnp.array([[2.0, 2.0], [2.0, 0.8], [0.8, 2.0]])
+        expected = jnp.array([[1.8, 1.8], [2.0, 0.8], [0.8, 2.0]])
         np.testing.assert_array_equal(params.kappa, expected)
 
     def test_delta_values(self, params):

@@ -61,7 +61,7 @@ class EnvParams(NamedTuple):
                           [0.10, 0.10, 0.80]])
         pi = _stationary_distribution(hmm)
         return EnvParams(
-            kappa=jnp.array([[2.0, 2.0],    # noise — symmetric
+            kappa=jnp.array([[1.8, 1.8],    # noise — symmetric
                              [2.0, 0.8],    # bull  — ask fills easily
                              [0.8, 2.0]]),  # bear  — bid fills easily
             delta=jnp.array([[1.0, 1.0],    # symmetric

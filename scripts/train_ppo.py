@@ -277,30 +277,32 @@ def train_single(seed, regime, seed_label=0, n_iters=200,
                       mb_adv, ret_f[idx])
                 model, a_opt_st, c_opt_st, _, _ = update(model, a_opt_st, c_opt_st, mb)
 
-        # Evaluate agent — always per-regime, inv fixed at 0
-        n_eval_per = n_eval if not is_mixed else n_eval // 3
-        regime_means = {}
-        for rid in range(3):
-            k_e, k_eval = jax.random.split(k_eval)
-            ep = eval_params._replace(locked_regime=rid)
-            ret_r, _ = evaluate_returns(k_e, model, ep, n_eval_per)
-            regime_means[regime_names[rid]] = float(jnp.mean(ret_r))
+        # Evaluate agent — per-regime for mixed, single regime for isolated
+        if it % eval_every == 0:
+            if is_mixed:
+                n_eval_per = n_eval // 3
+                regime_means = {}
+                for rid in range(3):
+                    k_e, k_eval = jax.random.split(k_eval)
+                    ep = eval_params._replace(locked_regime=rid)
+                    ret_r, _ = evaluate_returns(k_e, model, ep, n_eval_per)
+                    regime_means[regime_names[rid]] = float(jnp.mean(ret_r))
+                agent_mean = float(np.mean(list(regime_means.values())))
+            else:
+                ep_ret, _ = evaluate_returns(k_eval, model, eval_params, n_eval)
+                agent_mean = float(jnp.mean(ep_ret))
+                regime_means = {regime_names[regime]: agent_mean}
 
-        # For isolated: only the matching regime matters for the overall mean
-        if is_mixed:
-            agent_mean = float(np.mean(list(regime_means.values())))
-        else:
-            agent_mean = regime_means[regime_names[regime]]
+            iters.append(it)
+            agent_mean_returns.append(round(agent_mean, 4))
+            for n in regime_names:
+                per_regime_returns[n].append(
+                    round(regime_means.get(n, float("nan")), 4))
 
-        iters.append(it)
-        agent_mean_returns.append(round(agent_mean, 4))
-        for n in regime_names:
-            per_regime_returns[n].append(round(regime_means[n], 4))
-
-        if verbose:
-            rps = agent_mean / env_params.t_episode
-            print(f"    seed {seed_label} iter {it:4d} | "
-                  f"reward/step {rps:.4f} | {time.time()-t0:.0f}s")
+            if verbose:
+                rps = agent_mean / env_params.t_episode
+                print(f"    seed {seed_label} iter {it:4d} | "
+                      f"reward/step {rps:.4f} | {time.time()-t0:.0f}s")
 
     result = {
         "seed": int(seed),
@@ -363,11 +365,13 @@ def main():
         n_seeds = args.n_seeds or 1
         n_iters = args.n_iters or 30
         n_eval = 64
+        eval_every = 1
         n_heatmap_eps = 64
     else:
         n_seeds = args.n_seeds or 3
         n_iters = args.n_iters or 200
         n_eval = 128
+        eval_every = 5
         n_heatmap_eps = 256
 
     if args.regime == "all":
@@ -396,7 +400,7 @@ def main():
                 seed=int(seed), regime=rid,
                 seed_label=si,
                 n_iters=n_iters, n_envs=args.n_envs, lr=args.lr,
-                n_eval=n_eval, verbose=True)
+                eval_every=eval_every, n_eval=n_eval, verbose=True)
             runs.append(result)
             final_ret = result["mean_returns"][-1]
             if final_ret > best_ret:

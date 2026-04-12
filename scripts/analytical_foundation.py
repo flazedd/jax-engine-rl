@@ -182,6 +182,65 @@ def plot_oracle_bounds(oracle_stats):
 
 
 # ---------------------------------------------------------------------------
+# Figure 3 — Q-Value Landscape Per Regime
+# ---------------------------------------------------------------------------
+
+def plot_q_values(locked_solutions, params):
+    """3 heatmap grids (one per regime): rows=actions, cols=inventory, cells=Q-value."""
+    inv_max = int(params.inventory_max)
+    n_inv = 2 * inv_max + 1
+    inv_grid = np.arange(n_inv) - inv_max
+
+    # Shared color range across all regimes
+    all_Q = np.concatenate([np.array(s.Q) for s in locked_solutions])
+    vmin, vmax = float(all_Q.min()), float(all_Q.max())
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 3.5), sharey=True)
+
+    for r in range(N_REGIMES):
+        ax = axes[r]
+        Q = np.array(locked_solutions[r].Q)    # (n_inv, n_actions)
+        policy = np.array(locked_solutions[r].policy)
+        grid = Q.T  # (n_actions, n_inv)
+
+        ax.imshow(grid, cmap="RdYlGn", vmin=vmin, vmax=vmax,
+                  aspect="auto", interpolation="nearest")
+        ax.set_xticks(range(n_inv))
+        ax.set_xticklabels(inv_grid, fontsize=8)
+        ax.set_xlabel("Inventory q")
+        ax.set_title(REGIME_NAMES[r], fontsize=12, fontweight="bold")
+
+        if r == 0:
+            ax.set_yticks(range(N_ACTIONS))
+            ax.set_yticklabels(ACTION_LABELS, fontsize=10)
+            ax.set_ylabel("Action")
+        else:
+            ax.set_yticks(range(N_ACTIONS))
+
+        for a in range(N_ACTIONS):
+            for qi in range(n_inv):
+                val = grid[a, qi]
+                is_opt = (int(policy[qi]) == a)
+                weight = "bold" if is_opt else "normal"
+                # Dark text on light cells, light text on dark cells
+                frac = (val - vmin) / (vmax - vmin + 1e-9)
+                color = "black" if 0.3 < frac < 0.8 else "white"
+                label = f"{val:.1f}"
+                if is_opt:
+                    label += "*"
+                ax.text(qi, a, label, ha="center", va="center",
+                        fontsize=7, fontweight=weight, color=color)
+
+    fig.suptitle("Q-Values Per Regime (* = optimal)",
+                 fontsize=12, fontweight="bold", y=1.04)
+    fig.tight_layout()
+    path = os.path.join(PLOTS_DIR, "figure3_q_values.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  -> {os.path.relpath(path, ROOT)}")
+
+
+# ---------------------------------------------------------------------------
 # Save results
 # ---------------------------------------------------------------------------
 
@@ -291,6 +350,7 @@ def main():
     print("  Plotting ...")
     plot_optimal_policies(locked, q_max, params, pc1)
     plot_oracle_bounds(oracle_stats)
+    plot_q_values(locked, params)
 
     print("\n  Done.")
 

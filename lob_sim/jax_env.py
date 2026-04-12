@@ -43,7 +43,7 @@ class EnvParams(NamedTuple):
     hmm_transition: jnp.ndarray   # (3, 3) regime transition matrix
     stationary_dist: jnp.ndarray  # (3,) precomputed stationary distribution
     gamma_disc: float = 0.99
-    gamma_inventory: float = 0.15
+    gamma_inventory: float = 0.25
     inv_deadzone: int = 1
     mtm_weight: float = 1.0
     inventory_max: int = 5
@@ -70,7 +70,7 @@ class EnvParams(NamedTuple):
             drift_probs=jnp.array([[0.20, 0.60, 0.20],   # noise — zero mean
                                    [0.12, 0.50, 0.38],   # bull  — positive
                                    [0.38, 0.50, 0.12]]), # bear  — negative
-            sigma_sq=jnp.array([0.5, 1.5, 1.5]),
+            sigma_sq=jnp.array([0.4, 1.5, 1.5]),
             hmm_transition=hmm,
             stationary_dist=pi,
         )

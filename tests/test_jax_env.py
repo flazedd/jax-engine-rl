@@ -29,7 +29,7 @@ class TestEnvParams:
 
     def test_default_scalars(self, params):
         assert params.gamma_disc == 0.99
-        assert params.gamma_inventory == 0.15
+        assert params.gamma_inventory == 0.25
         assert params.inventory_max == 5
         assert params.t_episode == 200
         assert params.n_regimes == 3

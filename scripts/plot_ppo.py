@@ -149,50 +149,113 @@ def plot_figure2(ppo_data, optimal):
 # Figure 3 — Learning Curves (total episode reward)
 # ---------------------------------------------------------------------------
 
-def plot_figure3(ppo_data):
-    """Total episode reward vs iteration, oracle ceiling as red dotted line."""
-    t_ep = ppo_data.get("t_episode", 200)
+def load_oracle_bounds():
+    """Load oracle mean episode returns from analytical_foundation.json."""
+    with open(FOUNDATION_JSON) as f:
+        foundation = json.load(f)
+    bounds = foundation.get("oracle_bounds", {})
+    # Returns dict: {"noise": {"mean": ..., "std": ...}, ...}
+    return bounds
 
-    present = [r for r in REGIME_ORDER if r in ppo_data]
-    n_panels = len(present)
-    fig, axes = plt.subplots(1, n_panels, figsize=(4.2 * n_panels, 3.5))
-    if n_panels == 1:
-        axes = [axes]
 
-    for i, name in enumerate(present):
-        ax = axes[i]
-        entry = ppo_data[name]
-        runs = entry["runs"]
-        oracle_total = entry["oracle_rps"] * t_ep
+def _draw_learning_curve(ax, runs, regime_name, oracle_bounds, label_prefix="PPO"):
+    """Draw agent learning curve + oracle band on a single axes.
 
-        # Collect per-seed curves (already total episode reward in mean_returns)
-        all_iters = []
-        all_returns = []
-        for run in runs:
-            all_iters.append(np.array(run["iters"]))
+    Args:
+        runs: list of run dicts from ppo_baseline.json
+        regime_name: "noise", "bull", or "bear" — used for per_regime_returns key
+                     and oracle bounds lookup
+        oracle_bounds: dict from analytical_foundation.json
+        label_prefix: label for the agent curve
+    """
+    all_iters = []
+    all_returns = []
+    for run in runs:
+        all_iters.append(np.array(run["iters"]))
+        prr = run.get("per_regime_returns", {})
+        if regime_name in prr:
+            all_returns.append(np.array(prr[regime_name]))
+        else:
             all_returns.append(np.array(run["mean_returns"]))
 
-        common_iters = all_iters[0]
-        ret_matrix = np.array(all_returns)  # (n_seeds, n_checkpoints)
-        mean_ret = np.mean(ret_matrix, axis=0)
-        std_ret = np.std(ret_matrix, axis=0)
+    common_iters = all_iters[0]
+    matrix = np.array(all_returns)  # (n_seeds, n_iters)
+    mean = np.mean(matrix, axis=0)
+    std = np.std(matrix, axis=0)
 
-        ax.fill_between(common_iters, mean_ret - std_ret, mean_ret + std_ret,
-                        alpha=0.2, color="C0")
-        ax.plot(common_iters, mean_ret, color="C0", linewidth=1.5,
-                label=f"PPO ({len(runs)} seeds)")
-        ax.axhline(oracle_total, color="red", linestyle="--", linewidth=1.5,
-                   label=f"Oracle ({oracle_total:.1f})")
+    ax.fill_between(common_iters, mean - std, mean + std,
+                    alpha=0.2, color="C0")
+    ax.plot(common_iters, mean, color="C0", linewidth=1.5,
+            label=f"{label_prefix} ({len(runs)} seeds)")
 
-        ax.set_yscale("symlog", linthresh=10)
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("Total episode reward")
-        ax.set_title(REGIME_TITLES[name], fontsize=12, fontweight="bold")
-        ax.legend(fontsize=8, loc="lower right")
-        ax.grid(True, alpha=0.3, which="both")
+    # Oracle bound
+    if regime_name in oracle_bounds:
+        ob = oracle_bounds[regime_name]
+        oracle_mean = ob["mean"]
+        oracle_std = ob["std"]
+        ax.axhline(oracle_mean, color="red", linestyle="--", linewidth=1.5)
+        ax.axhspan(oracle_mean - oracle_std, oracle_mean + oracle_std,
+                   color="red", alpha=0.08)
+        ax.text(common_iters[-1], oracle_mean, f" {oracle_mean:.1f}",
+                va="bottom", ha="right", fontsize=7, color="red", fontweight="bold")
 
-    fig.suptitle("PPO MLP — Learning Curves",
-                 fontsize=12, fontweight="bold", y=1.02)
+    ax.set_xlabel("Iteration")
+    ax.set_title(REGIME_TITLES[regime_name], fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.3, which="both")
+
+
+def plot_figure3(ppo_data, oracle_bounds):
+    """2×3 grid: top row = PPO isolated per regime, bottom row = PPO mixed split by regime."""
+    regime_cols = ["noise", "bull", "bear"]
+    has_isolated = any(r in ppo_data for r in regime_cols)
+    has_mixed = "mixed" in ppo_data
+    n_rows = int(has_isolated) + int(has_mixed)
+
+    if n_rows == 0:
+        print("  (no data to plot for figure 3)")
+        return
+
+    fig, axes = plt.subplots(n_rows, 3, figsize=(13, 3.5 * n_rows), squeeze=False)
+    row = 0
+
+    # Top row: PPO isolated
+    if has_isolated:
+        for i, name in enumerate(regime_cols):
+            ax = axes[row, i]
+            if name in ppo_data:
+                _draw_learning_curve(ax, ppo_data[name]["runs"], name,
+                                     oracle_bounds, label_prefix="PPO Isolated")
+            else:
+                ax.set_visible(False)
+            if i == 0:
+                ax.set_ylabel("Mean episode return")
+        axes[row, 0].annotate(
+            "Isolated", xy=(-0.35, 0.5), xycoords="axes fraction",
+            fontsize=11, fontweight="bold", ha="right", va="center", rotation=90)
+        row += 1
+
+    # Bottom row: PPO mixed, split by regime
+    if has_mixed:
+        mixed_runs = ppo_data["mixed"]["runs"]
+        for i, name in enumerate(regime_cols):
+            ax = axes[row, i]
+            _draw_learning_curve(ax, mixed_runs, name,
+                                 oracle_bounds, label_prefix="PPO Mixed")
+            if i == 0:
+                ax.set_ylabel("Mean episode return")
+        axes[row, 0].annotate(
+            "Mixed", xy=(-0.35, 0.5), xycoords="axes fraction",
+            fontsize=11, fontweight="bold", ha="right", va="center", rotation=90)
+
+    # Legend from first populated axes
+    for r in range(n_rows):
+        for c in range(3):
+            h, l = axes[r, c].get_legend_handles_labels()
+            if h:
+                axes[r, c].legend(fontsize=7, loc="lower right")
+
+    fig.suptitle("PPO MLP — Learning Curves (per regime)",
+                 fontsize=13, fontweight="bold", y=1.02)
     fig.tight_layout()
     path = os.path.join(PLOTS_DIR, "figure3_ppo_curves.png")
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -220,13 +283,14 @@ def main():
         ppo_data = json.load(f)
 
     optimal = load_optimal_fracs()
+    oracle_bounds = load_oracle_bounds()
     os.makedirs(PLOTS_DIR, exist_ok=True)
 
     print("\n  Plotting figure 2 (optimal vs PPO action distributions) ...")
     plot_figure2(ppo_data, optimal)
 
     print("  Plotting figure 3 (learning curves) ...")
-    plot_figure3(ppo_data)
+    plot_figure3(ppo_data, oracle_bounds)
 
     print("\n  Done.")
 

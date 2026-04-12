@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Analytical Foundation — Per-Regime Optimal Policies.
+"""Analytical Foundation — Per-Regime Optimal Policies + Oracle Bounds.
 
 Solves the locked-regime MDP for each regime via value iteration,
-verifies that optimal policies are distinct across regimes, and
-plots per-regime optimal policy heatmaps.
+verifies that optimal policies are distinct across regimes,
+runs the oracle policy to compute episode return statistics,
+and plots per-regime optimal policy heatmaps + oracle bounds.
 
 Outputs:
-  results/analytical_foundation.json  — policy data + gate status
+  results/analytical_foundation.json  — policy data + gate + oracle bounds
   plots/figure1_optimal_policies.png  — per-regime policy heatmaps
+  plots/figure2_optimal_bounds.png    — oracle episode return distributions
 
 Usage:
     uv run python scripts/analytical_foundation.py [--fast]
@@ -18,13 +20,15 @@ import os
 import sys
 import time
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from lob_sim.jax_env import EnvParams
+from lob_sim.jax_env import EnvParams, rollout_episode
 from lob_sim.analytical_mdp import (
     N_REGIMES, N_ACTIONS, REGIME_NAMES,
     build_mdp_tables, solve_all_locked,
@@ -38,7 +42,50 @@ ACTION_LABELS = ["sym(1,1)", "ask(1,3)", "bid(3,1)"]
 
 
 # ---------------------------------------------------------------------------
-# Figure — Per-Regime Optimal Policy Heatmaps
+# Oracle rollout
+# ---------------------------------------------------------------------------
+
+def run_oracle_episodes(locked_solutions, params, n_batches, batch_size):
+    """Run oracle policy per isolated regime in K batches of N episodes.
+
+    Each batch produces a mean episode return. We report the mean and std
+    of those batch means — the std reflects how stable the estimate is,
+    not per-episode variance.
+
+    All evaluations use init_inventory=0.
+    """
+    inv_max = params.inventory_max
+    eval_params = params._replace(init_inventory=0)
+    results = {}
+
+    for r in range(N_REGIMES):
+        oracle_pol = jnp.array(locked_solutions[r].policy, dtype=jnp.int32)
+        ep = eval_params._replace(locked_regime=r)
+
+        def policy_fn(k, obs, _pol=oracle_pol):
+            return _pol[jnp.int32(obs[3] + inv_max)]
+
+        batch_means = []
+        for b in range(n_batches):
+            keys = jax.random.split(jax.random.PRNGKey(b), batch_size)
+            traj = jax.vmap(rollout_episode, in_axes=(0, None, None))(
+                keys, policy_fn, ep)
+            rets = jnp.sum(traj["rewards"], axis=1)
+            batch_means.append(float(jnp.mean(rets)))
+
+        batch_means = np.array(batch_means)
+        results[REGIME_NAMES[r].lower()] = {
+            "mean": float(batch_means.mean()),
+            "std": float(batch_means.std()),
+            "n_batches": n_batches,
+            "batch_size": batch_size,
+        }
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Figure 1 — Per-Regime Optimal Policy Heatmaps
 # ---------------------------------------------------------------------------
 
 def plot_optimal_policies(locked_solutions, q_max, params, pc1):
@@ -98,10 +145,47 @@ def plot_optimal_policies(locked_solutions, q_max, params, pc1):
 
 
 # ---------------------------------------------------------------------------
+# Figure 2 — Oracle Bounds (bar chart with error bars)
+# ---------------------------------------------------------------------------
+
+def plot_oracle_bounds(oracle_stats):
+    """Bar chart: mean episode return ± std per isolated regime."""
+    names = ["noise", "bull", "bear"]
+    labels = ["Noise", "Bull", "Bear"]
+    means = [oracle_stats[n]["mean"] for n in names]
+    stds = [oracle_stats[n]["std"] for n in names]
+    n_bat = oracle_stats[names[0]]["n_batches"]
+    bat_sz = oracle_stats[names[0]]["batch_size"]
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    x = np.arange(len(names))
+    ax.bar(x, means, yerr=stds, capsize=6, color=["C0", "C1", "C2"],
+           edgecolor="black", linewidth=0.5, alpha=0.85)
+
+    for i, (m, s) in enumerate(zip(means, stds)):
+        ax.text(i, m + s + 1, f"{m:.1f} ± {s:.1f}",
+                ha="center", va="bottom", fontsize=9, fontweight="bold")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.set_ylabel("Mean episode return", fontsize=11)
+    ax.set_title(f"Oracle Bounds ({n_bat} batches x {bat_sz} episodes)",
+                 fontsize=12, fontweight="bold")
+    ax.axhline(0, color="black", linewidth=0.5)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    fig.tight_layout()
+    path = os.path.join(PLOTS_DIR, "figure2_optimal_bounds.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  -> {os.path.relpath(path, ROOT)}")
+
+
+# ---------------------------------------------------------------------------
 # Save results
 # ---------------------------------------------------------------------------
 
-def save_results(pc1, q_max, locked_solutions):
+def save_results(pc1, q_max, locked_solutions, oracle_stats):
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     def jsonify(x):
@@ -138,6 +222,7 @@ def save_results(pc1, q_max, locked_solutions):
             REGIME_NAMES[r]: to_list(np.array(locked_solutions[r].policy))
             for r in range(N_REGIMES)
         },
+        "oracle_bounds": oracle_stats,
         "gate": {"passed": bool(pc1["passed"])},
     }
 
@@ -155,8 +240,11 @@ def save_results(pc1, q_max, locked_solutions):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fast", action="store_true",
-                        help="(Accepted for compatibility, no effect)")
+                        help="Fewer oracle episodes for quick validation")
     args = parser.parse_args()
+
+    n_batches = 16 if args.fast else 64
+    batch_size = 64 if args.fast else 128
 
     print("=" * 60)
     print("  Analytical Foundation — Per-Regime Optimal Policies")
@@ -188,12 +276,21 @@ def main():
     if not pc1["passed"]:
         print("  WARNING: Gate failed — retune parameters before proceeding!")
 
+    print(f"\n  Oracle rollout ({n_batches} batches x {batch_size} episodes) ...")
+    t0 = time.time()
+    oracle_stats = run_oracle_episodes(locked, params, n_batches, batch_size)
+    print(f"  {time.time()-t0:.1f}s")
+    for name in ["noise", "bull", "bear"]:
+        s = oracle_stats[name]
+        print(f"    {name:>5s}: mean={s['mean']:.1f}  std={s['std']:.1f}")
+
     os.makedirs(PLOTS_DIR, exist_ok=True)
     print("\n  Saving results ...")
-    save_results(pc1, q_max, locked)
+    save_results(pc1, q_max, locked, oracle_stats)
 
     print("  Plotting ...")
     plot_optimal_policies(locked, q_max, params, pc1)
+    plot_oracle_bounds(oracle_stats)
 
     print("\n  Done.")
 

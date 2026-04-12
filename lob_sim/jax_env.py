@@ -51,6 +51,7 @@ class EnvParams(NamedTuple):
     n_regimes: int = 3
     n_actions: int = 3
     locked_regime: int = -1       # -1 = mixed (HMM), 0/1/2 = locked
+    init_inventory: int = -99     # -99 = random uniform, else fixed value
 
     @staticmethod
     def default():
@@ -128,7 +129,7 @@ def env_reset(
     """Reset environment. Returns (state, obs).
 
     Initial regime sampled from stationary distribution (or locked).
-    Initial inventory sampled uniformly from [-inventory_max, inventory_max].
+    Initial inventory: random uniform if init_inventory == -99, else fixed.
     """
     k_regime, k_inv = jax.random.split(key)
     sampled = jax.random.categorical(k_regime, jnp.log(params.stationary_dist))
@@ -137,7 +138,9 @@ def env_reset(
     ).astype(jnp.int32)
 
     n_inv = 2 * params.inventory_max + 1
-    inv = jax.random.randint(k_inv, (), 0, n_inv) - params.inventory_max
+    random_inv = jax.random.randint(k_inv, (), 0, n_inv) - params.inventory_max
+    inv = jnp.where(params.init_inventory == -99, random_inv,
+                    params.init_inventory)
 
     state = EnvState(
         inventory=jnp.int32(inv),

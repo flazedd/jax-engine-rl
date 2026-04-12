@@ -2,7 +2,9 @@
 """PPO MLP Baseline — Training.
 
 Trains PPO on locked-regime (noise/bull/bear) or mixed (HMM switching).
-Saves learning curves, action distributions, and oracle baselines to JSON.
+Saves learning curves and action distributions to JSON.
+Oracle bounds are computed separately in analytical_foundation.py.
+
 Supports incremental updates: --regime noise only retrains noise.
 
 Outputs:
@@ -199,92 +201,16 @@ def collect_action_fracs(model, params, n_episodes=256):
 
 
 # ---------------------------------------------------------------------------
-# Oracle policy construction + matched evaluation
-# ---------------------------------------------------------------------------
-
-def build_oracle_policy(params, regime):
-    """Build oracle policy array for matched per-episode evaluation.
-
-    Regime is fixed per episode, so the oracle for any regime (including
-    mixed) is just the locked-regime VI policy.
-
-    Returns jnp array:
-        locked regime: shape (n_inv,) — action per inventory
-        mixed (regime=-1): shape (n_regimes, n_inv) — per-regime locked policies
-    """
-    from lob_sim.analytical_mdp import build_mdp_tables, solve_all_locked
-    tables = build_mdp_tables(params)
-    locked = solve_all_locked(tables, params)
-    if regime == -1:
-        # Stack all locked-regime policies: (3, n_inv)
-        return jnp.stack([jnp.array(s.policy, dtype=jnp.int32)
-                          for s in locked])
-    else:
-        return jnp.array(locked[regime].policy, dtype=jnp.int32)  # (n_inv,)
-
-
-def evaluate_oracle(key, oracle_policy, params, regime, n_episodes):
-    """Oracle returns on the same eval keys for matched comparison.
-
-    For mixed (regime=-1), the oracle sees the true regime (from state)
-    and uses the corresponding locked-regime policy.
-    """
-    inv_max = params.inventory_max
-    if regime == -1:
-        # Oracle sees true regime, picks locked-regime action
-        def run_single(ep_key):
-            k_reset, k_steps = jax.random.split(ep_key)
-            state, obs = env_reset(k_reset, params)
-            step_keys = jax.random.split(k_steps, params.t_episode)
-            def scan_step(carry, key_t):
-                state, obs = carry
-                _, k_env = jax.random.split(key_t)
-                action = oracle_policy[
-                    state.regime, jnp.int32(obs[3] + inv_max)]
-                new_state, new_obs, reward, done, _ = env_step(
-                    k_env, state, action, params)
-                return (new_state, new_obs), reward
-            _, rewards = jax.lax.scan(scan_step, (state, obs), step_keys)
-            return jnp.sum(rewards)
-        keys = jax.random.split(key, n_episodes)
-        return jax.vmap(run_single)(keys)
-    else:
-        # Locked regime: oracle is inventory lookup
-        def policy_fn(k, obs):
-            return oracle_policy[jnp.int32(obs[3] + inv_max)]
-        keys = jax.random.split(key, n_episodes)
-        traj = jax.vmap(rollout_episode, in_axes=(0, None, None))(
-            keys, policy_fn, params)
-        return jnp.sum(traj["rewards"], axis=1)
-
-
-# ---------------------------------------------------------------------------
-# Oracle baselines
-# ---------------------------------------------------------------------------
-
-def compute_oracle_rps(params, regime, n_envs=256):
-    """Oracle reward/step for a regime.
-
-    Regime is fixed per episode, so the oracle is always the locked-regime
-    VI policy. For mixed: oracle sees true regime, uses its locked policy.
-    """
-    oracle_pol = build_oracle_policy(params, regime)
-    key = jax.random.PRNGKey(42)
-    ep = params._replace(locked_regime=regime)
-    oracle_rets = evaluate_oracle(key, oracle_pol, ep, regime, n_envs)
-    return float(jnp.mean(oracle_rets)) / int(params.t_episode)
-
-
-# ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 
-def train_single(seed, regime, oracle_policy, seed_label=0, n_iters=200,
+def train_single(seed, regime, seed_label=0, n_iters=200,
                  n_envs=128, n_steps=64, n_epochs=3, minibatch_size=512,
-                 lr=3e-4, eval_every=5, n_eval=64, verbose=True):
+                 lr=3e-4, eval_every=1, n_eval=64, verbose=True):
     """Train PPO MLP. Returns (metrics_dict, final_model)."""
     key = jax.random.PRNGKey(seed)
     env_params = EnvParams.default()._replace(locked_regime=regime)
+    eval_params = env_params._replace(init_inventory=0)
 
     k_model, key = jax.random.split(key)
     model = ActorCritic(key=k_model)
@@ -307,17 +233,30 @@ def train_single(seed, regime, oracle_policy, seed_label=0, n_iters=200,
         m2 = eqx.tree_at(lambda m: m.critic, m2, eqx.apply_updates(model.critic, cu))
         return m2, a_opt_st2, c_opt_st2, al, cl
 
-    checkpoints = []
+    is_mixed = (regime == -1)
+    regime_names = ["noise", "bull", "bear"]
+    iters = []
+    agent_mean_returns = []
+    # For mixed: per-regime returns; for isolated: single-regime returns
+    per_regime_returns = {n: [] for n in regime_names}
     t0 = time.time()
 
     for it in range(n_iters):
         k_collect, k_eval, key = jax.random.split(key, 3)
-        traj = collect_rollout(k_collect, model, env_params, n_envs, n_steps)
-        # Bootstrap
-        last_keys = jax.random.split(jax.random.split(key)[0], n_envs)
-        # We need last obs — re-derive from final state
-        # Actually collect_rollout doesn't return last_obs anymore, let's fix:
-        # Use values at last step as approximate bootstrap
+
+        # Collect training rollout — stratified for mixed
+        if is_mixed:
+            n_per = n_envs // 3
+            trajs = []
+            for rid in range(3):
+                k_c, k_collect = jax.random.split(k_collect)
+                ep = env_params._replace(locked_regime=rid)
+                trajs.append(collect_rollout(k_c, model, ep, n_per, n_steps))
+            traj = jax.tree.map(
+                lambda *xs: jnp.concatenate(xs, axis=1), *trajs)
+        else:
+            traj = collect_rollout(k_collect, model, env_params, n_envs, n_steps)
+
         bootstrap = traj.values[-1]
         adv, ret = batch_gae(traj.rewards, traj.values, traj.dones, bootstrap, 0.99, 0.95)
 
@@ -338,35 +277,37 @@ def train_single(seed, regime, oracle_policy, seed_label=0, n_iters=200,
                       mb_adv, ret_f[idx])
                 model, a_opt_st, c_opt_st, _, _ = update(model, a_opt_st, c_opt_st, mb)
 
-        if it % eval_every == 0 or it == n_iters - 1:
-            ep_ret, ep_regimes = evaluate_returns(
-                k_eval, model, env_params, n_eval)
-            oracle_ret = evaluate_oracle(
-                k_eval, oracle_policy, env_params, regime, n_eval)
-            mean_ret = float(jnp.mean(ep_ret))
-            std_ret = float(jnp.std(ep_ret))
-            checkpoints.append({
-                "iter": it,
-                "mean_return": mean_ret,
-                "std_return": std_ret,
-                "episode_returns": np.array(ep_ret).round(4).tolist(),
-                "oracle_episode_returns": np.array(oracle_ret).round(4).tolist(),
-                "episode_regimes": np.array(ep_regimes, dtype=int).tolist(),
-            })
-            if verbose:
-                rps = mean_ret / env_params.t_episode
-                print(f"    seed {seed_label} iter {it:4d} | "
-                      f"reward/step {rps:.4f} | {time.time()-t0:.0f}s")
+        # Evaluate agent — always per-regime, inv fixed at 0
+        n_eval_per = n_eval if not is_mixed else n_eval // 3
+        regime_means = {}
+        for rid in range(3):
+            k_e, k_eval = jax.random.split(k_eval)
+            ep = eval_params._replace(locked_regime=rid)
+            ret_r, _ = evaluate_returns(k_e, model, ep, n_eval_per)
+            regime_means[regime_names[rid]] = float(jnp.mean(ret_r))
+
+        # For isolated: only the matching regime matters for the overall mean
+        if is_mixed:
+            agent_mean = float(np.mean(list(regime_means.values())))
+        else:
+            agent_mean = regime_means[regime_names[regime]]
+
+        iters.append(it)
+        agent_mean_returns.append(round(agent_mean, 4))
+        for n in regime_names:
+            per_regime_returns[n].append(round(regime_means[n], 4))
+
+        if verbose:
+            rps = agent_mean / env_params.t_episode
+            print(f"    seed {seed_label} iter {it:4d} | "
+                  f"reward/step {rps:.4f} | {time.time()-t0:.0f}s")
 
     result = {
         "seed": int(seed),
-        "iters": [c["iter"] for c in checkpoints],
-        "mean_returns": [c["mean_return"] for c in checkpoints],
-        "std_returns": [c["std_return"] for c in checkpoints],
-        "episode_returns": [c["episode_returns"] for c in checkpoints],
-        "oracle_episode_returns": [c["oracle_episode_returns"] for c in checkpoints],
-        "episode_regimes": [c["episode_regimes"] for c in checkpoints],
-        "n_iters": it + 1,
+        "iters": iters,
+        "mean_returns": agent_mean_returns,
+        "per_regime_returns": per_regime_returns,
+        "n_iters": n_iters,
         "train_time": time.time() - t0,
     }
     return result, model
@@ -413,6 +354,7 @@ def main():
     parser.add_argument("--n-seeds", type=int, default=None)
     parser.add_argument("--n-iters", type=int, default=None)
     parser.add_argument("--n-envs", type=int, default=128)
+
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--master-seed", type=int, default=0)
     args = parser.parse_args()
@@ -420,12 +362,12 @@ def main():
     if args.fast:
         n_seeds = args.n_seeds or 1
         n_iters = args.n_iters or 30
-        n_eval = 16
+        n_eval = 64
         n_heatmap_eps = 64
     else:
         n_seeds = args.n_seeds or 3
         n_iters = args.n_iters or 200
-        n_eval = 64
+        n_eval = 128
         n_heatmap_eps = 256
 
     if args.regime == "all":
@@ -445,22 +387,13 @@ def main():
 
     for name, rid in regimes:
         print(f"\n  --- {name.upper()} ---")
-
-        # Oracle baseline
-        t0 = time.time()
-        oracle_rps = compute_oracle_rps(params, rid,
-                                        n_envs=64 if args.fast else 256)
-        oracle_pol = build_oracle_policy(params, rid)
-        print(f"  Oracle reward/step: {oracle_rps:.4f}  ({time.time()-t0:.1f}s)")
-
-        # Train
         print(f"  Training ({n_seeds} seeds x {n_iters} iters)")
         run_seeds = master_rng.integers(0, 2**31, size=n_seeds)
         runs = []
         best_ret, best_model = -np.inf, None
         for si, seed in enumerate(run_seeds):
             result, model = train_single(
-                seed=int(seed), regime=rid, oracle_policy=oracle_pol,
+                seed=int(seed), regime=rid,
                 seed_label=si,
                 n_iters=n_iters, n_envs=args.n_envs, lr=args.lr,
                 n_eval=n_eval, verbose=True)
@@ -477,14 +410,12 @@ def main():
         # Store
         data[name] = {
             "locked_regime": rid,
-            "oracle_rps": oracle_rps,
             "runs": runs,
             "action_fracs": fracs.tolist(),
         }
 
         final_rps = best_ret / t_ep
-        print(f"  Best seed: reward/step={final_rps:.4f}  "
-              f"(oracle={oracle_rps:.4f}, ratio={final_rps/oracle_rps:.2f})")
+        print(f"  Best seed: reward/step={final_rps:.4f}")
 
     save_results(data)
     print("\n  Done. Run `uv run python scripts/plot_ppo.py` to generate figures.")

@@ -104,6 +104,26 @@
       2
     ]
   },
+  "oracle_bounds": {
+    "noise": {
+      "mean": 39.495820581912994,
+      "std": 1.0659750759854758,
+      "n_batches": 64,
+      "batch_size": 128
+    },
+    "bull": {
+      "mean": 61.44875115156174,
+      "std": 7.653454314124899,
+      "n_batches": 64,
+      "batch_size": 128
+    },
+    "bear": {
+      "mean": 61.857070446014404,
+      "std": 7.657552794032122,
+      "n_batches": 64,
+      "batch_size": 128
+    }
+  },
   "gate": {
     "passed": true
   }

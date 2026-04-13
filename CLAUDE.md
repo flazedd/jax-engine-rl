@@ -35,10 +35,10 @@ PPO+LSTM → PPO MLP              value of any memory at all
 - **Mean reward per step:** raw metric, no normalisation. Y-axis in reward/step units. Reference line for Oracle (locked-regime), PPO MLP asymptotic. All agents compared on the same scale.
 - **AULC (Area Under Learning Curve):** integral of mean reward/step over training steps, divided by total steps. Primary sample efficiency metric — captures both speed and asymptotic level. Wilcoxon signed-rank across 8 seeds.
 - **Steps to 0.8 × Oracle reward/step:** secondary threshold metric. Agents that never reach → "did not reach."
-- **Per-regime action distributions** (Figure 6) — tests genuine regime-appropriate behaviour vs better compromise.
+- **Per-regime action distributions** (Figure 15) — tests genuine regime-appropriate behaviour vs better compromise.
 - **Wilcoxon signed-rank + Cohen's d** between each adjacent agent pair across 8 seeds.
 
-**Figures:** 3, 4, 6
+**Figures:** 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15
 
 ## RQ1 — Regime-Structured Representations (mechanistic)
 
@@ -48,11 +48,11 @@ At regular checkpoints, freeze encoder, extract latent representations over **he
 
 **Representations probed:** GRU hidden state (RL², RL²+HN), posterior mean μ_t (VariBAD).
 
-**Evidence required:** probe accuracy >> 33% chance; pairwise L2 centroid distances increasing over training; pattern consistent across seeds; corroborated by Figure 6 action distributions.
+**Evidence required:** probe accuracy >> 33% chance; pairwise L2 centroid distances increasing over training; pattern consistent across seeds; corroborated by Figure 15 action distributions.
 
 **Caveat:** probe measures linear decodability only. Always interpreted jointly with per-regime action distributions. High probe + near-diagonal matrix = regime inference confirmed. High probe + off-diagonal = encodes but doesn't act on regime (publishable). Low probe + good performance = non-linear/alternative solution (publishable).
 
-**Figures:** 5, 7
+**Figures:** 14, 16
 
 ## RQ3 — Inference-Performance Timing (exploratory)
 
@@ -60,7 +60,7 @@ Per agent per seed, identify: `t_infer` = step where probe accuracy first > 60%;
 
 If `t_infer < t_perf` consistently → inference leads performance (causal support). If non-significant → co-development is the defensible conclusion. Framed as exploratory — thesis stands on RQ2 regardless.
 
-**Figures:** 5 (with markers)
+**Figures:** 14 (with markers)
 
 ---
 
@@ -217,26 +217,64 @@ Output: single figure with 3 heatmaps (noise | bull | bear), x=inventory, y=acti
 Each panel: heatmap (x=inventory q, y=action, cell=100% if optimal).
 Pairwise disagreement percentages in title. Gate: PASS/FAIL.
 
-### Figure 3 — PPO Validation ★ IMPLEMENTATION CHECK
+### Figure 4 — PPO Policies ★ IMPLEMENTATION CHECK
+3×3 grid: optimal vs PPO isolated vs PPO mixed action distributions per regime.
+Row 0: Optimal policy. Row 1: PPO trained in isolation. Row 2: PPO mixed split by regime.
+
+### Figure 5 — PPO Learning Curves ★ IMPLEMENTATION CHECK
 Learning curves (reward/step). PPO locked regimes converge near Oracle for that regime.
 PPO mixed converges well below Oracle — memoryless baseline cannot exploit regime structure.
 Shading: 25th–75th percentile, 8 seeds. Reference line: Oracle (reward/step).
 
-### Figure 4 — Agent Ladder (RQ2)
+### Figure 6 — PPO+LSTM Policies ★ IMPLEMENTATION CHECK
+3×3 grid: optimal vs PPO+LSTM isolated vs PPO+LSTM mixed action distributions per regime.
+Row 0: Optimal policy. Row 1: PPO+LSTM trained in isolation. Row 2: PPO+LSTM mixed split by regime.
+
+### Figure 7 — PPO+LSTM Learning Curves ★ IMPLEMENTATION CHECK
+Learning curves (reward/step). PPO+LSTM locked regimes converge near Oracle for that regime.
+PPO+LSTM mixed should outperform PPO MLP mixed — LSTM enables within-episode regime identification.
+Shading: 25th–75th percentile, 8 seeds. Reference line: Oracle (reward/step).
+
+### Figure 8 — PPO MLP vs PPO+LSTM vs RL² vs RL²+HN Comparison ★ IMPLEMENTATION CHECK
+Learning curves overlaid: PPO MLP (blue) vs PPO+LSTM (orange) vs RL² (green) vs RL²+HN (red) per regime.
+Top row: isolated. Bottom row: mixed split by regime. Oracle reference line.
+Key comparison: RL²+HN mixed should outperform RL² mixed — HyperNet architecture enables richer conditioning.
+
+### Figure 9 — RL² Policies ★ IMPLEMENTATION CHECK
+3×3 grid: optimal vs RL² isolated vs RL² mixed action distributions per regime.
+Row 0: Optimal policy. Row 1: RL² trained in isolation. Row 2: RL² mixed split by regime.
+RL² trains on 4-episode trials with persistent GRU state across episode boundaries.
+
+### Figure 10 — RL² Learning Curves ★ IMPLEMENTATION CHECK
+Learning curves (reward/step). RL² locked regimes converge near Oracle for that regime.
+RL² mixed should outperform PPO+LSTM mixed — cross-episode meta-learning enables faster regime ID.
+Shading: 25th–75th percentile, 8 seeds. Reference line: Oracle (reward/step).
+
+### Figure 11 — RL²+HN Policies ★ IMPLEMENTATION CHECK
+3×3 grid: optimal vs RL²+HN isolated vs RL²+HN mixed action distributions per regime.
+Row 0: Optimal policy. Row 1: RL²+HN trained in isolation. Row 2: RL²+HN mixed split by regime.
+RL²+HN trains on 4-episode trials with HyperNet-generated policy from GRU hidden state.
+
+### Figure 12 — RL²+HN Learning Curves ★ IMPLEMENTATION CHECK
+Learning curves (reward/step). RL²+HN locked regimes converge near Oracle for that regime.
+RL²+HN mixed should outperform RL² mixed — HyperNet enables richer regime conditioning.
+Shading: 25th–75th percentile, 8 seeds. Reference line: Oracle (reward/step).
+
+### Figure 13 — Agent Ladder (RQ2)
 Learning curves (reward/step) for all RL agents. Reference lines for Oracle, PPO MLP asymptotic.
 Gap annotations (labeled brackets) per decomposition table.
 Inset: AULC bar chart + threshold-crossing bars (steps to 0.8×Oracle reward/step).
 
-### Figure 5 — Regime Inference Over Training (RQ1 + RQ3)
+### Figure 14 — Regime Inference Over Training (RQ1 + RQ3)
 One panel per probed agent (RL², RL²+HN, VariBAD). Dual y-axis: probe accuracy (left), reward/step (right).
 Threshold lines: 60% (t_infer), 0.8×Oracle reward/step (t_perf). Per-seed tick marks.
 Below: distribution of t_infer − t_perf with sign test p-value. Framed as exploratory.
 
-### Figure 6 — Per-Regime Action Distributions (RQ1 + RQ2)
+### Figure 15 — Per-Regime Action Distributions (RQ1 + RQ2)
 3×3 normalised matrix per agent (rows=true regime, cols=action chosen).
 Show Oracle + all RL agents + Belief-PPO. Visual progression from diagonal (oracle) to uniform (PPO MLP).
 
-### Figure 7 — Latent Space Geometry (RQ1, supplementary)
+### Figure 16 — Latent Space Geometry (RQ1, supplementary)
 2D PCA, one panel per probed agent × early/late training. Color by true regime.
 Pairwise L2 centroid distances reported numerically.
 
@@ -269,7 +307,8 @@ Pairwise L2 centroid distances reported numerically.
 - MLP policy + value network. Input: o_t only
 - GAE via `lax.scan`
 - Locked-regime runs (3) + mixed-regime run
-- Reward/step learning curves → Figure 3
+- Reward/step learning curves → Figure 5
+- Per-regime action distributions → Figure 4
 - **Gate:** locked curves must converge near respective Oracle reward/step
 
 ### Phase 4 — PPO+LSTM
@@ -306,13 +345,13 @@ Pairwise L2 centroid distances reported numerically.
 
 ### Phase 9 — Evaluation & Figures
 - 8 seeds per agent; all agents evaluated on same env seeds
-- Reward/step learning curves → Figure 4
+- Reward/step learning curves → Figure 13
 - AULC computation (primary) + threshold-crossing (secondary)
 - Wilcoxon + Cohen's d between adjacent pairs
-- Logistic probe at each checkpoint: 256 held-out eval episodes, stratified 80/20 split, report test accuracy only → Figure 5
-- t_infer/t_perf extraction, sign test → Figure 5 (exploratory)
-- Per-regime action distributions → Figure 6
-- PCA latent projections → Figure 7
+- Logistic probe at each checkpoint: 256 held-out eval episodes, stratified 80/20 split, report test accuracy only → Figure 14
+- t_infer/t_perf extraction, sign test → Figure 14 (exploratory)
+- Per-regime action distributions → Figure 15
+- PCA latent projections → Figure 16
 
 ---
 

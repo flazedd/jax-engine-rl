@@ -31,6 +31,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from lob_sim.jax_env import EnvParams, env_reset, env_step, rollout_episode, batch_rollout
+from agents.ppo import ActorCritic, actor_loss_fn, critic_loss_fn
+from agents.common import batch_gae, NumpyEncoder
 
 RESULTS_DIR = os.path.join(ROOT, "results")
 JSON_PATH = os.path.join(RESULTS_DIR, "ppo_baseline.json")
@@ -45,72 +47,16 @@ def print(*args, **kwargs):
     kwargs.setdefault("flush", True)
     _print(*args, **kwargs)
 
+def _fmt_time(seconds):
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"{m}m{s:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h{m:02d}m"
 
-# ---------------------------------------------------------------------------
-# Actor-Critic
-# ---------------------------------------------------------------------------
-
-class MLP(eqx.Module):
-    layers: list
-    def __init__(self, sizes, *, key):
-        keys = jax.random.split(key, len(sizes) - 1)
-        self.layers = [eqx.nn.Linear(a, b, key=k)
-                       for a, b, k in zip(sizes[:-1], sizes[1:], keys)]
-    def __call__(self, x):
-        for layer in self.layers[:-1]:
-            x = jax.nn.relu(layer(x))
-        return self.layers[-1](x)
-
-
-class ActorCritic(eqx.Module):
-    actor: MLP
-    critic: MLP
-    def __init__(self, *, key):
-        k1, k2 = jax.random.split(key)
-        self.actor = MLP([OBS_SIZE, 64, 64, N_ACTIONS], key=k1)
-        self.critic = MLP([OBS_SIZE, 64, 64, 1], key=k2)
-    def __call__(self, obs):
-        return self.actor(obs), self.critic(obs).squeeze(-1)
-
-
-# ---------------------------------------------------------------------------
-# GAE
-# ---------------------------------------------------------------------------
-
-def compute_gae(rewards, values, dones, bootstrap_value, gamma=0.99, lam=0.95):
-    T = rewards.shape[0]
-    def scan_fn(gae, t):
-        idx = T - 1 - t
-        next_val = jnp.where(idx < T - 1, values[idx + 1], bootstrap_value)
-        delta = rewards[idx] + gamma * next_val * (1 - dones[idx]) - values[idx]
-        gae = delta + gamma * lam * (1 - dones[idx]) * gae
-        return gae, gae
-    _, adv_rev = jax.lax.scan(scan_fn, jnp.float32(0.0), jnp.arange(T))
-    adv = adv_rev[::-1]
-    return adv, adv + values
-
-batch_gae = jax.vmap(compute_gae, in_axes=(1,1,1,0,None,None), out_axes=(1,1))
-
-
-# ---------------------------------------------------------------------------
-# PPO losses
-# ---------------------------------------------------------------------------
-
-def actor_loss_fn(actor, critic, batch, clip_eps=0.2, ent_coef=0.01):
-    obs, actions, old_lp, advantages, _ = batch
-    logits = jax.vmap(actor)(obs)
-    lp_all = jax.nn.log_softmax(logits)
-    lp = jnp.take_along_axis(lp_all, actions[:, None], axis=1).squeeze(1)
-    ratio = jnp.exp(lp - old_lp)
-    clipped = jnp.clip(ratio, 1 - clip_eps, 1 + clip_eps)
-    loss = -jnp.mean(jnp.minimum(ratio * advantages, clipped * advantages))
-    entropy = -jnp.mean(jnp.sum(jax.nn.softmax(logits) * lp_all, axis=-1))
-    return loss - ent_coef * entropy
-
-def critic_loss_fn(critic, batch):
-    obs, _, _, _, returns = batch
-    vals = jax.vmap(critic)(obs).squeeze(-1)
-    return jnp.mean((vals - returns) ** 2)
 
 
 # ---------------------------------------------------------------------------
@@ -204,16 +150,17 @@ def collect_action_fracs(model, params, n_episodes=256):
 # Training
 # ---------------------------------------------------------------------------
 
-def train_single(seed, regime, seed_label=0, n_iters=200,
+def train_single(seed, regime, seed_label=0, n_iters=400,
                  n_envs=128, n_steps=64, n_epochs=3, minibatch_size=512,
-                 lr=3e-4, eval_every=1, n_eval=64, verbose=True):
+                 lr=3e-4, eval_every=1, n_eval=64, patience=100, verbose=True,
+                 global_t0=None, global_done_iters=0, global_total_iters=0):
     """Train PPO MLP. Returns (metrics_dict, final_model)."""
     key = jax.random.PRNGKey(seed)
     env_params = EnvParams.default()._replace(locked_regime=regime)
     eval_params = env_params._replace(init_inventory=0)
 
     k_model, key = jax.random.split(key)
-    model = ActorCritic(key=k_model)
+    model = ActorCritic(OBS_SIZE, N_ACTIONS, key=k_model)
 
     actor_opt = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(lr))
     critic_opt = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(lr))
@@ -239,6 +186,8 @@ def train_single(seed, regime, seed_label=0, n_iters=200,
     agent_mean_returns = []
     # For mixed: per-regime returns; for isolated: single-regime returns
     per_regime_returns = {n: [] for n in regime_names}
+    best_mean = -np.inf
+    iters_since_best = 0
     t0 = time.time()
 
     for it in range(n_iters):
@@ -301,8 +250,32 @@ def train_single(seed, regime, seed_label=0, n_iters=200,
 
             if verbose:
                 rps = agent_mean / env_params.t_episode
+                if global_t0 is not None:
+                    elapsed = time.time() - global_t0
+                    done = global_done_iters + it + 1
+                    avg = elapsed / done
+                    eta = avg * (global_total_iters - done)
+                else:
+                    elapsed = time.time() - t0
+                    avg = elapsed / (it + 1)
+                    eta = avg * (n_iters - it - 1)
                 print(f"    seed {seed_label} iter {it:4d} | "
-                      f"reward/step {rps:.4f} | {time.time()-t0:.0f}s")
+                      f"reward/step {rps:.4f} | "
+                      f"{_fmt_time(elapsed)} elapsed | "
+                      f"~{_fmt_time(eta)} remaining | "
+                      f"~{_fmt_time(elapsed + eta)} total")
+
+            # Early stopping: break if no new best for `patience` iters
+            if agent_mean > best_mean:
+                best_mean = agent_mean
+                iters_since_best = 0
+            else:
+                iters_since_best += eval_every
+            if patience and iters_since_best >= patience:
+                if verbose:
+                    print(f"    seed {seed_label} — early stop at iter {it} "
+                          f"(no improvement for {patience} iters)")
+                break
 
     result = {
         "seed": int(seed),
@@ -318,17 +291,6 @@ def train_single(seed, regime, seed_label=0, n_iters=200,
 # ---------------------------------------------------------------------------
 # JSON helpers
 # ---------------------------------------------------------------------------
-
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, (np.integer, np.bool_)):
-            return int(obj)
-        if isinstance(obj, np.floating):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return super().default(obj)
-
 
 def load_results():
     if os.path.exists(JSON_PATH):
@@ -368,8 +330,8 @@ def main():
         eval_every = 1
         n_heatmap_eps = 64
     else:
-        n_seeds = args.n_seeds or 3
-        n_iters = args.n_iters or 200
+        n_seeds = args.n_seeds or 1
+        n_iters = args.n_iters or 400
         n_eval = 128
         eval_every = 5
         n_heatmap_eps = 256
@@ -389,6 +351,10 @@ def main():
     data["t_episode"] = t_ep
     master_rng = np.random.default_rng(args.master_seed)
 
+    global_t0 = time.time()
+    global_total = len(regimes) * n_seeds * n_iters
+    global_done = 0
+
     for name, rid in regimes:
         print(f"\n  --- {name.upper()} ---")
         print(f"  Training ({n_seeds} seeds x {n_iters} iters)")
@@ -400,7 +366,10 @@ def main():
                 seed=int(seed), regime=rid,
                 seed_label=si,
                 n_iters=n_iters, n_envs=args.n_envs, lr=args.lr,
-                eval_every=eval_every, n_eval=n_eval, verbose=True)
+                eval_every=eval_every, n_eval=n_eval, verbose=True,
+                global_t0=global_t0, global_done_iters=global_done,
+                global_total_iters=global_total)
+            global_done += n_iters
             runs.append(result)
             final_ret = result["mean_returns"][-1]
             if final_ret > best_ret:

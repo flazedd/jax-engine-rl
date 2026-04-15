@@ -4,6 +4,22 @@
 
 ---
 
+## Thesis Strategy
+
+**Primary story (Story B): VariBAD+HN as architectural contribution, with Story A as fallback.**
+
+VariBAD+HN combines explicit Bayesian inference (ELBO-trained world model) with HyperNetwork policy conditioning. The hypothesis: VariBAD has the right inductive bias (explicit posterior over regimes) but the wrong policy conditioning (latent bottleneck); RL²+HN has the right conditioning (HyperNetwork) but the wrong learning signal (pure RL, no world model). VariBAD+HN combines both.
+
+- **If VariBAD+HN wins on market-making**: frame as the contribution (Story B) — "explicit Bayesian inference helps, but only when paired with sufficiently expressive policy conditioning"
+- **If VariBAD+HN doesn't clearly win**: frame the decomposition itself as the contribution (Story A) — "we show explicit Bayesian inference doesn't help beyond what HyperNetworks provide, which is itself a useful finding for practitioners"
+- **Either outcome is informative** because the six-gap decomposition tells you what matters for market making: does memory help? does meta-learning help? does explicit inference help? does richer conditioning help?
+
+**Calibration appendix (light touch of Story C):** Fit environment parameters (κ, drift_probs, σ²) to one real instrument (e.g. SPY via HMM on realized volatility). Show the best agent's behavior is economically interpretable — regime-appropriate quoting widths, inventory management, directional lean. Discuss what's missing for real deployment (latency, multi-asset, continuous actions, non-stationary regimes). This takes the thesis from "toy RL exercise" to "someone actually thought about whether this works in practice."
+
+**Validation section (done):** Bernoulli bandit + chain MDP validate all agents work and establish the hierarchy on toy tasks before the main market-making experiment.
+
+---
+
 ## Thesis Framing
 
 POMDP market-making environment with analytically tractable optimal policies as performance ceilings. Fixed regime per episode — each episode samples one regime and holds it constant. Agents must infer the regime from within-episode observations. Inventory resets between episodes. This is the textbook VariBAD setup: clean task identification over a meta-trial of 4 episodes. Per-regime optimal policies computed via locked-regime VI and verified to be distinct before any RL training.
@@ -24,8 +40,9 @@ Train the full agent ladder on the fixed-regime-per-episode environment. The six
 
 ```
 Oracle → Belief-PPO            cost of partial observability (inference transient)
-Belief-PPO → VariBAD           cost of approximate vs exact Bayesian inference
-VariBAD → RL²+HN               value of explicit posterior vs implicit HN conditioning
+Belief-PPO → VariBAD+HN        cost of approximate vs exact Bayesian inference
+VariBAD+HN → VariBAD           value of HyperNetwork conditioning for VariBAD
+VariBAD+HN → RL²+HN            value of explicit ELBO-trained world model
 RL²+HN → RL²                   value of hypernetwork architecture (Beck et al. 2023)
 RL² → PPO+LSTM                  value of meta-learning (multi-episode trials)
 PPO+LSTM → PPO MLP              value of any memory at all
@@ -142,6 +159,7 @@ All recurrent + Belief-PPO: (o_t, a_{t-1}, r_{t-1})
 | RL² | `(o_t, a_{t-1}, r_{t-1})` | GRU, h persists across episodes in trial | Multi-episode trial (4 eps) | End-to-end meta-RL |
 | RL²+HN | `(o_t, a_{t-1}, r_{t-1})` | GRU → HyperNet → policy MLP; state re-conditioned | Multi-episode trial (4 eps) | Recurrent hypernetwork (Beck et al. 2023) |
 | VariBAD | `(o_t, a_{t-1}, r_{t-1})` | GRU encoder → VAE posterior; policy on `(o_t, μ_t, σ_t)` | Multi-episode trial (4 eps) | Explicit approximate Bayesian inference |
+| VariBAD+HN | `(o_t, a_{t-1}, r_{t-1})` | GRU encoder → VAE posterior + HyperNet → policy MLP | Multi-episode trial (4 eps) | ELBO world model + HyperNet conditioning (novel) |
 | Belief-PPO | `(o_t, b_t)` | MLP + exact Bayesian filter (true params) | Multi-episode trial (4 eps) | Perfect inference ablation |
 | Oracle | `(q, r)` | VI lookup (locked-regime) | — | Full-information upper bound |
 
@@ -166,6 +184,24 @@ Decoder:  MLP(z_t, o_t, a_t) → (r̂_t, ô_{t+1}), z_t ~ N(μ_t, σ_t²)
 Policy:   MLP(o_t, μ_t, σ_t) → action logits
 Loss:     L_PPO + β·L_ELBO, β=1.0
           L_ELBO = E[log P(r_t, o_{t+1} | z_t, o_t, a_t)] - KL[q(z|h_t) || N(0,I)]
+```
+
+### VariBAD+HN Architecture (novel contribution)
+```
+Encoder:  GRU over (o_t, a_{t-1}, r_{t-1}) → h_t
+Posterior: MLP(h_t) → (μ_t, σ_t), latent dim d=4 (for ELBO training)
+Decoder:  MLP(z_t, o_t, a_t) → (r̂_t, ô_{t+1}), z_t ~ N(μ_t, σ_t²)
+HyperNet: h_t → all weights & biases of policy MLP (Bias-HyperInit)
+Policy:   generated MLP: o_t → action logits (dual conditioning via h_t)
+Critic:   MLP([h_t, o_t]) → value
+Loss:     L_PPO + β·L_ELBO, β=1.0
+
+Key insight: VariBAD's latent bottleneck (8 floats: μ + σ) limits policy
+expressiveness. Replacing the fixed policy MLP with a HyperNet-generated
+policy gives the same fast learning as RL²+HN while retaining the ELBO's
+structured world-model training signal. On toy tasks (bandit, chain) this
+matches RL²+HN; the hypothesis is that the ELBO provides additional value
+on harder tasks with richer dynamics (market-making environment).
 ```
 
 ### Belief-PPO (new ablation)

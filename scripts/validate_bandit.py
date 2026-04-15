@@ -26,6 +26,7 @@ import sys
 import jax
 import jax.numpy as jnp
 import equinox as eqx
+import matplotlib.pyplot as plt
 import numpy as np
 import optax
 
@@ -140,8 +141,20 @@ def collect_ppo_rollout(key, model, params, n_envs):
     return all_obs, all_act, all_rew, all_done, all_lp, all_val
 
 
-def train_ppo(key, params, n_iters, n_envs=512, lr=3e-4, verbose=True):
-    """Train PPO MLP on bandit. Returns trained model."""
+def _converged(history, patience, min_delta, min_iters):
+    """Check if the last `patience` iters show no improvement over the
+    previous `patience` iters.  Returns True once plateaued.
+    Never triggers before min_iters to avoid killing slow-warmup agents."""
+    if len(history) < max(2 * patience, min_iters):
+        return False
+    recent = np.mean(history[-patience:])
+    previous = np.mean(history[-2 * patience:-patience])
+    return recent - previous < min_delta
+
+
+def train_ppo(key, params, max_iters, n_envs=512, lr=3e-4,
+              patience=30, min_delta=0.002, min_iters=60, verbose=True):
+    """Train PPO MLP on bandit. Returns (trained model, reward_history)."""
     k_model, key = jax.random.split(key)
     model = ActorCritic(OBS_SIZE, N_ACTIONS, hidden=32, key=k_model)
     actor_opt = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(lr))
@@ -165,11 +178,22 @@ def train_ppo(key, params, n_iters, n_envs=512, lr=3e-4, verbose=True):
                           eqx.apply_updates(model.critic, cu))
         return m2, a_opt_st2, c_opt_st2
 
+    reward_history = []
+    stopped_early = False
     t0 = time.time()
-    for it in range(n_iters):
+    for it in range(max_iters):
         k_coll, key = jax.random.split(key)
         obs, actions, rewards, dones, lp, values = collect_ppo_rollout(
             k_coll, model, params, n_envs)
+
+        reward_history.append(float(jnp.mean(rewards)))
+
+        if _converged(reward_history, patience, min_delta, min_iters):
+            stopped_early = True
+            if verbose:
+                _print(f"\r    PPO MLP  converged at iter {it + 1} "
+                       f"[{time.time() - t0:.0f}s]    ")
+            break
 
         bootstrap = values[-1]
         adv, ret = batch_gae(rewards, values, dones, bootstrap, 0.99, 0.95)
@@ -181,14 +205,14 @@ def train_ppo(key, params, n_iters, n_envs=512, lr=3e-4, verbose=True):
                  adv_f, ret.reshape(-1))
         model, a_opt_st, c_opt_st = update(model, a_opt_st, c_opt_st, batch)
 
-        if verbose and it % max(1, n_iters // 5) == 0:
+        if verbose and it % max(1, max_iters // 10) == 0:
             elapsed = time.time() - t0
-            _print(f"\r    PPO MLP  iter {it:4d}/{n_iters} "
+            _print(f"\r    PPO MLP  iter {it:4d}/{max_iters} "
                    f"[{elapsed:.0f}s]", end="", flush=True)
-    if verbose:
-        _print(f"\r    PPO MLP  iter {n_iters:4d}/{n_iters} "
-               f"[{time.time() - t0:.0f}s]    ")
-    return model
+    if not stopped_early and verbose:
+        _print(f"\r    PPO MLP  iter {max_iters:4d}/{max_iters} "
+               f"[{time.time() - t0:.0f}s]  (max iters)")
+    return model, reward_history
 
 
 def eval_ppo_per_step(model, params, key, n_episodes):
@@ -275,10 +299,12 @@ def collect_recurrent_rollout(key, model, params, n_trials,
     return traj
 
 
-def train_recurrent(key, model, loss_fn, params, n_iters, n_trials=64,
+def train_recurrent(key, model, loss_fn, params, max_iters, n_trials=64,
                     n_epochs=3, minibatch_size=512, lr=3e-4,
-                    elbo_fn=None, label="recurrent", verbose=True):
-    """Train a recurrent agent on bandit. Returns trained model."""
+                    elbo_fn=None, label="recurrent",
+                    patience=50, min_delta=0.002, min_iters=200,
+                    verbose=True):
+    """Train a recurrent agent on bandit. Returns (trained model, reward_history)."""
     optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(lr))
     opt_st = optimizer.init(eqx.filter(model, eqx.is_array))
 
@@ -299,10 +325,21 @@ def train_recurrent(key, model, loss_fn, params, n_iters, n_trials=64,
                 grads, opt_st, eqx.filter(model, eqx.is_array))
             return eqx.apply_updates(model, updates), new_opt
 
+    reward_history = []
+    stopped_early = False
     t0 = time.time()
-    for it in range(n_iters):
+    for it in range(max_iters):
         k_coll, k_elbo, key = jax.random.split(key, 3)
         traj = collect_recurrent_rollout(k_coll, model, params, n_trials)
+
+        reward_history.append(float(jnp.mean(traj.rewards)))
+
+        if _converged(reward_history, patience, min_delta, min_iters):
+            stopped_early = True
+            if verbose:
+                _print(f"\r    {label:<9s} converged at iter {it + 1} "
+                       f"[{time.time() - t0:.0f}s]    ")
+            break
 
         bootstrap = traj.values[-1]
         adv, ret = batch_gae(traj.rewards, traj.values, traj.dones,
@@ -334,14 +371,14 @@ def train_recurrent(key, model, loss_fn, params, n_iters, n_trials=64,
                       mb_adv, ret_f[idx])
                 model, opt_st = ppo_update(model, opt_st, mb)
 
-        if verbose and it % max(1, n_iters // 5) == 0:
+        if verbose and it % max(1, max_iters // 10) == 0:
             elapsed = time.time() - t0
-            _print(f"\r    {label:<9s} iter {it:4d}/{n_iters} "
+            _print(f"\r    {label:<9s} iter {it:4d}/{max_iters} "
                    f"[{elapsed:.0f}s]", end="", flush=True)
-    if verbose:
-        _print(f"\r    {label:<9s} iter {n_iters:4d}/{n_iters} "
-               f"[{time.time() - t0:.0f}s]    ")
-    return model
+    if not stopped_early and verbose:
+        _print(f"\r    {label:<9s} iter {max_iters:4d}/{max_iters} "
+               f"[{time.time() - t0:.0f}s]  (max iters)")
+    return model, reward_history
 
 
 def eval_recurrent_per_step(model, params, key, n_episodes):
@@ -377,6 +414,86 @@ def eval_recurrent_per_step(model, params, key, n_episodes):
 
 
 # ---------------------------------------------------------------------------
+# Plotting
+# ---------------------------------------------------------------------------
+
+PLOTS_DIR = os.path.join(ROOT, "plots")
+
+AGENT_COLORS = {
+    "PPO MLP": "C0",
+    "RL²": "C1",
+    "RL²+HN": "C2",
+    "VariBAD": "C3",
+}
+
+
+def plot_bandit_learning_curves(train_histories, per_step, results):
+    """Two-panel chart: training curves + per-step reward curves.
+
+    Args:
+        train_histories: dict name -> list of mean reward/step per iter
+        per_step: dict name -> (t_episode,) array of per-step rewards
+        results: dict name -> scalar mean reward/step (final eval)
+    """
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+
+    # --- Left panel: training curves ---
+    ax1.set_title("Training Curves (rollout reward/step)", fontweight="bold")
+    for name in ["PPO MLP", "RL²", "RL²+HN", "VariBAD"]:
+        if name not in train_histories:
+            continue
+        hist = train_histories[name]
+        iters = np.arange(len(hist))
+        color = AGENT_COLORS[name]
+        # smooth with rolling mean for readability
+        window = max(1, len(hist) // 20)
+        smoothed = np.convolve(hist, np.ones(window) / window, mode="valid")
+        x_smooth = np.arange(window - 1, len(hist))
+        ax1.plot(x_smooth, smoothed, color=color, linewidth=1.5, label=name)
+        ax1.plot(iters, hist, color=color, alpha=0.2, linewidth=0.5)
+
+    ax1.axhline(results["Random"], color="gray", linestyle=":",
+                linewidth=1, label="Random (0.50)")
+    ax1.axhline(results["Thompson"], color="red", linestyle="--",
+                linewidth=1, label=f"Thompson ({results['Thompson']:.3f})")
+    ax1.set_xlabel("Training iteration")
+    ax1.set_ylabel("Mean reward / step")
+    ax1.legend(fontsize=8, loc="lower right")
+    ax1.grid(True, alpha=0.3)
+
+    # --- Right panel: per-step reward curves ---
+    ax2.set_title("Within-Episode Reward (eval, greedy)", fontweight="bold")
+    steps = np.arange(1, len(per_step["Random"]) + 1)
+
+    ax2.fill_between(steps, 0.5, 0.5, alpha=0)  # dummy for axis
+    ax2.plot(steps, per_step["Random"], color="gray", linestyle=":",
+             linewidth=1, label="Random")
+    ax2.plot(steps, per_step["Thompson"], color="red", linestyle="--",
+             linewidth=1.5, label="Thompson")
+    for name in ["PPO MLP", "RL²", "RL²+HN", "VariBAD"]:
+        if name not in per_step:
+            continue
+        ax2.plot(steps, per_step[name], color=AGENT_COLORS[name],
+                 linewidth=1.5, label=name)
+
+    ax2.set_xlabel("Step within episode")
+    ax2.set_ylabel("Mean reward")
+    ax2.legend(fontsize=8, loc="lower right")
+    ax2.grid(True, alpha=0.3)
+    ax2.set_xticks(steps)
+
+    fig.suptitle("Bernoulli Bandit — Meta-RL Validation",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    path = os.path.join(PLOTS_DIR, "bandit_learning_curves.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Chart saved: {os.path.relpath(path, ROOT)}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -388,13 +505,13 @@ def main():
     args = parser.parse_args()
 
     if args.fast:
-        n_iters_ppo = 50
-        n_iters_rec = 200
+        max_iters_ppo = 200
+        max_iters_rec = 1000
         n_trials = 128
         n_eval = 2000
     else:
-        n_iters_ppo = 100
-        n_iters_rec = 400
+        max_iters_ppo = 500
+        max_iters_rec = 2000
         n_trials = 128
         n_eval = 5000
 
@@ -408,10 +525,14 @@ def main():
           f" prior, T={params.t_episode} steps/episode")
     print(f"  Recurrent: {EPISODES_PER_TRIAL} episodes/trial, "
           f"hidden={HIDDEN_SIZE}")
+    print(f"  Max iters: PPO={max_iters_ppo}, recurrent={max_iters_rec} "
+          f"(early stop: patience=50, min_delta=0.002, "
+          f"min_iters=60/200)")
     print()
 
     results = {}       # name -> mean reward/step
     per_step = {}      # name -> (t_episode,) array
+    train_histories = {}  # name -> list of mean reward/step per training iter
 
     # --- Random baseline ---
     print("  Computing baselines ...")
@@ -429,7 +550,8 @@ def main():
     # --- PPO MLP ---
     print("\n  Training agents ...")
     k_ppo, key = jax.random.split(key)
-    ppo_model = train_ppo(k_ppo, params, n_iters_ppo)
+    ppo_model, ppo_hist = train_ppo(k_ppo, params, max_iters_ppo)
+    train_histories["PPO MLP"] = ppo_hist
     k_eval, key = jax.random.split(key)
     ppo_curve = np.array(eval_ppo_per_step(ppo_model, params, k_eval, n_eval))
     results["PPO MLP"] = float(ppo_curve.mean())
@@ -440,9 +562,10 @@ def main():
     k_m, k_t = jax.random.split(k_rl2)
     rl2_model = GRUActorCritic(
         INPUT_SIZE, OBS_SIZE, N_ACTIONS, hidden_size=HIDDEN_SIZE, key=k_m)
-    rl2_model = train_recurrent(
-        k_t, rl2_model, rl2_loss_fn, params, n_iters_rec,
+    rl2_model, rl2_hist = train_recurrent(
+        k_t, rl2_model, rl2_loss_fn, params, max_iters_rec,
         n_trials=n_trials, label="RL²")
+    train_histories["RL²"] = rl2_hist
     k_eval, key = jax.random.split(key)
     rl2_curve = np.array(eval_recurrent_per_step(
         rl2_model, params, k_eval, n_eval))
@@ -455,9 +578,10 @@ def main():
     hn_model = HNActorCritic(
         INPUT_SIZE, OBS_SIZE, N_ACTIONS,
         hidden_size=HIDDEN_SIZE, policy_hidden=16, key=k_m)
-    hn_model = train_recurrent(
-        k_t, hn_model, rl2_hn_loss_fn, params, n_iters_rec,
+    hn_model, hn_hist = train_recurrent(
+        k_t, hn_model, rl2_hn_loss_fn, params, max_iters_rec,
         n_trials=n_trials, label="RL²+HN")
+    train_histories["RL²+HN"] = hn_hist
     k_eval, key = jax.random.split(key)
     hn_curve = np.array(eval_recurrent_per_step(
         hn_model, params, k_eval, n_eval))
@@ -470,9 +594,10 @@ def main():
     vb_model = VariBADActorCritic(
         INPUT_SIZE, OBS_SIZE, N_ACTIONS,
         hidden_size=HIDDEN_SIZE, latent_dim=2, key=k_m)
-    vb_model = train_recurrent(
-        k_t, vb_model, varibad_ppo_loss_fn, params, n_iters_rec,
+    vb_model, vb_hist = train_recurrent(
+        k_t, vb_model, varibad_ppo_loss_fn, params, max_iters_rec,
         n_trials=n_trials, elbo_fn=elbo_loss_fn, label="VariBAD")
+    train_histories["VariBAD"] = vb_hist
     k_eval, key = jax.random.split(key)
     vb_curve = np.array(eval_recurrent_per_step(
         vb_model, params, k_eval, n_eval))
@@ -529,6 +654,10 @@ def main():
     else:
         print("\n  WARNING: Some agents failed to outperform random.")
         print("  Check architecture/training — may indicate a bug.")
+
+    # --- Learning curve chart ---
+    print("\n  Plotting learning curves ...")
+    plot_bandit_learning_curves(train_histories, per_step, results)
 
     print()
 

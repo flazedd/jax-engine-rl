@@ -1,18 +1,27 @@
 #!/usr/bin/env python3
-"""Train all agents on Bernoulli Bandit for fixed iterations, save to JSON.
+"""Validate meta-RL agents on Windy Chain MDP.
 
-Fixed iteration counts, no early stopping.
-  PPO MLP:  300 iters
-  RL²:      2000 iters
-  RL²+HN:   2000 iters
-  VariBAD:  2000 iters
+7-state chain with 3 hidden regimes.  Each regime determines:
+  - a goal position (0, 3, or 6)
+  - a stochastic wind pattern (strong rightward / calm / strong leftward)
+  - 4D side-signal means (regime-dependent Gaussian noise)
 
-Saves per-iteration rollout rewards + final eval per-step curves to
-results/bandit_validation.json.  Plot with: uv run python scripts/plot_bandit.py
+Three mechanisms give VariBAD(+HN) a learning advantage over RL²(+HN):
+  1. Transition dynamics (wind) carry dense regime info at every step.
+  2. Side signals (4D Gaussian) provide additional regime-dependent obs.
+  3. Reward is Bernoulli(0.4) at goal — noisy and sparse RL signal.
+VariBAD's ELBO decoder gets supervised gradients on transitions AND
+side signals at every step.  RL²(+HN) must discover all of this
+purely through RL credit assignment (slower).
+
+Expected hierarchy:
+  Random / PPO MLP  << RL² ≤ RL²+HN < VariBAD ≤ VariBAD+HN
 
 Usage:
-    uv run python scripts/run_bandit_long.py
+    uv run python scripts/validate_windy_chain.py --fast
+    uv run python scripts/validate_windy_chain.py
 """
+import argparse
 import json
 import os
 import sys
@@ -27,31 +36,29 @@ import optax
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from envs.bandit import BanditParams, env_reset, env_step
+from envs.windy_chain import (WindyChainParams, GOALS, WIND_PROBS,
+                               SIDE_DIM, env_reset, env_step)
 from agents.ppo import ActorCritic, actor_loss_fn, critic_loss_fn
 from agents.rl2 import GRUActorCritic, rl2_loss_fn
 from agents.rl2_hn import HNActorCritic, rl2_hn_loss_fn
 from agents.varibad import VariBADActorCritic, elbo_loss_fn, varibad_ppo_loss_fn
-from agents.common import batch_gae
+from agents.varibad_hn import (VariBADHNActorCritic, varibad_hn_elbo_loss_fn,
+                                varibad_hn_ppo_loss_fn)
+from agents.common import batch_gae, NumpyEncoder
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-OBS_SIZE = 1
-N_ACTIONS = 3
-INPUT_SIZE = OBS_SIZE + N_ACTIONS + 1
-HIDDEN_SIZE = 32
+N_STATES = 7
+OBS_SIZE = N_STATES + SIDE_DIM  # one_hot(pos, 7) + 4D side signals = 11
+N_ACTIONS = 3                   # left=0, stay=1, right=2
+INPUT_SIZE = OBS_SIZE + N_ACTIONS + 1  # aug = (obs, prev_act_oh, prev_rew)
+HIDDEN_SIZE = 64
 EPISODES_PER_TRIAL = 4
 
-N_ITERS_PPO = 200
-N_ITERS_REC = 200
-N_EVAL = 5000
-N_ENVS = 512
-N_TRIALS = 128
-
 RESULTS_DIR = os.path.join(ROOT, "results")
-OUT_JSON = os.path.join(RESULTS_DIR, "bandit_validation.json")
+OUT_JSON = os.path.join(RESULTS_DIR, "windy_chain_validation.json")
 
 import builtins
 _print = builtins.print
@@ -61,30 +68,39 @@ def print(*args, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# Thompson baseline
+# Oracle baseline (knows regime → knows goal + optimal action)
 # ---------------------------------------------------------------------------
 
-def thompson_per_step(key, params, n_episodes):
+def oracle_action(pos, regime):
+    """Optimal oracle action given known regime.
+
+    Regime 0: always left  — clip at pos=0 neutralises rightward wind.
+    Regime 1: greedy toward centre (goal=3), stay at goal.
+    Regime 2: always right — clip at pos=6 neutralises leftward wind.
+    """
+    goal = GOALS[regime]
+    return jnp.where(
+        regime == 0, jnp.int32(0),    # always left
+        jnp.where(
+            regime == 2, jnp.int32(2),  # always right
+            jnp.where(pos < goal, jnp.int32(2),
+                       jnp.where(pos > goal, jnp.int32(0),
+                                  jnp.int32(1)))))
+
+
+def oracle_per_step(key, params, n_episodes):
+    """Returns (t_episode,) mean reward per step for oracle policy."""
     def single_episode(key):
-        k_arms, k_steps = jax.random.split(key)
-        arm_probs = jax.random.beta(
-            k_arms, params.prior_alpha, params.prior_beta, (params.n_arms,))
-        alphas = jnp.ones(params.n_arms)
-        betas_post = jnp.ones(params.n_arms)
+        k_reset, k_steps = jax.random.split(key)
+        state, _ = env_reset(k_reset, params)
         step_keys = jax.random.split(k_steps, params.t_episode)
 
-        def scan_fn(carry, k):
-            alphas, betas_post = carry
-            k_ts, k_pull = jax.random.split(k)
-            samples = jax.random.beta(k_ts, alphas, betas_post)
-            action = jnp.argmax(samples)
-            reward = jax.random.bernoulli(
-                k_pull, arm_probs[action]).astype(jnp.float32)
-            alphas = alphas.at[action].add(reward)
-            betas_post = betas_post.at[action].add(1.0 - reward)
-            return (alphas, betas_post), reward
+        def scan_fn(state, k):
+            action = oracle_action(state.pos, state.regime)
+            new_state, _, reward, _, _ = env_step(k, state, action, params)
+            return new_state, reward
 
-        _, rewards = jax.lax.scan(scan_fn, (alphas, betas_post), step_keys)
+        _, rewards = jax.lax.scan(scan_fn, state, step_keys)
         return rewards
 
     keys = jax.random.split(key, n_episodes)
@@ -92,7 +108,7 @@ def thompson_per_step(key, params, n_episodes):
 
 
 # ---------------------------------------------------------------------------
-# Trajectory
+# Trajectory storage
 # ---------------------------------------------------------------------------
 
 class Trajectory(eqx.Module):
@@ -109,7 +125,7 @@ class Trajectory(eqx.Module):
 
 
 # ---------------------------------------------------------------------------
-# PPO MLP
+# PPO MLP — rollout, training, evaluation
 # ---------------------------------------------------------------------------
 
 def collect_ppo_rollout(key, model, params, n_envs):
@@ -138,9 +154,9 @@ def collect_ppo_rollout(key, model, params, n_envs):
     return all_obs, all_act, all_rew, all_done, all_lp, all_val
 
 
-def train_ppo(key, params, n_iters):
+def train_ppo(key, params, n_iters, n_envs=512):
     k_model, key = jax.random.split(key)
-    model = ActorCritic(OBS_SIZE, N_ACTIONS, hidden=32, key=k_model)
+    model = ActorCritic(OBS_SIZE, N_ACTIONS, hidden=64, key=k_model)
     actor_opt = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
     critic_opt = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
     a_opt_st = actor_opt.init(eqx.filter(model.actor, eqx.is_array))
@@ -166,7 +182,7 @@ def train_ppo(key, params, n_iters):
     for it in range(n_iters):
         k_coll, key = jax.random.split(key)
         obs, actions, rewards, dones, lp, values = collect_ppo_rollout(
-            k_coll, model, params, N_ENVS)
+            k_coll, model, params, n_envs)
         history.append(float(jnp.mean(rewards)))
         bootstrap = values[-1]
         adv, ret = batch_gae(rewards, values, dones, bootstrap, 0.99, 0.95)
@@ -202,7 +218,7 @@ def eval_ppo_per_step(model, params, key, n_episodes):
 
 
 # ---------------------------------------------------------------------------
-# Recurrent agents
+# Recurrent agents — generic rollout, training, evaluation
 # ---------------------------------------------------------------------------
 
 def collect_recurrent_rollout(key, model, params, n_trials):
@@ -250,7 +266,7 @@ def collect_recurrent_rollout(key, model, params, n_trials):
     return traj
 
 
-def train_recurrent(key, model, loss_fn, params, n_iters,
+def train_recurrent(key, model, loss_fn, params, n_iters, n_trials=128,
                     elbo_fn=None, label="recurrent"):
     optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
     opt_st = optimizer.init(eqx.filter(model, eqx.is_array))
@@ -276,15 +292,20 @@ def train_recurrent(key, model, loss_fn, params, n_iters,
     t0 = time.time()
     for it in range(n_iters):
         k_coll, k_elbo, key = jax.random.split(key, 3)
-        traj = collect_recurrent_rollout(k_coll, model, params, N_TRIALS)
+        traj = collect_recurrent_rollout(k_coll, model, params, n_trials)
         history.append(float(jnp.mean(traj.rewards)))
+
         bootstrap = traj.values[-1]
         adv, ret = batch_gae(traj.rewards, traj.values, traj.dones,
                              bootstrap, 0.99, 0.95)
+
+        # ELBO update (VariBAD / VariBAD+HN only)
         if elbo_fn is not None:
             elbo_data = (traj.obs, traj.actions, traj.rewards, traj.next_obs,
                          traj.prev_actions_oh, traj.prev_rewards)
             model, opt_st = elbo_update(model, opt_st, elbo_data, k_elbo)
+
+        # PPO updates
         flat = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), traj)
         adv_f = adv.reshape(-1)
         ret_f = ret.reshape(-1)
@@ -302,10 +323,11 @@ def train_recurrent(key, model, loss_fn, params, n_iters,
                       flat.actions[idx], flat.log_probs[idx],
                       mb_adv, ret_f[idx])
                 model, opt_st = ppo_update(model, opt_st, mb)
+
         if it % max(1, n_iters // 20) == 0:
-            _print(f"\r    {label:<9s} iter {it:4d}/{n_iters} "
+            _print(f"\r    {label:<12s} iter {it:4d}/{n_iters} "
                    f"[{time.time() - t0:.0f}s]", end="", flush=True)
-    _print(f"\r    {label:<9s} iter {n_iters:4d}/{n_iters} "
+    _print(f"\r    {label:<12s} iter {n_iters:4d}/{n_iters} "
            f"[{time.time() - t0:.0f}s]    ")
     return model, history
 
@@ -340,43 +362,88 @@ def eval_recurrent_per_step(model, params, key, n_episodes):
 # ---------------------------------------------------------------------------
 
 def main():
-    params = BanditParams()
+    parser = argparse.ArgumentParser(
+        description="Validate meta-RL agents on Windy Chain MDP")
+    parser.add_argument("--fast", action="store_true",
+                        help="Quick validation (fewer iters/episodes)")
+    args = parser.parse_args()
+
+    if args.fast:
+        n_iters_ppo = 150
+        n_iters_rec = 500
+        n_trials = 128
+        n_eval = 3000
+    else:
+        n_iters_ppo = 300
+        n_iters_rec = 1000
+        n_trials = 128
+        n_eval = 5000
+
+    params = WindyChainParams()
     key = jax.random.PRNGKey(42)
 
-    print("=" * 60)
-    print("  Bernoulli Bandit — Long Training Run")
-    print("=" * 60)
-    print(f"  K={params.n_arms} arms, T={params.t_episode} steps/episode")
-    print(f"  PPO MLP: {N_ITERS_PPO} iters | "
-          f"RL²/RL²+HN/VariBAD: {N_ITERS_REC} iters")
-    print(f"  Eval: {N_EVAL} episodes")
+    print("=" * 65)
+    print("  Windy Chain MDP — Transition-Informative Validation")
+    print("=" * 65)
+    print(f"  N={params.n_states} states, T={params.t_episode} steps/episode,"
+          f" {params.n_regimes} regimes")
+    print(f"  Goals: {list(np.array(GOALS))}, "
+          f"reward=Bernoulli({params.reward_prob})")
+    print(f"  Wind:  regime 0 → right w.p.0.5, regime 1 → calm,"
+          f" regime 2 → left w.p.0.5")
+    print(f"  Side signals: 4D Gaussian, σ={params.side_sigma}")
+    print(f"  Obs dim: {OBS_SIZE} (7 pos + 4 side)")
+    print(f"  Recurrent: {EPISODES_PER_TRIAL} episodes/trial,"
+          f" hidden={HIDDEN_SIZE}")
     print()
 
     out = {}
 
-    # --- Random ---
-    out["random"] = {"reward_per_step": 0.5,
-                     "per_step_curve": [0.5] * params.t_episode}
+    # --- Random baseline ---
+    # Random gets reward when randomly landing on goal: ~1/7 * 1/3 * adjusted
+    # Simplest: just simulate
+    print("  Computing baselines ...")
+    k_rand, key = jax.random.split(key)
 
-    # --- Thompson ---
-    print("  Computing Thompson baseline ...")
-    k_ts, key = jax.random.split(key)
-    ts_curve = np.array(thompson_per_step(k_ts, params, N_EVAL)).tolist()
-    out["thompson"] = {"reward_per_step": float(np.mean(ts_curve)),
-                       "per_step_curve": ts_curve}
-    print(f"    Thompson: {out['thompson']['reward_per_step']:.4f} reward/step")
+    def random_per_step(key, n_episodes):
+        def single(key):
+            k_r, k_s = jax.random.split(key)
+            state, _ = env_reset(k_r, params)
+            skeys = jax.random.split(k_s, params.t_episode)
+            def step(state, ks):
+                ka, ke = jax.random.split(ks)
+                action = jax.random.randint(ka, (), 0, N_ACTIONS)
+                ns, _, rew, _, _ = env_step(ke, state, action, params)
+                return ns, rew
+            _, rews = jax.lax.scan(step, state, skeys)
+            return rews
+        keys = jax.random.split(key, n_episodes)
+        return jnp.mean(jax.vmap(single)(keys), axis=0)
+
+    rand_curve = np.array(random_per_step(k_rand, n_eval))
+    rand_rps = float(rand_curve.mean())
+    out["random"] = {"reward_per_step": rand_rps,
+                     "per_step_curve": rand_curve.tolist()}
+
+    # --- Oracle ---
+    k_or, key = jax.random.split(key)
+    oracle_curve = np.array(oracle_per_step(k_or, params, n_eval))
+    oracle_rps = float(oracle_curve.mean())
+    out["oracle"] = {"reward_per_step": oracle_rps,
+                     "per_step_curve": oracle_curve.tolist()}
+    print(f"    Random:  {rand_rps:.4f} reward/step")
+    print(f"    Oracle:  {oracle_rps:.4f} reward/step")
 
     # --- PPO MLP ---
     print("\n  Training agents ...")
     k_ppo, key = jax.random.split(key)
-    ppo_model, ppo_hist = train_ppo(k_ppo, params, N_ITERS_PPO)
+    ppo_model, ppo_hist = train_ppo(k_ppo, params, n_iters_ppo)
     k_eval, key = jax.random.split(key)
-    ppo_curve = np.array(eval_ppo_per_step(
-        ppo_model, params, k_eval, N_EVAL)).tolist()
-    out["ppo_mlp"] = {"n_iters": N_ITERS_PPO,
+    ppo_curve = np.array(eval_ppo_per_step(ppo_model, params, k_eval, n_eval))
+    out["ppo_mlp"] = {"n_iters": n_iters_ppo,
                       "train_history": ppo_hist,
-                      "reward_per_step": float(np.mean(ppo_curve)),
-                      "per_step_curve": ppo_curve}
+                      "reward_per_step": float(ppo_curve.mean()),
+                      "per_step_curve": ppo_curve.tolist()}
 
     # --- RL² ---
     k_rl2, key = jax.random.split(key)
@@ -384,14 +451,15 @@ def main():
     rl2_model = GRUActorCritic(
         INPUT_SIZE, OBS_SIZE, N_ACTIONS, hidden_size=HIDDEN_SIZE, key=k_m)
     rl2_model, rl2_hist = train_recurrent(
-        k_t, rl2_model, rl2_loss_fn, params, N_ITERS_REC, label="RL²")
+        k_t, rl2_model, rl2_loss_fn, params, n_iters_rec,
+        n_trials=n_trials, label="RL²")
     k_eval, key = jax.random.split(key)
     rl2_curve = np.array(eval_recurrent_per_step(
-        rl2_model, params, k_eval, N_EVAL)).tolist()
-    out["rl2"] = {"n_iters": N_ITERS_REC,
+        rl2_model, params, k_eval, n_eval))
+    out["rl2"] = {"n_iters": n_iters_rec,
                   "train_history": rl2_hist,
-                  "reward_per_step": float(np.mean(rl2_curve)),
-                  "per_step_curve": rl2_curve}
+                  "reward_per_step": float(rl2_curve.mean()),
+                  "per_step_curve": rl2_curve.tolist()}
 
     # --- RL²+HN ---
     k_hn, key = jax.random.split(key)
@@ -400,53 +468,107 @@ def main():
         INPUT_SIZE, OBS_SIZE, N_ACTIONS,
         hidden_size=HIDDEN_SIZE, policy_hidden=16, key=k_m)
     hn_model, hn_hist = train_recurrent(
-        k_t, hn_model, rl2_hn_loss_fn, params, N_ITERS_REC, label="RL²+HN")
+        k_t, hn_model, rl2_hn_loss_fn, params, n_iters_rec,
+        n_trials=n_trials, label="RL²+HN")
     k_eval, key = jax.random.split(key)
     hn_curve = np.array(eval_recurrent_per_step(
-        hn_model, params, k_eval, N_EVAL)).tolist()
-    out["rl2_hn"] = {"n_iters": N_ITERS_REC,
+        hn_model, params, k_eval, n_eval))
+    out["rl2_hn"] = {"n_iters": n_iters_rec,
                      "train_history": hn_hist,
-                     "reward_per_step": float(np.mean(hn_curve)),
-                     "per_step_curve": hn_curve}
+                     "reward_per_step": float(hn_curve.mean()),
+                     "per_step_curve": hn_curve.tolist()}
 
     # --- VariBAD ---
     k_vb, key = jax.random.split(key)
     k_m, k_t = jax.random.split(k_vb)
     vb_model = VariBADActorCritic(
         INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-        hidden_size=HIDDEN_SIZE, latent_dim=2, key=k_m)
+        hidden_size=HIDDEN_SIZE, latent_dim=4, key=k_m)
     vb_model, vb_hist = train_recurrent(
-        k_t, vb_model, varibad_ppo_loss_fn, params, N_ITERS_REC,
-        elbo_fn=elbo_loss_fn, label="VariBAD")
+        k_t, vb_model, varibad_ppo_loss_fn, params, n_iters_rec,
+        n_trials=n_trials, elbo_fn=elbo_loss_fn, label="VariBAD")
     k_eval, key = jax.random.split(key)
     vb_curve = np.array(eval_recurrent_per_step(
-        vb_model, params, k_eval, N_EVAL)).tolist()
-    out["varibad"] = {"n_iters": N_ITERS_REC,
+        vb_model, params, k_eval, n_eval))
+    out["varibad"] = {"n_iters": n_iters_rec,
                       "train_history": vb_hist,
-                      "reward_per_step": float(np.mean(vb_curve)),
-                      "per_step_curve": vb_curve}
+                      "reward_per_step": float(vb_curve.mean()),
+                      "per_step_curve": vb_curve.tolist()}
+
+    # --- VariBAD+HN ---
+    k_vbhn, key = jax.random.split(key)
+    k_m, k_t = jax.random.split(k_vbhn)
+    vbhn_model = VariBADHNActorCritic(
+        INPUT_SIZE, OBS_SIZE, N_ACTIONS,
+        hidden_size=HIDDEN_SIZE, latent_dim=4, policy_hidden=16, key=k_m)
+    vbhn_model, vbhn_hist = train_recurrent(
+        k_t, vbhn_model, varibad_hn_ppo_loss_fn, params, n_iters_rec,
+        n_trials=n_trials, elbo_fn=varibad_hn_elbo_loss_fn, label="VariBAD+HN")
+    k_eval, key = jax.random.split(key)
+    vbhn_curve = np.array(eval_recurrent_per_step(
+        vbhn_model, params, k_eval, n_eval))
+    out["varibad_hn"] = {"n_iters": n_iters_rec,
+                         "train_history": vbhn_hist,
+                         "reward_per_step": float(vbhn_curve.mean()),
+                         "per_step_curve": vbhn_curve.tolist()}
 
     # --- Save ---
     os.makedirs(RESULTS_DIR, exist_ok=True)
     with open(OUT_JSON, "w") as f:
-        json.dump(out, f, indent=2)
+        json.dump(out, f, indent=2, cls=NumpyEncoder)
     print(f"\n  Results saved: {os.path.relpath(OUT_JSON, ROOT)}")
 
-    # --- Summary ---
-    random_rps = out["random"]["reward_per_step"]
-    ts_rps = out["thompson"]["reward_per_step"]
-    print("\n" + "=" * 60)
+    # --- Summary table ---
+    print("\n" + "=" * 65)
     print(f"  {'Agent':<14} {'reward/step':>12} {'vs Random':>10} "
-          f"{'vs Thompson':>12}")
-    print("  " + "-" * 56)
+          f"{'vs Oracle':>10}")
+    print("  " + "-" * 61)
     for label, k in [("Random", "random"), ("PPO MLP", "ppo_mlp"),
                      ("RL²", "rl2"), ("RL²+HN", "rl2_hn"),
-                     ("VariBAD", "varibad"), ("Thompson", "thompson")]:
+                     ("VariBAD", "varibad"), ("VariBAD+HN", "varibad_hn"),
+                     ("Oracle", "oracle")]:
         rps = out[k]["reward_per_step"]
-        print(f"  {label:<14} {rps:>12.4f} {rps - random_rps:>+10.4f} "
-              f"{rps - ts_rps:>+12.4f}")
-    print("=" * 60)
-    print(f"\n  Plot with: uv run python scripts/plot_bandit.py\n")
+        print(f"  {label:<14} {rps:>12.4f} {rps - rand_rps:>+10.4f} "
+              f"{rps - oracle_rps:>+10.4f}")
+    print("=" * 65)
+
+    # --- Key comparison ---
+    hn_rps = out["rl2_hn"]["reward_per_step"]
+    vbhn_rps = out["varibad_hn"]["reward_per_step"]
+    gap = vbhn_rps - hn_rps
+    print(f"\n  RL²+HN vs VariBAD+HN gap: {gap:+.4f} reward/step")
+    if gap > 0.01:
+        print("  --> VariBAD+HN outperforms RL²+HN"
+              " (ELBO exploits transition dynamics)")
+    elif gap < -0.01:
+        print("  --> RL²+HN outperforms VariBAD+HN (unexpected)")
+    else:
+        print("  --> No clear gap (consider increasing n_iters or wind_prob)")
+
+    # --- Per-step curves (abbreviated) ---
+    agents = ["Random", "Oracle", "PPO MLP", "RL²", "RL²+HN",
+              "VariBAD", "VariBAD+HN"]
+    keys_map = ["random", "oracle", "ppo_mlp", "rl2", "rl2_hn",
+                "varibad", "varibad_hn"]
+    print(f"\n  Per-step reward (T={params.t_episode}, every 5 steps):")
+    header = f"  {'step':>4}"
+    for name in agents:
+        header += f"  {name:>10}"
+    print(header)
+    print("  " + "-" * (4 + len(agents) * 12))
+    for t in range(0, params.t_episode, 5):
+        row = f"  {t + 1:>4}"
+        for k in keys_map:
+            row += f"  {out[k]['per_step_curve'][t]:>10.3f}"
+        print(row)
+    # Final step
+    t = params.t_episode - 1
+    row = f"  {t + 1:>4}"
+    for k in keys_map:
+        row += f"  {out[k]['per_step_curve'][t]:>10.3f}"
+    print(row)
+
+    print()
 
 
 if __name__ == "__main__":

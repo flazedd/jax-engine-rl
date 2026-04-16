@@ -13,9 +13,13 @@ class VariBADHNActorCritic(eqx.Module):
     Encoder: GRU over (obs, prev_action_onehot, prev_reward) -> h_t
     Posterior: MLP(h_t) -> (mu, log_sigma), for ELBO training
     Decoder: MLP(z, obs, action_oh) -> (reward_hat, next_obs_hat)
-    HyperNet: h_t -> all weights & biases of policy MLP (dual conditioning)
+    HyperNet: (h_t, mu_t, sigma_t) -> policy MLP weights (posterior-conditioned)
     Generated policy: obs -> logits
-    Critic: [h_t, obs] -> value
+    Critic: [h_t, mu_t, sigma_t, obs] -> value
+
+    Key design: the posterior (μ, σ) flows into both HyperNet and critic,
+    so ELBO gradients that shape the posterior directly affect policy
+    generation — unlike the original design where h_t alone fed the HyperNet.
     """
     gru_cell: eqx.nn.GRUCell
     posterior_net: MLP
@@ -51,26 +55,39 @@ class VariBADHNActorCritic(eqx.Module):
         decoder_output = 1 + obs_size
         self.decoder_net = MLP([decoder_input, 64, decoder_output], key=k3)
 
-        # HyperNet: h_t -> flat policy params (Bias-HyperInit)
+        # HyperNet: (h_t, mu_t, sigma_t) -> flat policy params
+        # Input: h_t (hidden_size) + mu (latent_dim) + sigma (latent_dim)
+        hn_input_size = hidden_size + 2 * latent_dim
         n_params = compute_n_policy_params(obs_size, policy_hidden, n_actions)
-        hn = MLP([hidden_size, 256, n_params], key=k4)
+        hn = MLP([hn_input_size, 256, n_params], key=k4)
         self.hyper_net = eqx.tree_at(
             lambda m: m.layers[-1].weight, hn,
             jnp.zeros_like(hn.layers[-1].weight))
 
-        # Critic: [h_t, obs] -> value
-        self.critic_head = MLP([hidden_size + obs_size, 64, 1], key=k5)
+        # Critic: [h_t, mu_t, sigma_t, obs] -> value
+        critic_input_size = hidden_size + 2 * latent_dim + obs_size
+        self.critic_head = MLP([critic_input_size, 64, 1], key=k5)
 
     def init_state(self):
         return jnp.zeros(self.hidden_size)
 
+    def _get_posterior(self, h):
+        """Compute posterior (mu, sigma) from GRU hidden state."""
+        post = self.posterior_net(h)
+        mu = post[:self.latent_dim]
+        log_sig = jnp.clip(post[self.latent_dim:], -5.0, 2.0)
+        sigma = jnp.exp(log_sig)
+        return mu, sigma
+
     def forward_step(self, aug_input, obs, hidden):
         """Single step -> (logits, value, new_hidden)."""
         new_h = self.gru_cell(aug_input, hidden)
-        policy_params = self.hyper_net(new_h)
+        mu, sigma = self._get_posterior(new_h)
+        hn_in = jnp.concatenate([new_h, mu, sigma])
+        policy_params = self.hyper_net(hn_in)
         logits = apply_generated_policy(
             obs, policy_params, self.obs_size, self.policy_hidden, self.n_actions)
-        critic_in = jnp.concatenate([new_h, obs])
+        critic_in = jnp.concatenate([new_h, mu, sigma, obs])
         value = self.critic_head(critic_in).squeeze(-1)
         return logits, value, new_h
 
@@ -126,16 +143,21 @@ def varibad_hn_elbo_loss_fn(model, elbo_data, rng_key, beta=1.0):
 # ---------------------------------------------------------------------------
 
 def varibad_hn_ppo_loss_fn(model, batch, clip_eps=0.2, ent_coef=0.01, vf_coef=0.5):
-    """PPO loss for VariBAD+HN. Policy via HyperNet, not posterior."""
+    """PPO loss for VariBAD+HN. Policy via posterior-conditioned HyperNet."""
     obs, prev_act, prev_rew, gru_h, actions, old_lp, advantages, returns = batch
     aug = jnp.concatenate([obs, prev_act, prev_rew], axis=-1)
 
     def forward_one(x, o, h):
         new_h = model.gru_cell(x, h)
-        policy_params = model.hyper_net(new_h)
+        post = model.posterior_net(new_h)
+        mu = post[:model.latent_dim]
+        log_sig = jnp.clip(post[model.latent_dim:], -5.0, 2.0)
+        sigma = jnp.exp(log_sig)
+        hn_in = jnp.concatenate([new_h, mu, sigma])
+        policy_params = model.hyper_net(hn_in)
         logits = apply_generated_policy(
             o, policy_params, model.obs_size, model.policy_hidden, model.n_actions)
-        critic_in = jnp.concatenate([new_h, o])
+        critic_in = jnp.concatenate([new_h, mu, sigma, o])
         value = model.critic_head(critic_in).squeeze(-1)
         return logits, value
 

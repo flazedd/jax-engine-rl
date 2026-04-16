@@ -59,6 +59,23 @@ batch_gae = jax.vmap(compute_gae, in_axes=(1, 1, 1, 0, None, None),
 
 
 # ---------------------------------------------------------------------------
+# PPO loss (shared tail)
+# ---------------------------------------------------------------------------
+
+def ppo_loss_from_logits(logits, values, actions, old_lp, advantages, returns,
+                         clip_eps=0.2, ent_coef=0.01, vf_coef=0.5):
+    """Standard PPO clip loss given logits and values."""
+    lp_all = jax.nn.log_softmax(logits)
+    lp = jnp.take_along_axis(lp_all, actions[:, None], axis=1).squeeze(1)
+    ratio = jnp.exp(lp - old_lp)
+    clipped = jnp.clip(ratio, 1 - clip_eps, 1 + clip_eps)
+    actor_loss = -jnp.mean(jnp.minimum(ratio * advantages, clipped * advantages))
+    entropy = -jnp.mean(jnp.sum(jax.nn.softmax(logits) * lp_all, axis=-1))
+    critic_loss = jnp.mean((values - returns) ** 2)
+    return actor_loss - ent_coef * entropy + vf_coef * critic_loss
+
+
+# ---------------------------------------------------------------------------
 # JSON helper
 # ---------------------------------------------------------------------------
 

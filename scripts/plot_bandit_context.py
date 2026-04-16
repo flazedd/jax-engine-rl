@@ -19,11 +19,11 @@ RESULTS_JSON = os.path.join(ROOT, "results", "bandit_context_validation.json")
 PLOTS_DIR = os.path.join(ROOT, "plots")
 
 AGENTS = [
-    ("ppo_mlp",    "PPO MLP",    "C0"),
-    ("rl2",        "RL²",        "C1"),
-    ("rl2_hn",     "RL²+HN",     "C2"),
-    ("varibad",    "VariBAD",    "C3"),
-    ("varibad_hn", "VariBAD+HN", "C4"),
+    ("ppo_mlp",      "PPO MLP",       "C0"),
+    ("rl2",          "RL²",           "C1"),
+    ("rl2_hn",       "RL²+HN",        "C2"),
+    ("varibad",      "VariBAD",       "C3"),
+    ("v2_mu",        "V2:μOnly",      "C4"),
 ]
 
 
@@ -43,7 +43,7 @@ def main():
     bs_curve = data["bayes_side"]["per_step_curve"]
     t_episode = len(ts_curve)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
     # --- Left panel: training curves ---
     ax1.set_title("Training Curves (rollout reward/step)", fontweight="bold")
@@ -66,7 +66,7 @@ def main():
                 linewidth=1, label=f"Bayes-Side ({bs_rps:.3f})")
     ax1.set_xlabel("Training iteration")
     ax1.set_ylabel("Mean reward / step")
-    ax1.legend(fontsize=7, loc="lower right")
+    ax1.legend(fontsize=6, loc="lower right", ncol=2)
     ax1.grid(True, alpha=0.3)
 
     # --- Right panel: per-step reward curves ---
@@ -87,7 +87,7 @@ def main():
 
     ax2.set_xlabel("Step within episode")
     ax2.set_ylabel("Mean reward")
-    ax2.legend(fontsize=7, loc="lower right")
+    ax2.legend(fontsize=6, loc="lower right", ncol=2)
     ax2.grid(True, alpha=0.3)
     ax2.set_xticks(steps)
 

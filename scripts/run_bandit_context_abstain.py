@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Train all agents on Contextual Bandit with Side Information.
+"""Train agents on Contextual Bandit with Abstain action (calibration stress test).
 
-Side signals: 2D Gaussian per task, σ=2.0 so single obs ≈ chance level.
-VariBAD's decoder can predict side signals → dense ELBO gradients for task ID.
-RL² agents must discover side signal value purely through RL.
+Adds a fixed-payoff abstain action. Optimal policy: abstain while uncertain,
+commit once posterior confidence exceeds threshold. Tests whether agents
+develop calibrated uncertainty — overconfident agents commit too early,
+underconfident agents abstain too long.
 
-Saves to results/bandit_context_validation.json.
-Plot with: uv run python scripts/plot_bandit_context.py
+Saves to results/bandit_context_abstain.json.
+Plot with: uv run python scripts/plot_bandit_context_abstain.py
 
 Usage:
-    uv run python scripts/run_bandit_context_long.py          # full run
-    uv run python scripts/run_bandit_context_long.py --fast    # quick smoke test
+    uv run python scripts/run_bandit_context_abstain.py --agent ppo_mlp
+    uv run python scripts/run_bandit_context_abstain.py --agent all
+    uv run python scripts/run_bandit_context_abstain.py --agent all --fast
 """
 import argparse
 import json
@@ -27,34 +29,15 @@ import optax
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from envs.bandit_context import (BanditContextParams, SIDE_MEANS,
-                                  env_reset, env_step)
+from envs.bandit_context import SIDE_MEANS
+from envs.bandit_context_abstain import (BanditAbstainParams, ABSTAIN_PAYOFF,
+                                          env_reset, env_step)
 from agents.ppo import ActorCritic, actor_loss_fn, critic_loss_fn
 from agents.rl2 import GRUActorCritic, rl2_loss_fn
 from agents.rl2_hn import HNActorCritic, rl2_hn_loss_fn
 from agents.varibad import VariBADActorCritic, elbo_loss_fn, varibad_ppo_loss_fn
-from agents.varibad_hn import (VariBADHNActorCritic, varibad_hn_elbo_loss_fn,
-                                varibad_hn_ppo_loss_fn)
-from agents.varibad_hn_v1_sg import (V1SGActorCritic, v1_sg_ppo_loss_fn,
-                                      v1_sg_elbo_loss_fn)
 from agents.varibad_hn_v2_mu import (V2MuOnlyActorCritic, v2_mu_ppo_loss_fn,
                                       v2_mu_elbo_loss_fn)
-from agents.varibad_hn_v4_muobs import (V4MuObsActorCritic, v4_muobs_ppo_loss_fn,
-                                         v4_muobs_elbo_loss_fn)
-from agents.varibad_hn_v5_aux import (V5AuxActorCritic, v5_aux_ppo_loss_fn,
-                                       v5_aux_elbo_loss_fn)
-from agents.varibad_hn_v6_logitclip import (V6LogitClipActorCritic,
-                                              v6_logitclip_ppo_loss_fn,
-                                              v6_logitclip_elbo_loss_fn)
-from agents.varibad_hn_v7_highent import (V7HighEntActorCritic,
-                                            v7_highent_ppo_loss_fn,
-                                            v7_highent_elbo_loss_fn)
-from agents.varibad_hn_v8_conservative import (V8ConservativeActorCritic,
-                                                v8_conservative_ppo_loss_fn,
-                                                v8_conservative_elbo_loss_fn)
-from agents.varibad_hn_v9_normedhn import (V9NormedHNActorCritic,
-                                             v9_normedhn_ppo_loss_fn,
-                                             v9_normedhn_elbo_loss_fn)
 from agents.common import batch_gae, NumpyEncoder
 
 # ---------------------------------------------------------------------------
@@ -62,9 +45,12 @@ from agents.common import batch_gae, NumpyEncoder
 # ---------------------------------------------------------------------------
 
 OBS_SIZE = 5          # (time, side_0..3)
-N_ACTIONS = 5
-INPUT_SIZE = OBS_SIZE + N_ACTIONS + 1    # 11
+N_ARMS = 5
+N_ACTIONS = 6         # 5 arms + 1 abstain
+INPUT_SIZE = OBS_SIZE + N_ACTIONS + 1    # 12
 HIDDEN_SIZE = 64
+LATENT_DIM = 4
+POLICY_HIDDEN = 16
 EPISODES_PER_TRIAL = 4
 
 N_ITERS_PPO = 300
@@ -74,7 +60,9 @@ N_ENVS = 512
 N_TRIALS = 128
 
 RESULTS_DIR = os.path.join(ROOT, "results")
-OUT_JSON = os.path.join(RESULTS_DIR, "bandit_context_validation.json")
+OUT_JSON = os.path.join(RESULTS_DIR, "bandit_context_abstain.json")
+
+ALL_AGENTS = ["ppo_mlp", "rl2", "rl2_hn", "varibad", "v2_mu"]
 
 import builtins
 _print = builtins.print
@@ -87,37 +75,8 @@ def print(*args, **kwargs):
 # Baselines
 # ---------------------------------------------------------------------------
 
-def thompson_per_step(key, params, n_episodes):
-    """Thompson sampling — uses rewards only, ignores side signals."""
-    def single_episode(key):
-        k_task, k_steps = jax.random.split(key)
-        task_id = jax.random.randint(k_task, (), 0, params.n_arms)
-        arm_probs = jnp.full(params.n_arms, params.arm_prob_low)
-        arm_probs = arm_probs.at[task_id].set(params.arm_prob_high)
-        alphas = jnp.ones(params.n_arms)
-        betas_post = jnp.ones(params.n_arms)
-        step_keys = jax.random.split(k_steps, params.t_episode)
-
-        def scan_fn(carry, k):
-            alphas, betas_post = carry
-            k_ts, k_pull = jax.random.split(k)
-            samples = jax.random.beta(k_ts, alphas, betas_post)
-            action = jnp.argmax(samples)
-            reward = jax.random.bernoulli(
-                k_pull, arm_probs[action]).astype(jnp.float32)
-            alphas = alphas.at[action].add(reward)
-            betas_post = betas_post.at[action].add(1.0 - reward)
-            return (alphas, betas_post), reward
-
-        _, rewards = jax.lax.scan(scan_fn, (alphas, betas_post), step_keys)
-        return rewards
-
-    keys = jax.random.split(key, n_episodes)
-    return jnp.mean(jax.vmap(single_episode)(keys), axis=0)
-
-
-def bayes_side_per_step(key, params, n_episodes):
-    """Bayes-Side oracle — exact Bayesian inference on side signals only."""
+def bayes_optimal_per_step(key, params, n_episodes):
+    """Bayes-optimal: exact posterior over tasks, abstain vs pull decision."""
     sigma2 = params.side_sigma ** 2
 
     def single_episode(key):
@@ -128,7 +87,8 @@ def bayes_side_per_step(key, params, n_episodes):
         step_keys = jax.random.split(k_steps, params.t_episode)
         log_prior = jnp.log(jnp.ones(params.n_arms) / params.n_arms)
 
-        def scan_fn(log_post, k):
+        def scan_fn(carry, k):
+            log_post, arm_probs = carry
             k_side, k_pull = jax.random.split(k)
             side = SIDE_MEANS[task_id] + params.side_sigma * jax.random.normal(
                 k_side, (params.side_dim,))
@@ -136,16 +96,33 @@ def bayes_side_per_step(key, params, n_episodes):
                 (side[None, :] - SIDE_MEANS) ** 2, axis=-1) / sigma2
             log_post = log_post + log_liks
             log_post = log_post - jax.nn.logsumexp(log_post)
-            action = jnp.argmax(log_post)
-            reward = jax.random.bernoulli(
-                k_pull, arm_probs[action]).astype(jnp.float32)
-            return log_post, reward
+            post = jnp.exp(log_post)
+            # Expected reward from pulling MAP arm
+            map_arm = jnp.argmax(post)
+            e_pull = post[map_arm] * params.arm_prob_high + \
+                     (1.0 - post[map_arm]) * params.arm_prob_low
+            # Abstain if expected pull reward < abstain payoff
+            should_abstain = e_pull < params.abstain_payoff
+            reward_pull = jax.random.bernoulli(
+                k_pull, arm_probs[map_arm]).astype(jnp.float32)
+            reward = jnp.where(should_abstain, params.abstain_payoff, reward_pull)
+            action = jnp.where(should_abstain, params.n_arms, map_arm)
+            return (log_post, arm_probs), (reward, action)
 
-        _, rewards = jax.lax.scan(scan_fn, log_prior, step_keys)
-        return rewards
+        _, (rewards, actions) = jax.lax.scan(
+            scan_fn, (log_prior, arm_probs), step_keys)
+        abstain_mask = (actions == params.n_arms).astype(jnp.float32)
+        return rewards, abstain_mask
 
     keys = jax.random.split(key, n_episodes)
-    return jnp.mean(jax.vmap(single_episode)(keys), axis=0)
+    all_rewards, all_abstains = jax.vmap(single_episode)(keys)
+    return (jnp.mean(all_rewards, axis=0),
+            jnp.mean(all_abstains, axis=0))
+
+
+def always_abstain_rps(params):
+    """Reward/step from always abstaining."""
+    return params.abstain_payoff
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +140,7 @@ class Trajectory(eqx.Module):
     prev_rewards: jnp.ndarray
     gru_h: jnp.ndarray
     next_obs: jnp.ndarray
-    task_ids: jnp.ndarray      # for V5 aux loss
+    task_ids: jnp.ndarray
 
 
 # ---------------------------------------------------------------------------
@@ -252,15 +229,17 @@ def eval_ppo_per_step(model, params, key, n_episodes):
             logits, _ = model(obs)
             action = jnp.argmax(logits)
             new_s, new_o, rew, _, _ = env_step(k, state, action, params)
-            return (new_s, new_o), rew
-        _, rewards = jax.lax.scan(scan_fn, (state, obs), step_keys)
-        return rewards
+            is_abstain = (action == params.n_arms).astype(jnp.float32)
+            return (new_s, new_o), (rew, is_abstain)
+        _, (rewards, abstains) = jax.lax.scan(scan_fn, (state, obs), step_keys)
+        return rewards, abstains
     keys = jax.random.split(key, n_episodes)
-    return jnp.mean(jax.vmap(single_episode)(keys), axis=0)
+    all_r, all_a = jax.vmap(single_episode)(keys)
+    return jnp.mean(all_r, axis=0), jnp.mean(all_a, axis=0)
 
 
 # ---------------------------------------------------------------------------
-# Recurrent agents (RL², RL²+HN, VariBAD, VariBAD+HN)
+# Recurrent agents
 # ---------------------------------------------------------------------------
 
 def collect_recurrent_rollout(key, model, params, n_trials):
@@ -310,8 +289,7 @@ def collect_recurrent_rollout(key, model, params, n_trials):
 
 
 def train_recurrent(key, model, loss_fn, params, n_iters,
-                    elbo_fn=None, label="recurrent", warmstart_iters=0,
-                    elbo_needs_task_ids=False):
+                    elbo_fn=None, label="recurrent"):
     optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
     opt_st = optimizer.init(eqx.filter(model, eqx.is_array))
 
@@ -344,15 +322,7 @@ def train_recurrent(key, model, loss_fn, params, n_iters,
         if elbo_fn is not None:
             elbo_data = (traj.obs, traj.actions, traj.rewards, traj.next_obs,
                          traj.prev_actions_oh, traj.prev_rewards)
-            if elbo_needs_task_ids:
-                elbo_data = elbo_data + (traj.task_ids,)
             model, opt_st = elbo_update(model, opt_st, elbo_data, k_elbo)
-        if it < warmstart_iters:
-            if it % max(1, n_iters // 20) == 0:
-                _print(f"\r    {label:<12s} iter {it:4d}/{n_iters} "
-                       f"[warmstart, {time.time() - t0:.0f}s]",
-                       end="", flush=True)
-            continue
         flat = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), traj)
         adv_f = adv.reshape(-1)
         ret_f = ret.reshape(-1)
@@ -393,32 +363,29 @@ def eval_recurrent_per_step(model, params, key, n_episodes):
             logits, _, new_h = model.forward_step(aug, obs, h)
             action = jnp.argmax(logits)
             new_s, new_o, rew, _, _ = env_step(k, state, action, params)
+            is_abstain = (action == params.n_arms).astype(jnp.float32)
             carry = (new_s, new_o, new_h,
                      jax.nn.one_hot(action, N_ACTIONS), rew[None])
-            return carry, rew
-        _, rewards = jax.lax.scan(
+            return carry, (rew, is_abstain)
+        _, (rewards, abstains) = jax.lax.scan(
             scan_fn, (state, obs, h, prev_act, prev_rew), step_keys)
-        return rewards
+        return rewards, abstains
     keys = jax.random.split(key, n_episodes)
-    return jnp.mean(jax.vmap(single_episode)(keys), axis=0)
+    all_r, all_a = jax.vmap(single_episode)(keys)
+    return jnp.mean(all_r, axis=0), jnp.mean(all_a, axis=0)
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-ALL_AGENTS = ["ppo_mlp", "rl2", "rl2_hn", "varibad", "varibad_hn",
-              "v1_sg", "v2_mu", "v4_muobs", "v5_aux",
-              "v6_logitclip", "v7_highent", "v8_conservative", "v9_normedhn"]
-
-
 def main():
     global N_ITERS_PPO, N_ITERS_REC, N_EVAL, N_ENVS, N_TRIALS
 
     parser = argparse.ArgumentParser(
-        description="Contextual Bandit with Side Information")
+        description="Contextual Bandit with Abstain (calibration stress test)")
     parser.add_argument("--fast", action="store_true",
-                        help="Quick smoke test (fewer iters/trials/eval)")
+                        help="Quick smoke test")
     parser.add_argument("--agent", type=str, default="all",
                         choices=ALL_AGENTS + ["all"],
                         help="Train a single agent (merges into existing JSON)")
@@ -433,8 +400,7 @@ def main():
 
     run_agent = args.agent
     agents_to_run = ALL_AGENTS if run_agent == "all" else [run_agent]
-
-    params = BanditContextParams()
+    params = BanditAbstainParams()
 
     # Load existing results to merge into
     if os.path.exists(OUT_JSON) and run_agent != "all":
@@ -447,45 +413,50 @@ def main():
     suffix = f" (FAST)" if args.fast else ""
     if run_agent != "all":
         suffix += f" agent={run_agent}"
-    print(f"  Contextual Bandit with Side Information{suffix}")
+    print(f"  Calibration Stress: Bandit + Abstain{suffix}")
     print("=" * 60)
-    print(f"  K={params.n_arms} arms, T={params.t_episode} steps/episode, "
-          f"side_σ={params.side_sigma}")
-    print(f"  arm_probs: best={params.arm_prob_high}, "
+    print(f"  K={params.n_arms} arms + 1 abstain, T={params.t_episode} steps")
+    print(f"  abstain_payoff={params.abstain_payoff}, "
+          f"arm_probs: best={params.arm_prob_high}, "
           f"others={params.arm_prob_low}")
     print(f"  PPO MLP: {N_ITERS_PPO} iters | "
           f"Recurrent: {N_ITERS_REC} iters")
     print(f"  Eval: {N_EVAL} episodes")
     print()
 
-    # --- Baselines (always computed, fast) ---
+    # --- Baselines (always computed) ---
     key = jax.random.PRNGKey(42)
+
     random_rps = float(
-        (params.arm_prob_high + (params.n_arms - 1) * params.arm_prob_low)
-        / params.n_arms)
-    out["random"] = {"reward_per_step": random_rps,
-                     "per_step_curve": [random_rps] * params.t_episode}
+        (params.arm_prob_high + (params.n_arms - 1) * params.arm_prob_low
+         + params.abstain_payoff)
+        / (params.n_arms + 1))
+    out["random"] = {
+        "reward_per_step": random_rps,
+        "per_step_curve": [random_rps] * params.t_episode,
+        "abstain_curve": [1.0 / (params.n_arms + 1)] * params.t_episode}
+
+    abstain_rps = float(params.abstain_payoff)
+    out["always_abstain"] = {
+        "reward_per_step": abstain_rps,
+        "per_step_curve": [abstain_rps] * params.t_episode,
+        "abstain_curve": [1.0] * params.t_episode}
 
     print("  Computing baselines ...")
-    k_ts, key = jax.random.split(key)
-    ts_curve = np.array(thompson_per_step(k_ts, params, N_EVAL)).tolist()
-    out["thompson"] = {"reward_per_step": float(np.mean(ts_curve)),
-                       "per_step_curve": ts_curve}
-    print(f"    Random:     {random_rps:.4f} reward/step")
-    print(f"    Thompson:   {out['thompson']['reward_per_step']:.4f} "
-          f"reward/step (reward only)")
+    k_bo, key = jax.random.split(key)
+    bo_reward_curve, bo_abstain_curve = bayes_optimal_per_step(
+        k_bo, params, N_EVAL)
+    bo_reward_curve = np.array(bo_reward_curve).tolist()
+    bo_abstain_curve = np.array(bo_abstain_curve).tolist()
+    out["bayes_optimal"] = {
+        "reward_per_step": float(np.mean(bo_reward_curve)),
+        "per_step_curve": bo_reward_curve,
+        "abstain_curve": bo_abstain_curve}
+    print(f"    Random:         {random_rps:.4f} reward/step")
+    print(f"    Always Abstain: {abstain_rps:.4f} reward/step")
+    print(f"    Bayes-Optimal:  {out['bayes_optimal']['reward_per_step']:.4f} "
+          f"reward/step")
 
-    k_bs, key = jax.random.split(key)
-    bs_curve = np.array(bayes_side_per_step(k_bs, params, N_EVAL)).tolist()
-    out["bayes_side"] = {"reward_per_step": float(np.mean(bs_curve)),
-                         "per_step_curve": bs_curve}
-    print(f"    Bayes-Side: {out['bayes_side']['reward_per_step']:.4f} "
-          f"reward/step (side signal only)")
-
-    LATENT_DIM = 4
-    POLICY_HIDDEN = 16
-
-    # --- Deterministic key schedule (always advance, train only if selected) ---
     def should_run(name):
         return name in agents_to_run
 
@@ -496,12 +467,12 @@ def main():
     k_eval_ppo, key = jax.random.split(key)
     if should_run("ppo_mlp"):
         ppo_model, ppo_hist = train_ppo(k_ppo, params, N_ITERS_PPO)
-        ppo_curve = np.array(eval_ppo_per_step(
-            ppo_model, params, k_eval_ppo, N_EVAL)).tolist()
+        ppo_r, ppo_a = eval_ppo_per_step(ppo_model, params, k_eval_ppo, N_EVAL)
         out["ppo_mlp"] = {"n_iters": N_ITERS_PPO,
                           "train_history": ppo_hist,
-                          "reward_per_step": float(np.mean(ppo_curve)),
-                          "per_step_curve": ppo_curve}
+                          "reward_per_step": float(np.mean(np.array(ppo_r))),
+                          "per_step_curve": np.array(ppo_r).tolist(),
+                          "abstain_curve": np.array(ppo_a).tolist()}
 
     # RL²
     k_rl2, key = jax.random.split(key)
@@ -512,12 +483,13 @@ def main():
             INPUT_SIZE, OBS_SIZE, N_ACTIONS, hidden_size=HIDDEN_SIZE, key=k_m)
         rl2_model, rl2_hist = train_recurrent(
             k_t, rl2_model, rl2_loss_fn, params, N_ITERS_REC, label="RL²")
-        rl2_curve = np.array(eval_recurrent_per_step(
-            rl2_model, params, k_eval_rl2, N_EVAL)).tolist()
+        rl2_r, rl2_a = eval_recurrent_per_step(
+            rl2_model, params, k_eval_rl2, N_EVAL)
         out["rl2"] = {"n_iters": N_ITERS_REC,
                       "train_history": rl2_hist,
-                      "reward_per_step": float(np.mean(rl2_curve)),
-                      "per_step_curve": rl2_curve}
+                      "reward_per_step": float(np.mean(np.array(rl2_r))),
+                      "per_step_curve": np.array(rl2_r).tolist(),
+                      "abstain_curve": np.array(rl2_a).tolist()}
 
     # RL²+HN
     k_hn, key = jax.random.split(key)
@@ -529,12 +501,13 @@ def main():
             hidden_size=HIDDEN_SIZE, policy_hidden=POLICY_HIDDEN, key=k_m)
         hn_model, hn_hist = train_recurrent(
             k_t, hn_model, rl2_hn_loss_fn, params, N_ITERS_REC, label="RL²+HN")
-        hn_curve = np.array(eval_recurrent_per_step(
-            hn_model, params, k_eval_hn, N_EVAL)).tolist()
+        hn_r, hn_a = eval_recurrent_per_step(
+            hn_model, params, k_eval_hn, N_EVAL)
         out["rl2_hn"] = {"n_iters": N_ITERS_REC,
                          "train_history": hn_hist,
-                         "reward_per_step": float(np.mean(hn_curve)),
-                         "per_step_curve": hn_curve}
+                         "reward_per_step": float(np.mean(np.array(hn_r))),
+                         "per_step_curve": np.array(hn_r).tolist(),
+                         "abstain_curve": np.array(hn_a).tolist()}
 
     # VariBAD
     k_vb, key = jax.random.split(key)
@@ -547,50 +520,13 @@ def main():
         vb_model, vb_hist = train_recurrent(
             k_t, vb_model, varibad_ppo_loss_fn, params, N_ITERS_REC,
             elbo_fn=elbo_loss_fn, label="VariBAD")
-        vb_curve = np.array(eval_recurrent_per_step(
-            vb_model, params, k_eval_vb, N_EVAL)).tolist()
+        vb_r, vb_a = eval_recurrent_per_step(
+            vb_model, params, k_eval_vb, N_EVAL)
         out["varibad"] = {"n_iters": N_ITERS_REC,
                           "train_history": vb_hist,
-                          "reward_per_step": float(np.mean(vb_curve)),
-                          "per_step_curve": vb_curve}
-
-    # VariBAD+HN
-    k_vbhn, key = jax.random.split(key)
-    k_eval_vbhn, key = jax.random.split(key)
-    if should_run("varibad_hn"):
-        k_m, k_t = jax.random.split(k_vbhn)
-        vbhn_model = VariBADHNActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        vbhn_model, vbhn_hist = train_recurrent(
-            k_t, vbhn_model, varibad_hn_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=varibad_hn_elbo_loss_fn, label="VariBAD+HN")
-        vbhn_curve = np.array(eval_recurrent_per_step(
-            vbhn_model, params, k_eval_vbhn, N_EVAL)).tolist()
-        out["varibad_hn"] = {"n_iters": N_ITERS_REC,
-                             "train_history": vbhn_hist,
-                             "reward_per_step": float(np.mean(vbhn_curve)),
-                             "per_step_curve": vbhn_curve}
-
-    # V1: Stop-Gradient
-    k_v1, key = jax.random.split(key)
-    k_eval_v1, key = jax.random.split(key)
-    if should_run("v1_sg"):
-        k_m, k_t = jax.random.split(k_v1)
-        v1_model = V1SGActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v1_model, v1_hist = train_recurrent(
-            k_t, v1_model, v1_sg_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v1_sg_elbo_loss_fn, label="V1:StopGrad")
-        v1_curve = np.array(eval_recurrent_per_step(
-            v1_model, params, k_eval_v1, N_EVAL)).tolist()
-        out["v1_sg"] = {"n_iters": N_ITERS_REC,
-                        "train_history": v1_hist,
-                        "reward_per_step": float(np.mean(v1_curve)),
-                        "per_step_curve": v1_curve}
+                          "reward_per_step": float(np.mean(np.array(vb_r))),
+                          "per_step_curve": np.array(vb_r).tolist(),
+                          "abstain_curve": np.array(vb_a).tolist()}
 
     # V2: μ-Only
     k_v2, key = jax.random.split(key)
@@ -604,160 +540,40 @@ def main():
         v2_model, v2_hist = train_recurrent(
             k_t, v2_model, v2_mu_ppo_loss_fn, params, N_ITERS_REC,
             elbo_fn=v2_mu_elbo_loss_fn, label="V2:MuOnly")
-        v2_curve = np.array(eval_recurrent_per_step(
-            v2_model, params, k_eval_v2, N_EVAL)).tolist()
+        v2_r, v2_a = eval_recurrent_per_step(
+            v2_model, params, k_eval_v2, N_EVAL)
         out["v2_mu"] = {"n_iters": N_ITERS_REC,
                         "train_history": v2_hist,
-                        "reward_per_step": float(np.mean(v2_curve)),
-                        "per_step_curve": v2_curve}
+                        "reward_per_step": float(np.mean(np.array(v2_r))),
+                        "per_step_curve": np.array(v2_r).tolist(),
+                        "abstain_curve": np.array(v2_a).tolist()}
 
-    # V4: μ-as-Obs
-    k_v4, key = jax.random.split(key)
-    k_eval_v4, key = jax.random.split(key)
-    if should_run("v4_muobs"):
-        k_m, k_t = jax.random.split(k_v4)
-        v4_model = V4MuObsActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v4_model, v4_hist = train_recurrent(
-            k_t, v4_model, v4_muobs_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v4_muobs_elbo_loss_fn, label="V4:MuObs")
-        v4_curve = np.array(eval_recurrent_per_step(
-            v4_model, params, k_eval_v4, N_EVAL)).tolist()
-        out["v4_muobs"] = {"n_iters": N_ITERS_REC,
-                           "train_history": v4_hist,
-                           "reward_per_step": float(np.mean(v4_curve)),
-                           "per_step_curve": v4_curve}
-
-    # V5: Aux Regime
-    k_v5, key = jax.random.split(key)
-    k_eval_v5, key = jax.random.split(key)
-    if should_run("v5_aux"):
-        k_m, k_t = jax.random.split(k_v5)
-        v5_model = V5AuxActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS, n_tasks=params.n_arms,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v5_model, v5_hist = train_recurrent(
-            k_t, v5_model, v5_aux_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v5_aux_elbo_loss_fn, label="V5:AuxRegime",
-            elbo_needs_task_ids=True)
-        v5_curve = np.array(eval_recurrent_per_step(
-            v5_model, params, k_eval_v5, N_EVAL)).tolist()
-        out["v5_aux"] = {"n_iters": N_ITERS_REC,
-                         "train_history": v5_hist,
-                         "reward_per_step": float(np.mean(v5_curve)),
-                         "per_step_curve": v5_curve}
-
-    # V6: Logit Clip
-    k_v6, key = jax.random.split(key)
-    k_eval_v6, key = jax.random.split(key)
-    if should_run("v6_logitclip"):
-        k_m, k_t = jax.random.split(k_v6)
-        v6_model = V6LogitClipActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v6_model, v6_hist = train_recurrent(
-            k_t, v6_model, v6_logitclip_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v6_logitclip_elbo_loss_fn, label="V6:LogitClip")
-        v6_curve = np.array(eval_recurrent_per_step(
-            v6_model, params, k_eval_v6, N_EVAL)).tolist()
-        out["v6_logitclip"] = {"n_iters": N_ITERS_REC,
-                               "train_history": v6_hist,
-                               "reward_per_step": float(np.mean(v6_curve)),
-                               "per_step_curve": v6_curve}
-
-    # V7: High Entropy
-    k_v7, key = jax.random.split(key)
-    k_eval_v7, key = jax.random.split(key)
-    if should_run("v7_highent"):
-        k_m, k_t = jax.random.split(k_v7)
-        v7_model = V7HighEntActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v7_model, v7_hist = train_recurrent(
-            k_t, v7_model, v7_highent_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v7_highent_elbo_loss_fn, label="V7:HighEnt")
-        v7_curve = np.array(eval_recurrent_per_step(
-            v7_model, params, k_eval_v7, N_EVAL)).tolist()
-        out["v7_highent"] = {"n_iters": N_ITERS_REC,
-                             "train_history": v7_hist,
-                             "reward_per_step": float(np.mean(v7_curve)),
-                             "per_step_curve": v7_curve}
-
-    # V8: Conservative PPO
-    k_v8, key = jax.random.split(key)
-    k_eval_v8, key = jax.random.split(key)
-    if should_run("v8_conservative"):
-        k_m, k_t = jax.random.split(k_v8)
-        v8_model = V8ConservativeActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v8_model, v8_hist = train_recurrent(
-            k_t, v8_model, v8_conservative_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v8_conservative_elbo_loss_fn, label="V8:Conserv")
-        v8_curve = np.array(eval_recurrent_per_step(
-            v8_model, params, k_eval_v8, N_EVAL)).tolist()
-        out["v8_conservative"] = {"n_iters": N_ITERS_REC,
-                                  "train_history": v8_hist,
-                                  "reward_per_step": float(np.mean(v8_curve)),
-                                  "per_step_curve": v8_curve}
-
-    # V9: Normalized HN
-    k_v9, key = jax.random.split(key)
-    k_eval_v9, key = jax.random.split(key)
-    if should_run("v9_normedhn"):
-        k_m, k_t = jax.random.split(k_v9)
-        v9_model = V9NormedHNActorCritic(
-            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
-            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
-            policy_hidden=POLICY_HIDDEN, key=k_m)
-        v9_model, v9_hist = train_recurrent(
-            k_t, v9_model, v9_normedhn_ppo_loss_fn, params, N_ITERS_REC,
-            elbo_fn=v9_normedhn_elbo_loss_fn, label="V9:NormedHN")
-        v9_curve = np.array(eval_recurrent_per_step(
-            v9_model, params, k_eval_v9, N_EVAL)).tolist()
-        out["v9_normedhn"] = {"n_iters": N_ITERS_REC,
-                              "train_history": v9_hist,
-                              "reward_per_step": float(np.mean(v9_curve)),
-                              "per_step_curve": v9_curve}
-
-    # --- Save (merge into existing) ---
+    # --- Save ---
     os.makedirs(RESULTS_DIR, exist_ok=True)
     with open(OUT_JSON, "w") as f:
         json.dump(out, f, indent=2, cls=NumpyEncoder)
     print(f"\n  Results saved: {os.path.relpath(OUT_JSON, ROOT)}")
 
-    # --- Summary (only agents present in results) ---
+    # --- Summary ---
     print("\n" + "=" * 68)
-    print(f"  {'Agent':<16} {'reward/step':>12} {'vs Random':>10} "
-          f"{'vs BayesSide':>13}")
+    print(f"  {'Agent':<16} {'reward/step':>12} {'vs Abstain':>11} "
+          f"{'vs BayesOpt':>12}")
     print("  " + "-" * 62)
-    bs_rps = out["bayes_side"]["reward_per_step"]
-    for label, k in [("Random", "random"), ("PPO MLP", "ppo_mlp"),
+    bo_rps = out["bayes_optimal"]["reward_per_step"]
+    for label, k in [("Random", "random"),
+                     ("Always Abstain", "always_abstain"),
+                     ("PPO MLP", "ppo_mlp"),
                      ("RL²", "rl2"), ("RL²+HN", "rl2_hn"),
-                     ("VariBAD", "varibad"), ("VariBAD+HN", "varibad_hn"),
-                     ("V1:StopGrad", "v1_sg"),
+                     ("VariBAD", "varibad"),
                      ("V2:MuOnly", "v2_mu"),
-                     ("V4:MuObs", "v4_muobs"),
-                     ("V5:AuxRegime", "v5_aux"),
-                     ("V6:LogitClip", "v6_logitclip"),
-                     ("V7:HighEnt", "v7_highent"),
-                     ("V8:Conserv", "v8_conservative"),
-                     ("V9:NormedHN", "v9_normedhn"),
-                     ("Thompson", "thompson"),
-                     ("Bayes-Side", "bayes_side")]:
+                     ("Bayes-Optimal", "bayes_optimal")]:
         if k not in out:
             continue
         rps = out[k]["reward_per_step"]
-        print(f"  {label:<16} {rps:>12.4f} {rps - random_rps:>+10.4f} "
-              f"{rps - bs_rps:>+13.4f}")
+        print(f"  {label:<16} {rps:>12.4f} {rps - abstain_rps:>+11.4f} "
+              f"{rps - bo_rps:>+12.4f}")
     print("=" * 68)
-    print(f"\n  Plot with: uv run python scripts/plot_bandit_context.py\n")
+    print(f"\n  Plot: uv run python scripts/plot_bandit_context_abstain.py\n")
 
 
 if __name__ == "__main__":

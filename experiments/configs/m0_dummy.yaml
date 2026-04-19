@@ -1,0 +1,16 @@
+experiment_name: m0_dummy
+env:
+  name: dummy
+  params:
+    episode_length: 32
+    reward_value: 1.0
+    obs_size: 1
+    n_actions: 2
+agent:
+  name: dummy
+  params: {}
+iterations: 10
+parallel_envs: 64
+rollout_length: 32
+num_seeds: 3
+seed_base: 0

@@ -208,3 +208,13 @@ __marimo__/
 
 .DS_store
 .idea
+
+# Generated experiment outputs (per docs/implementation.md).
+# Carve out milestone review notes, which are committed review artifacts.
+/results/*
+!/results/milestones/
+/results/milestones/*
+!/results/milestones/M*/
+/results/milestones/M*/*
+!/results/milestones/M*/PASS.md
+!/results/milestones/M*/FAIL.md

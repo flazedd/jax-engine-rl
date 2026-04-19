@@ -82,8 +82,8 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 
 (Update this section as milestones pass.)
 
-- [ ] M0 — infrastructure skeleton
-- [ ] M1 — PPO on AS baseline
+- [x] M0 — infrastructure skeleton
+- [x] M1 — PPO on AS baseline
 - [ ] M2 — regime-switching env, R1–R4 verified
 - [ ] M3 — reference levels (answers RQ1)
 - [ ] M4 — implementation validation

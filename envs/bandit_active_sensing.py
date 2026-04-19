@@ -30,14 +30,14 @@ ABSTAIN_PAYOFF = 0.50
 
 # Action-dependent observation noise levels
 SIGMA_EXPLOIT = 4.0    # noisy — pulling correct arm obscures next signal
-SIGMA_EXPLORE = 1.5    # clear — pulling wrong arm reveals next signal
+SIGMA_EXPLORE = 2.5    # moderate — pulling wrong arm reveals next signal
 SIGMA_DEFAULT = 2.5    # moderate — abstain or initial observation
 
 
 class BanditActiveSensingParams(NamedTuple):
     """Immutable parameters for active sensing bandit."""
     n_arms: int = 5
-    t_episode: int = 15
+    t_episode: int = 10
     side_dim: int = 4
     sigma_exploit: float = SIGMA_EXPLOIT
     sigma_explore: float = SIGMA_EXPLORE

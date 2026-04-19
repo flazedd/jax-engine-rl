@@ -21,16 +21,16 @@ RESULTS_JSON = os.path.join(ROOT, "results", "bandit_active_sensing.json")
 PLOTS_DIR = os.path.join(ROOT, "plots")
 
 AGENTS = [
-    ("ppo_mlp",           "PPO MLP",         "#888888"),
-    ("rl2_hn",            "RL²+HN",          "#1f77b4"),
-    ("varibad",           "VariBAD",          "#2ca02c"),
-    ("v2_mu",             "V2:μOnly",         "#d62728"),
-    ("v18_predcoding",    "V18:PredCod",      "#e377c2"),
-    ("v21_attn_hn",       "V21:AttnHN",       "#17becf"),
-    ("v22_posterior_vel", "V22:Vel",           "#ff7f0e"),
-    ("v24_aux_classifier","V24:AuxCls",        "#bcbd22"),
-    ("v25_moe_hn",        "V25:MoE",           "#e6550d"),
+    ("ppo_mlp",           "PPO MLP",           "#888888"),
+    ("rl2_hn",            "RL²+HN",            "#1f77b4"),
+    ("varibad",           "VariBAD",           "#2ca02c"),
+    ("v2_mu",             "V2:μOnly",          "#d62728"),
+    ("v21_attn_hn",       "V21:AttnHN",        "#17becf"),
     ("v27_hindsight",     "V27:Hindsight",     "#b5152b"),
+    ("v28_discrete",      "V28:Discrete",      "#9467bd"),
+    ("v29_surprise",      "V29:Surprise",      "#8c564b"),
+    ("v30_abstain",       "V30:Abstain",       "#e377c2"),
+    ("v31_voi",           "V31:VoI",           "#ff7f0e"),
 ]
 
 
@@ -89,7 +89,11 @@ def main():
     for key, label, color in AGENTS:
         if key not in data:
             continue
-        ax2.plot(steps, data[key]["per_step_curve"], color=color,
+        curve = data[key]["per_step_curve"]
+        if len(curve) != t_episode:
+            print(f"  skipping {key}: curve length {len(curve)} != {t_episode}")
+            continue
+        ax2.plot(steps, curve, color=color,
                  linewidth=1.5, label=label, alpha=0.8)
     ax2.set_xlabel("Step within episode")
     ax2.set_ylabel("Mean reward")
@@ -124,7 +128,7 @@ def main():
     ax3.grid(True, alpha=0.3, axis="x")
 
     fig.suptitle("Active Sensing Bandit: Action-Dependent Observation Noise "
-                 "(σ_exploit=4.0, σ_explore=1.5, σ_default=2.5)",
+                 "(σ_exploit=4.0, σ_explore=2.5, σ_default=2.5)",
                  fontsize=12, fontweight="bold")
     fig.tight_layout()
     os.makedirs(PLOTS_DIR, exist_ok=True)

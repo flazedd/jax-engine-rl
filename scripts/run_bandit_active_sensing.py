@@ -80,6 +80,15 @@ from agents.v26_pred_attn import (V26PredAttnActorCritic,
 from agents.v27_hindsight import (V27HindsightActorCritic,
                                    v27_hindsight_ppo_loss_fn,
                                    v27_hindsight_elbo_loss_fn)
+from agents.v28_discrete_posterior import (V28DiscretePosteriorActorCritic,
+                                            v28_ppo_loss_fn, v28_elbo_loss_fn)
+from agents.v29_bayes_surprise import (V29BayesSurpriseActorCritic,
+                                        v29_ppo_loss_fn, v29_elbo_loss_fn,
+                                        bayesian_surprise_kl, BETA_SURPRISE)
+from agents.v30_abstain_gate import (V30AbstainGateActorCritic,
+                                      v30_ppo_loss_fn, v30_elbo_loss_fn)
+from agents.v31_voi_critic import (V31VoICriticActorCritic,
+                                    v31_ppo_loss_fn, v31_elbo_loss_fn)
 from agents.common import batch_gae, NumpyEncoder
 
 # ---------------------------------------------------------------------------
@@ -104,13 +113,9 @@ N_TRIALS = 128
 RESULTS_DIR = os.path.join(ROOT, "results")
 OUT_JSON = os.path.join(RESULTS_DIR, "bandit_active_sensing.json")
 
-ALL_AGENTS = ["ppo_mlp", "rl2", "rl2_hn", "varibad", "v2_mu",
-              "v10_musigma", "v11_curiosity", "v12_dualmu", "v13_prederr",
-              "v14_fastweight", "v15_plasticity", "v16_attention",
-              "v17_lottery", "v18_predcoding", "v19_worldmodel",
-              "v20_neuromod", "v21_attn_hn", "v22_posterior_vel",
-              "v23_contrastive", "v24_aux_classifier", "v25_moe_hn",
-              "v26_pred_attn", "v27_hindsight"]
+ALL_AGENTS = ["ppo_mlp", "rl2_hn", "varibad", "v2_mu",
+              "v21_attn_hn", "v27_hindsight",
+              "v28_discrete", "v29_surprise", "v30_abstain", "v31_voi"]
 
 import builtins
 _print = builtins.print
@@ -788,6 +793,131 @@ def eval_prederr_per_step(model, params, key, n_episodes):
 
 
 # ---------------------------------------------------------------------------
+# V29: Bayesian-surprise rollout (KL between consecutive posteriors)
+# ---------------------------------------------------------------------------
+
+def collect_surprise_rollout(key, model, params, n_trials):
+    """Rollout that adds β · KL(q_t || q_{t-1}) to extrinsic rewards."""
+    n_steps = EPISODES_PER_TRIAL * params.t_episode
+    k_reset, k_roll = jax.random.split(key)
+    reset_keys = jax.random.split(k_reset, n_trials)
+    states, obs = jax.vmap(env_reset, in_axes=(0, None))(reset_keys, params)
+    prev_act = jnp.zeros((n_trials, N_ACTIONS))
+    prev_rew = jnp.zeros((n_trials, 1))
+    gru_st = jnp.zeros((n_trials, model.hidden_size))
+    prev_mu = jnp.zeros((n_trials, model.latent_dim))
+    prev_sig = jnp.ones((n_trials, model.latent_dim))
+    all_keys = jax.random.split(k_roll, n_steps * 3).reshape(n_steps, 3, -1)
+
+    def scan_step(carry, keys_t):
+        states, obs, prev_act, prev_rew, gru_st, prev_mu, prev_sig = carry
+        k_act, k_env, k_rst = keys_t[0], keys_t[1], keys_t[2]
+        aug = jnp.concatenate([obs, prev_act, prev_rew], axis=-1)
+        stored_h = gru_st
+        logits, values, new_gru_st = jax.vmap(
+            lambda x, o, h: model.forward_step(x, o, h))(aug, obs, gru_st)
+        curr_mu, curr_sig = jax.vmap(model.get_mu_sigma)(new_gru_st)
+        surprise = jax.vmap(bayesian_surprise_kl)(
+            curr_mu, curr_sig, prev_mu, prev_sig)
+        bonus = BETA_SURPRISE * surprise
+
+        act_keys = jax.random.split(k_act, n_trials)
+        actions = jax.vmap(
+            jax.random.categorical, in_axes=(0, 0))(act_keys, logits)
+        lp_all = jax.nn.log_softmax(logits)
+        lp = jnp.take_along_axis(lp_all, actions[:, None], axis=1).squeeze(1)
+        env_keys = jax.random.split(k_env, n_trials)
+        new_s, new_o, rews, dones, _ = jax.vmap(
+            env_step, in_axes=(0, 0, 0, None))(env_keys, states, actions, params)
+        augmented_rews = rews + bonus
+        next_obs = new_o
+        rst_keys = jax.random.split(k_rst, n_trials)
+
+        def maybe_reset(done, ns, no, rk):
+            rs, ro = env_reset(rk, params)
+            return (jax.tree.map(lambda a, b: jnp.where(done, a, b), rs, ns),
+                    jnp.where(done, ro, no))
+        final_s, final_o = jax.vmap(maybe_reset)(dones, new_s, new_o, rst_keys)
+        # Reset prev posterior on done (start of next episode in trial)
+        reset_mu = jnp.where(dones[:, None], jnp.zeros_like(curr_mu), curr_mu)
+        reset_sig = jnp.where(dones[:, None], jnp.ones_like(curr_sig), curr_sig)
+        carry = (final_s, final_o, jax.nn.one_hot(actions, N_ACTIONS),
+                 rews[:, None], new_gru_st, reset_mu, reset_sig)
+        return carry, Trajectory(
+            obs=obs, actions=actions, rewards=augmented_rews, dones=dones,
+            log_probs=lp, values=values,
+            prev_actions_oh=prev_act, prev_rewards=prev_rew,
+            gru_h=stored_h, next_obs=next_obs,
+            task_ids=states.task_id)
+
+    _, traj = jax.lax.scan(
+        scan_step,
+        (states, obs, prev_act, prev_rew, gru_st, prev_mu, prev_sig),
+        all_keys)
+    return traj
+
+
+def train_surprise(key, model, loss_fn, params, n_iters,
+                   elbo_fn=None, label="V29:Surprise"):
+    optimizer = optax.chain(optax.clip_by_global_norm(0.5), optax.adam(3e-4))
+    opt_st = optimizer.init(eqx.filter(model, eqx.is_array))
+
+    @eqx.filter_jit
+    def ppo_update(model, opt_st, batch):
+        loss, grads = eqx.filter_value_and_grad(
+            lambda m: loss_fn(m, batch))(model)
+        updates, new_opt = optimizer.update(
+            grads, opt_st, eqx.filter(model, eqx.is_array))
+        return eqx.apply_updates(model, updates), new_opt
+
+    if elbo_fn is not None:
+        @eqx.filter_jit
+        def elbo_update(model, opt_st, elbo_data, rng_key):
+            loss, grads = eqx.filter_value_and_grad(
+                lambda m: elbo_fn(m, elbo_data, rng_key))(model)
+            updates, new_opt = optimizer.update(
+                grads, opt_st, eqx.filter(model, eqx.is_array))
+            return eqx.apply_updates(model, updates), new_opt
+
+    history = []
+    t0 = time.time()
+    for it in range(n_iters):
+        k_coll, k_elbo, key = jax.random.split(key, 3)
+        traj = collect_surprise_rollout(k_coll, model, params, N_TRIALS)
+        history.append(float(jnp.mean(traj.rewards)))
+        bootstrap = traj.values[-1]
+        adv, ret = batch_gae(traj.rewards, traj.values, traj.dones,
+                             bootstrap, 0.99, 0.95)
+        if elbo_fn is not None:
+            elbo_data = (traj.obs, traj.actions, traj.rewards, traj.next_obs,
+                         traj.prev_actions_oh, traj.prev_rewards)
+            model, opt_st = elbo_update(model, opt_st, elbo_data, k_elbo)
+        flat = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), traj)
+        adv_f = adv.reshape(-1)
+        ret_f = ret.reshape(-1)
+        total = flat.obs.shape[0]
+        k_shuf, key = jax.random.split(key)
+        for _ in range(3):
+            k_p, k_shuf = jax.random.split(k_shuf)
+            perm = jax.random.permutation(k_p, total)
+            for start in range(0, total, 512):
+                idx = perm[start:start + 512]
+                mb_adv = adv_f[idx]
+                mb_adv = (mb_adv - mb_adv.mean()) / (mb_adv.std() + 1e-8)
+                mb = (flat.obs[idx], flat.prev_actions_oh[idx],
+                      flat.prev_rewards[idx], flat.gru_h[idx],
+                      flat.actions[idx], flat.log_probs[idx],
+                      mb_adv, ret_f[idx])
+                model, opt_st = ppo_update(model, opt_st, mb)
+        if it % max(1, n_iters // 20) == 0:
+            _print(f"\r    {label:<12s} iter {it:4d}/{n_iters} "
+                   f"[{time.time() - t0:.0f}s]", end="", flush=True)
+    _print(f"\r    {label:<12s} iter {n_iters:4d}/{n_iters} "
+           f"[{time.time() - t0:.0f}s]    ")
+    return model, history
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1334,6 +1464,89 @@ def main():
             "per_step_curve": np.array(v27_r).tolist(),
             "abstain_curve": np.array(v27_a).tolist()}
 
+    # V28: Discrete-Posterior HN (needs task_ids)
+    k_v28, key = jax.random.split(key)
+    k_eval_v28, key = jax.random.split(key)
+    if should_run("v28_discrete"):
+        k_m, k_t = jax.random.split(k_v28)
+        v28_model = V28DiscretePosteriorActorCritic(
+            INPUT_SIZE, OBS_SIZE, N_ACTIONS, n_tasks=N_ARMS,
+            hidden_size=HIDDEN_SIZE, policy_hidden=POLICY_HIDDEN, key=k_m)
+        v28_model, v28_hist = train_recurrent_taskids(
+            k_t, v28_model, v28_ppo_loss_fn, params, N_ITERS_REC,
+            elbo_fn=v28_elbo_loss_fn, label="V28:Discrete")
+        v28_r, v28_a = eval_recurrent_per_step(
+            v28_model, params, k_eval_v28, N_EVAL)
+        out["v28_discrete"] = {
+            "n_iters": N_ITERS_REC,
+            "train_history": v28_hist,
+            "reward_per_step": float(np.mean(np.array(v28_r))),
+            "per_step_curve": np.array(v28_r).tolist(),
+            "abstain_curve": np.array(v28_a).tolist()}
+
+    # V29: Bayesian-surprise shaping (custom rollout)
+    k_v29, key = jax.random.split(key)
+    k_eval_v29, key = jax.random.split(key)
+    if should_run("v29_surprise"):
+        k_m, k_t = jax.random.split(k_v29)
+        v29_model = V29BayesSurpriseActorCritic(
+            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
+            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
+            policy_hidden=POLICY_HIDDEN, key=k_m)
+        v29_model, v29_hist = train_surprise(
+            k_t, v29_model, v29_ppo_loss_fn, params, N_ITERS_REC,
+            elbo_fn=v29_elbo_loss_fn, label="V29:Surprise")
+        v29_r, v29_a = eval_recurrent_per_step(
+            v29_model, params, k_eval_v29, N_EVAL)
+        out["v29_surprise"] = {
+            "n_iters": N_ITERS_REC,
+            "train_history": v29_hist,
+            "reward_per_step": float(np.mean(np.array(v29_r))),
+            "per_step_curve": np.array(v29_r).tolist(),
+            "abstain_curve": np.array(v29_a).tolist()}
+
+    # V30: Decision-theoretic abstain gate
+    k_v30, key = jax.random.split(key)
+    k_eval_v30, key = jax.random.split(key)
+    if should_run("v30_abstain"):
+        k_m, k_t = jax.random.split(k_v30)
+        v30_model = V30AbstainGateActorCritic(
+            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
+            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
+            policy_hidden=POLICY_HIDDEN, key=k_m)
+        v30_model, v30_hist = train_recurrent(
+            k_t, v30_model, v30_ppo_loss_fn, params, N_ITERS_REC,
+            elbo_fn=v30_elbo_loss_fn, label="V30:Abstain")
+        v30_r, v30_a = eval_recurrent_per_step(
+            v30_model, params, k_eval_v30, N_EVAL)
+        out["v30_abstain"] = {
+            "n_iters": N_ITERS_REC,
+            "train_history": v30_hist,
+            "reward_per_step": float(np.mean(np.array(v30_r))),
+            "per_step_curve": np.array(v30_r).tolist(),
+            "abstain_curve": np.array(v30_a).tolist()}
+
+    # V31: Value-of-Information dual critic
+    k_v31, key = jax.random.split(key)
+    k_eval_v31, key = jax.random.split(key)
+    if should_run("v31_voi"):
+        k_m, k_t = jax.random.split(k_v31)
+        v31_model = V31VoICriticActorCritic(
+            INPUT_SIZE, OBS_SIZE, N_ACTIONS,
+            hidden_size=HIDDEN_SIZE, latent_dim=LATENT_DIM,
+            policy_hidden=POLICY_HIDDEN, key=k_m)
+        v31_model, v31_hist = train_recurrent(
+            k_t, v31_model, v31_ppo_loss_fn, params, N_ITERS_REC,
+            elbo_fn=v31_elbo_loss_fn, label="V31:VoI")
+        v31_r, v31_a = eval_recurrent_per_step(
+            v31_model, params, k_eval_v31, N_EVAL)
+        out["v31_voi"] = {
+            "n_iters": N_ITERS_REC,
+            "train_history": v31_hist,
+            "reward_per_step": float(np.mean(np.array(v31_r))),
+            "per_step_curve": np.array(v31_r).tolist(),
+            "abstain_curve": np.array(v31_a).tolist()}
+
     # --- Save ---
     os.makedirs(RESULTS_DIR, exist_ok=True)
     with open(OUT_JSON, "w") as f:
@@ -1367,6 +1580,10 @@ def main():
                      ("V25:MoE", "v25_moe_hn"),
                      ("V26:PredAttn", "v26_pred_attn"),
                      ("V27:Hindsight", "v27_hindsight"),
+                     ("V28:Discrete", "v28_discrete"),
+                     ("V29:Surprise", "v29_surprise"),
+                     ("V30:Abstain", "v30_abstain"),
+                     ("V31:VoI", "v31_voi"),
                      ("Bayes-Optimal", "bayes_optimal")]:
         if k not in out:
             continue

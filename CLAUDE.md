@@ -108,7 +108,7 @@ Then, on the two belief-learning methods (RL², VariBAD), run a 2×2 factorial o
 
 **Measurements per configuration.**
 - Return (gap-closed fractions relative to Oracle-PPO and Belief-PPO).
-- Posterior approximation error: bidirectional mapping error between inferred belief and analytical HMM posterior.
+- Posterior approximation error: symmetric KL divergence between inferred belief (mapped to simplex via the linear probe specified in Statistical methodology) and analytical HMM posterior.
 - Regime classification accuracy from the inferred belief.
 
 **Factorial ablation (orthogonal-axes subsection under RQ2).** The factorial tests whether integration mechanism and exploration bonus are separable axes of method design, or whether they interact with belief source. Specifically:
@@ -139,7 +139,7 @@ The mu-only vs full-posterior ablation is separate (it's a question about what p
   - *Why it matters.* Same role as in RQ1: the bar chart is a snapshot, this plot is the diagnostic that confirms the snapshot is from a settled point in training. Also reveals qualitative differences that the final-return bar chart hides (e.g., "VariBAD converges twice as fast as RL²").
 
 - `fig_rq2_posterior_error.png`
-  - *What it shows.* Line plot, x = iteration, y = bidirectional mapping error between inferred belief and analytical HMM posterior (averaged over a held-out trajectory set). One line per belief-based method (RL², VariBAD).
+  - *What it shows.* Line plot, x = iteration, y = symmetric KL divergence between inferred belief (mapped to simplex via the linear probe specified in Statistical methodology) and analytical HMM posterior (averaged over a held-out trajectory set). One line per belief-based method (RL², VariBAD).
   - *What it tells you.* Whether methods are learning the posterior, how fast they get there, and the ranking of methods *by belief quality* (which may differ from ranking by return).
   - *Why it matters.* The analytical posterior is your setup's unique asset. This plot is the operationalization of that asset — a direct measurement of inference quality that most meta-RL benchmarks cannot produce. Also the input to RQ3's posterior-vs-performance analysis.
 
@@ -198,7 +198,7 @@ At each difficulty point and for each method, plot gap-closure (y) vs posterior 
   - *Why it matters.* Persistence and distinguishability are two different sources of inference difficulty — a method might be robust to one and fragile to the other. Separating the axes surfaces that distinction, which a 2D heatmap would bury.
 
 - `fig_rq3_persistence_posterior_error.png`
-  - *What it shows.* Same axes as the gap-closure sweep, but y-axis = posterior approximation error (bidirectional mapping error vs analytical HMM posterior). One line per belief-based method.
+  - *What it shows.* Same axes as the gap-closure sweep, but y-axis = posterior approximation error (symmetric KL divergence vs analytical HMM posterior, via linear probe). One line per belief-based method.
   - *What it tells you.* How belief inference quality degrades with regime persistence. Useful paired with the gap-closure plot: if posterior error rises and gap-closure falls together, belief quality is driving performance; if they come apart, something else is going on.
   - *Why it matters.* This plot is the setup for the posterior-vs-performance scatter. It shows the marginal relationship between difficulty and belief quality, which you then condition on in the scatter.
 
@@ -328,21 +328,25 @@ This framing should be stated explicitly in the thesis: *"The MM environment is 
 
 ### Problem requirements
 
-The MM environment must satisfy the following properties for the thesis to be well-posed. These are the foundation that makes meta-RL a meaningful thing to study here — if any of them fail, the research questions collapse.
+The MM environment must satisfy the following properties for the thesis to be well-posed. These are the foundation that makes meta-RL a meaningful thing to study here — if any of them fail, the research questions collapse. Concrete thresholds are committed in the M2 JSON schema; what follows is the conceptual statement.
 
-**R1. Regime-conditional policy divergence.** The optimal policy on each locked regime must differ meaningfully from the optimal policies on other regimes. Formally: the VI-derived optimal policies on the three locked regimes should disagree on a non-trivial fraction of the state space, and where they disagree, the value loss from playing the wrong regime's policy should be substantial.
+**R1. Regime-conditional policy divergence.** The optimal policy on each locked regime must differ across regimes, and the value loss from playing the wrong regime's policy must be real.
+*Threshold:* `fraction_disagreeing_states >= 0.15` AND `wrong_regime_value_loss_as_fraction_of_optimal_return >= 0.10`.
 *Why required:* if optimal policies are the same across regimes, regime information is useless and no method can benefit from it. There is nothing to study.
 
-**R2. PPO achieves optimality on locked regimes.** A PPO agent trained on a single locked regime (per-regime PPO) should converge to the regime-conditional optimum (matching VI). This must hold for every regime.
+**R2. PPO achieves optimality on locked regimes.** A PPO agent trained on a single locked regime must converge to the regime-conditional optimum (matching VI). This must hold for every regime.
+*Threshold:* `min_ratio >= 0.85` in M2 diagnostic, `>= 0.95` in full-budget M1/M3 re-verification.
 *Why required:* if PPO cannot learn a locked regime's optimum, any failure of PPO on the mixed setting is attributable to optimization, not to the regime-switching structure. The ceiling decomposition loses meaning.
 
-**R3. PPO settles on a strictly suboptimal compromise on mixed regimes.** A regime-agnostic PPO trained on the full HMM-generated trajectories must converge to a stationary policy whose return is meaningfully below the return achievable with regime information (Oracle-PPO) and below the regime-conditional optimum (per-regime PPO). The gap must be large enough that the variation across seeds does not swamp it.
+**R3. PPO settles on a strictly suboptimal compromise on mixed regimes.** A regime-agnostic PPO trained on the full HMM-generated trajectories must converge to a return below Oracle-PPO and below per-regime PPO. The gap must exceed seed-level CI width by a clear margin.
+*Threshold:* `gap_to_ci_ratio >= 3.0`.
 *Why required:* this is the gap that meta-RL methods are asked to close. Without a measurable gap, there is no room for belief-conditioned methods to shine.
 
-**R4. Regime inferability from history.** The HMM posterior over regime, conditioned on a reasonable finite history of observations, must sharpen meaningfully — i.e. it cannot remain close to the stationary prior indefinitely. Belief-PPO must close a non-trivial fraction of the Oracle-PPO gap.
+**R4. Regime inferability from history.** The HMM posterior must sharpen with evidence, and a policy conditioned on it must improve performance over regime-agnostic PPO.
+*Threshold:* `entropy_decay_fraction >= 0.30` AND `belief_ppo_gap_closure_fraction >= 0.30`.
 *Why required:* if the regime is not inferable from observations, no belief-based method can succeed regardless of its machinery. RQ2 becomes unanswerable.
 
-These requirements are verified empirically on the chosen parameterization before main experiments begin. See **Sanity checks** below.
+These requirements are verified empirically on the chosen parameterization in M2. The `oracles/verify_requirements.py` script produces `stats_M2_requirements.json` containing the pass/fail decision for each R.
 
 ### Action space: discrete, not continuous
 
@@ -485,7 +489,62 @@ Training is structured as a small number of **iterations** (outer loop steps), e
 
 - JIT compilation overhead is one-time per seed — compile the full rollout + update step once, then run 100 iterations. Keep function signatures shape-stable.
 - Env throughput matters less than at long-horizon training; agent forward/backward pass dominates.
-- Ladder scope pre-commitment remains important. Even with short curves, 11 methods × 5 seeds × M4 is non-trivial wall-clock — plan for overnight runs.
+- Ladder scope pre-commitment remains important. Even with short curves, 7 ladder methods + 6 additional factorial cells + mu-only ablation = 14 unique configurations × 5 seeds on MM is non-trivial wall-clock — plan for overnight runs in M5.
+
+### JAX performance discipline
+
+JAX's performance comes from aggressive compilation, not from being a numpy replacement. The difference between a JAX project running at 10% of hardware and at 90% is almost entirely about whether the code is written to compile well. The rules below are committed design constraints; every module in the project follows them.
+
+**Compile the largest possible function.** The unit of compilation is `jit`ted, and JIT overhead is amortized over how much work it does. Compile the whole rollout + update step for a seed into one function, not one call per env-step. Concretely, `training/train.py` wraps the entire (reset-to-convergence) inner loop in `jit` where possible, or at least the per-iteration (rollout + GAE + update) step. Compile once at the start of a seed, run 100 iterations, never recompile mid-run.
+
+**Shape-stability is non-negotiable.** Every `jit`ted function has fully static shapes in and out. This means:
+- `parallel_envs`, `rollout_length`, `batch_size` are known at compile time and fixed for an entire seed.
+- No Python-side `if shape == ...` branching inside `jit` regions.
+- No dynamic `jnp.arange(n)` where `n` varies across calls. Use `jax.lax.dynamic_slice` when you need indexing with runtime indices.
+- Padding to fixed shapes is fine and often necessary. The cost of computing over slightly-more elements is far smaller than the cost of triggering recompilation.
+
+**Use `lax.scan` for sequential structure, not Python loops.** Anywhere you'd be tempted to write `for t in range(T)` inside a JAX function (rollouts, GAE, recurrent state updates, HMM forward algorithm), use `jax.lax.scan` instead. Python loops inside JIT are either unrolled (compile-time blow-up) or cause recompilation per iteration. `scan` is the correct pattern.
+
+**Use `vmap` for batch parallelism, not Python loops or list comprehensions.** Parallel envs are batched via `vmap`, not via a Python loop over env instances. Every env interaction — reset, step, reward, done detection — is written as a scalar function and vectorized with `vmap`. Same rule for computing advantages across envs, or per-seed bootstrap resampling.
+
+**Minimize pytree structure churn.** Every `act`/`update` call takes and returns pytrees with *identical structure* across calls. Adding or removing keys mid-run invalidates the compilation cache. The `AgentState` pytree schema is fixed for a seed; if metadata varies, put it in a sidecar that's not part of the JIT'd function.
+
+**Random keys are threaded, not created ad hoc.** `jax.random.PRNGKey(seed)` is called once per seed at the start; all subsequent randomness is produced by `jax.random.split`. Never call `PRNGKey` inside a JIT'd function — the seed would be baked in at compile time, so every call uses the same "random" values.
+
+**Pure functions only inside JIT.** No side effects, no logging, no file I/O, no Python-side mutation of state. Side effects go in the outer loop that calls the JIT'd function. If you need to log per-iteration metrics, the JIT'd function *returns* metrics as part of its output pytree, and the outer loop writes them out after the call completes.
+
+**Static shapes for env state.** `env_state` pytrees are shape-stable across the entire rollout, including after `done=True`. An env with variable-length episodes still uses a fixed-shape `env_state` plus a `done` mask. The rollout never returns early — it scans for `rollout_length` steps every time, and `done` flags are used in GAE to mask advantages at episode boundaries.
+
+**Avoid `jax.device_put` inside loops.** Host-to-device transfers are expensive on any backend. Data lives on device from the moment it's created until results are read out.
+
+**Profile if in doubt.** `jax.profiler.trace()` gives a flame-graph showing compile time vs execution time per function. If a milestone is slower than expected, profile before guessing. Symptoms of bad compilation: first iteration takes forever (expected), *second* iteration also takes forever (bad — probably recompiling due to shape drift).
+
+**Specific idiom checklist.** For every new function in the project, check:
+- [ ] Marked with `@jax.jit` or called inside a `jit`'d caller?
+- [ ] All inputs have fixed shapes across calls?
+- [ ] No Python control flow depending on array values (use `lax.cond` / `lax.switch` if needed)?
+- [ ] No `for` loops that should be `scan` or `vmap`?
+- [ ] Returns pytrees with fixed structure?
+- [ ] Takes a `key` parameter for any randomness, doesn't create its own?
+
+**Common footguns and their fixes.**
+- **Recompilation every iteration**: shape of some input is drifting. Log shapes at function entry; one of them is lying about being static.
+- **Slow first iteration, slow again later at iteration ~N**: you're hitting the JIT cache limit. Consolidate compiled functions.
+- **NaN gradients that appear only at certain batch sizes**: numerical instability in softmax or log computations. Use `jax.nn.log_softmax` and `jax.nn.logsumexp` rather than manual `log(softmax(...))`.
+- **`vmap` over an env with state-dependent branching fails**: env `step` must be written with `lax.cond`/`lax.select` rather than `if/else`. Every branch of a conditional runs; `lax.select` picks the output.
+- **Rollout loop is Python-slow despite JIT**: the `scan` body is reconstructing Python objects. Ensure the body returns raw arrays, not custom classes, and that the carry is a flat pytree.
+
+**JAX performance is verified, not assumed.** Each milestone's build order ends with a run-mode test that records iteration time. Track this in `stats_M{n}_*.json`:
+```json
+"timing": {
+  "compile_time_seconds": ...,    // time for first iteration
+  "per_iter_time_seconds": ...,   // median over iterations 2–N
+  "iterations_run": ...,
+  "compile_ratio": ...            // compile / (compile + total_run)
+}
+```
+
+If `per_iter_time` drifts upward or `compile_ratio` is suspiciously high (>10% on full runs), something is recompiling. This is a diagnostic, not a pass criterion — but if it's degenerate, investigate before continuing.
 
 ### Configuration
 
@@ -611,7 +670,7 @@ This is also a token-cost rule — reading a PNG costs ~2000 tokens; reading the
 - Writes convergence stats and final policy.
 - Final stdout: `[vi] OK | converged_at_iter=847 | bellman_residual=1.2e-7 | output=results/oracles/vi_regime_0.json`
 
-**Why this matters.** When running dozens of experiments in batches (e.g., `run_ladder.sh`), the only practical way to verify everything worked is `grep "OK\|FAIL" logs/*.log`. Without this discipline, failure diagnosis becomes archaeology through full logs.
+**Why this matters.** When running dozens of experiments in batches (e.g., `run_ladder.py`), the only practical way to verify everything worked is `grep "OK\|FAIL" logs/*.log`. Without this discipline, failure diagnosis becomes archaeology through full logs.
 
 **Script output schema.**
 
@@ -630,7 +689,7 @@ Every script's summary JSON conforms to a minimal shared schema:
 }
 ```
 
-Every script writes this alongside its main output. Enables automated milestone verification and lets `make_milestone.sh` check that every step produced its expected artifacts before regenerating plots.
+Every script writes this alongside its main output. Enables automated milestone verification and lets `scripts/make_milestone.py` check that every step produced its expected artifacts before regenerating plots.
 
 ## Repo layout
 
@@ -690,8 +749,16 @@ thesis/
 │   ├── __init__.py
 │   ├── train.py                     # main entry point; dispatches by agent/env in config
 │   ├── rollout.py                   # lax.scan rollout utilities
-│   ├── ppo_update.py                # shared PPO loss/update (reused by every PPO-based agent)
-│   ├── varibad_update.py            # VariBAD ELBO + PPO joint update (separate optimizers)
+│   ├── ppo_update.py                # shared PPO loss/update. Used by every PPO-based agent
+│   │                                #   including RL² — RL²'s loss is ordinary PPO loss,
+│   │                                #   it differs only in architecture (recurrent) and data
+│   │                                #   handling (trajectory-level minibatches). Branches on
+│   │                                #   is_recurrent=True to preserve temporal order.
+│   ├── varibad_update.py            # VariBAD-specific update: PPO loss + ELBO with two
+│   │                                #   optimizers on two parameter groups (encoder/decoder
+│   │                                #   vs policy). Internally calls ppo_update for the PPO
+│   │                                #   portion. Needs its own file because the joint
+│   │                                #   optimization structure is genuinely different.
 │   └── config.py                    # dataclass configs per experiment + apply_run_mode()
 │
 ├── evaluation/
@@ -700,9 +767,9 @@ thesis/
 │   │                                #   factorial marginal means
 │   ├── comparisons.py               # paired Wilcoxon + Holm correction + bootstrap CI;
 │   │                                #   produces the "supported / not supported" decisions
-│   ├── posterior_compare.py         # bidirectional mapping error vs analytical HMM posterior.
-│   │                                #   Uses a trained linear probe from inferred belief to
-│   │                                #   simplex; probe choice documented and held fixed.
+│   ├── posterior_compare.py         # symmetric KL vs analytical HMM posterior, via linear
+│   │                                #   probe to simplex (probe frozen after M5; see
+│   │                                #   Statistical methodology)
 │   └── posterior_performance.py     # M6 decoupling analysis: scatter of gap-closed vs
 │                                    #   posterior error, per-method Spearman correlations
 │
@@ -715,8 +782,9 @@ thesis/
 │   ├── __init__.py
 │   ├── style.py                     # apply_style(): colors, fonts, sizes. Called by every plot.
 │   ├── load_results.py              # parse .json result files, handle missing fields
-│   ├── make_milestone.py            # regenerate all figures for a milestone. Invoke:
-│   │                                #   uv run python -m plotting.make_milestone M{n}
+│   ├── regenerate_figures.py        # regenerate all figures for a milestone from existing JSONs.
+│   │                                #   Called by scripts/make_milestone.py; usable standalone:
+│   │                                #     uv run python -m plotting.regenerate_figures M{n}
 │   ├── learning_curves.py           # training curves with CI bands (RQ1, RQ2, M1, M2, etc.)
 │   ├── gap_decomposition.py         # fig_rq1_ceilings_bar, fig_rq1_gap_fractions
 │   ├── posterior_quality.py         # fig_rq2_posterior_error, fig_M4_varibad_posterior_sharpening
@@ -775,15 +843,19 @@ thesis/
 │   ├── test_oracles.py              # VI convergence, policy stability
 │   ├── test_leak.py                 # regression: regime doesn't leak into non-oracle agents
 │   ├── test_run_modes.py            # --super-fast < 30s, --fast < 5min
-│   └── test_script_output.py        # every write_summary JSON validates against schema
+│   ├── test_script_output.py        # every write_summary JSON validates against schema
+│   └── test_jax_perf.py             # second iteration doesn't recompile; catches shape drift
 │
 ├── scripts/
-│   ├── make_milestone.sh            # orchestrate a milestone: run training, dump JSON, plot,
-│   │                                #   check all artifacts present. Called as:
-│   │                                #   scripts/make_milestone.sh M{n}
-│   ├── run_sweep.py                 # M6 orchestration: run a grid of (difficulty × method
-│   │                                #   × seed) configs and aggregate into stats_M6_sweep.json
-│   └── run_ladder.sh                # batch runner for M5 ladder (calls train.py per method)
+│   ├── __init__.py
+│   ├── make_milestone.py            # orchestrate a milestone end-to-end: run training,
+│   │                                #   dump JSONs, generate plots, check artifacts,
+│   │                                #   verify pass criteria. Called as:
+│   │                                #     uv run python -m scripts.make_milestone M{n}
+│   ├── run_ladder.py                # batch runner for M5 ladder (invokes train over
+│   │                                #   each method config, then calls make_milestone M5)
+│   └── run_sweep.py                 # M6 orchestration: run a grid of (difficulty × method
+│                                    #   × seed) configs and aggregate into stats_M6_sweep.json
 │
 ├── results/                         # gitignored; generated outputs
 │   ├── milestones/                  # milestone-level artifacts
@@ -832,6 +904,8 @@ These appear in the layout only if the corresponding scope decision goes "yes":
 **Per-regime PPO = PPO × N.** `agents/ppo_per_regime.py` is a thin wrapper that trains N independent instances of `ppo.py` on locked regimes, then reports either the regime-conditional optimum (evaluation on the matching regime) or an oracle-switched composite.
 
 **All composition is in configs, not code.** Whether an RL² run uses hypernet or concat, bonus or no bonus, is a config value. The same `rl2.py` file serves all factorial cells.
+
+**One update file per distinct loss structure, not per agent.** `ppo_update.py` covers every agent whose loss is pure PPO: vanilla PPO, Oracle-PPO, Belief-PPO, per-regime PPO, *and RL²*. RL² differs from vanilla PPO in architecture (recurrent) and minibatching (trajectory-level to preserve temporal order), not in the loss function — so it uses the same update file with `is_recurrent=True`. Only VariBAD has a different loss structure (joint PPO + ELBO with two optimizers on two parameter groups), so only VariBAD gets its own `varibad_update.py`. Hypernet and exploration bonus don't warrant their own update files either: hypernet adds parameters that are trained through the same backward pass, and exploration bonus adds an extra reward term that flows through normal advantage computation.
 
 **Milestone artifacts have two homes.** `results/milestones/M{n}/` for JSONs and `figures/milestones/M{n}/` for PNGs. Thesis figures are additionally copied to `figures/thesis/` under the `fig_rqN_*.png` name.
 
@@ -1005,6 +1079,157 @@ class Agent:
 ```
 Namespacing by component makes failure diagnosis trivial ("VariBAD's KL is blowing up" vs "VariBAD's return isn't improving" are different debugging paths).
 
+### `agents/modules/hypernet.py`
+
+The hypernet is a composable module that replaces the concat-integration path in RL² or VariBAD. Instead of the belief being concatenated to the observation and fed through a fixed policy network, the belief is fed to a hypernet that *generates the weights* of a small target policy network. The target network then maps observation to action logits using those belief-generated weights.
+
+**Concrete shape** (flax):
+
+```python
+# agents/modules/hypernet.py
+import flax.linen as nn
+import jax.numpy as jnp
+from typing import Tuple
+
+class Hypernet(nn.Module):
+    """Maps a belief vector to the weights of a small target policy network.
+
+    The target network is a fixed 2-layer MLP: obs_dim → hidden → action_dim.
+    Only the target weights (not its architecture) depend on the belief.
+    """
+    target_obs_dim: int
+    target_hidden: int
+    target_output_dim: int    # action_dim
+    hypernet_hidden: int
+
+    def target_param_count(self) -> int:
+        """Total scalar weights needed to parameterize the target network."""
+        return (
+            self.target_obs_dim * self.target_hidden + self.target_hidden
+            + self.target_hidden * self.target_output_dim + self.target_output_dim
+        )
+
+    @nn.compact
+    def __call__(self, belief: jnp.ndarray) -> jnp.ndarray:
+        """Belief → flat weight vector for the target network."""
+        h = nn.Dense(self.hypernet_hidden)(belief)
+        h = nn.relu(h)
+        return nn.Dense(self.target_param_count())(h)
+
+    def apply_target(self, flat_weights: jnp.ndarray, obs: jnp.ndarray) -> jnp.ndarray:
+        """Unpack flat weights into target-network tensors and do forward pass."""
+        i = 0
+        W1 = flat_weights[i:i + self.target_obs_dim * self.target_hidden] \
+                .reshape(self.target_obs_dim, self.target_hidden)
+        i += self.target_obs_dim * self.target_hidden
+        b1 = flat_weights[i:i + self.target_hidden]
+        i += self.target_hidden
+        W2 = flat_weights[i:i + self.target_hidden * self.target_output_dim] \
+                .reshape(self.target_hidden, self.target_output_dim)
+        i += self.target_hidden * self.target_output_dim
+        b2 = flat_weights[i:i + self.target_output_dim]
+        h = jnp.maximum(obs @ W1 + b1, 0.0)
+        return h @ W2 + b2
+```
+
+**How agents use it.** Agents that support hypernet integration branch on `config.integration` in `setup`:
+
+```python
+# agents/varibad.py (sketch)
+def setup(self, config):
+    self.encoder = VariationalEncoder(...)
+    self.decoder = Decoder(...)
+    if config.integration == "concat":
+        self.policy = PolicyMLP(input_dim=config.obs_dim + config.belief_dim, ...)
+    elif config.integration == "hypernet":
+        self.hypernet = Hypernet(
+            target_obs_dim=config.obs_dim,
+            target_hidden=config.hypernet_target_hidden,
+            target_output_dim=config.action_dim,
+            hypernet_hidden=config.hypernet_hidden,
+        )
+
+def act(self, state, obs, key):
+    belief = self.encoder(state.trajectory_history)
+    if self.config.integration == "concat":
+        logits = self.policy(jnp.concatenate([obs, belief]))
+    elif self.config.integration == "hypernet":
+        flat_weights = self.hypernet(belief)
+        logits = self.hypernet.apply_target(flat_weights, obs)
+    return sample_from_logits(logits, key), new_state
+```
+
+RL²'s use is identical except "belief" is the GRU hidden state rather than a variational posterior.
+
+**Design notes.**
+- **Target network must be small.** Target has maybe 100–500 parameters (e.g., 10-dim obs × 16 hidden + biases + 16 × 3 action + biases ≈ 240). A larger target means a larger hypernet output layer, which defeats the purpose: the hypernet's output dim scales *linearly* with target parameter count, so a 10k-param target requires a 10k-output-dim final layer on the hypernet.
+- **Separate learning rate.** Hypernet gradients have different magnitudes from those flowing through a standard MLP. Per the implementation-pitfalls rule, the hypernet uses its own `optax` optimizer with `config.hypernet_lr`, distinct from the PPO-core LR used by non-hypernet parameters.
+- **JIT-compatibility.** The `apply_target` method uses static shape operations (indexing with known-at-compile-time slices, reshape with static shapes). Everything is `jit`-friendly.
+- **No Python-side branching during act.** The `if config.integration == "concat"` branch happens at module construction (once, in `setup`), not inside `act`. Once constructed, the agent either has `self.policy` or `self.hypernet`, and its `act` method jits cleanly.
+
+### `agents/modules/exploration_bonus.py`
+
+The exploration bonus adds an auxiliary intrinsic reward based on belief-space novelty. It's a function that takes a rollout's belief trajectory and returns a per-step bonus to add to the task reward before advantage computation.
+
+**Concrete shape:**
+
+```python
+# agents/modules/exploration_bonus.py
+import jax.numpy as jnp
+from jax import vmap
+
+def compute_exploration_bonus(
+    belief_trajectory: jnp.ndarray,    # shape: (T, belief_dim)
+    coef: float,
+    window_K: int,
+) -> jnp.ndarray:
+    """L2 distance from rolling mean of last K beliefs, scaled by coef.
+
+    Returns per-step bonus, shape (T,). Bonus at step t uses beliefs from
+    steps [max(0, t-K) : t]; at t=0 the bonus is zero.
+    """
+    T, D = belief_trajectory.shape
+
+    def bonus_at(t):
+        # Select the window [t-K, t); pad with current belief so mean is well-defined.
+        start = jnp.maximum(0, t - window_K)
+        # Use dynamic_slice for jit compatibility:
+        window = jax.lax.dynamic_slice(
+            belief_trajectory,
+            (start, 0),
+            (window_K, D),
+        )
+        # Mask out positions before `start` (when t < K):
+        valid = jnp.arange(window_K) < (t - start)
+        weights = valid.astype(jnp.float32) / jnp.maximum(valid.sum(), 1)
+        window_mean = (window * weights[:, None]).sum(axis=0)
+        return coef * jnp.linalg.norm(belief_trajectory[t] - window_mean)
+
+    return vmap(bonus_at)(jnp.arange(T))
+```
+
+**How it's integrated.** In `training/rollout.py`, after the rollout is collected, the training loop computes `exploration_bonus` (if `config.exploration_bonus` is True) and adds it to the task reward before GAE:
+
+```python
+if config.exploration_bonus:
+    bonus = compute_exploration_bonus(
+        belief_trajectory=rollout.beliefs,
+        coef=config.exploration_bonus_coef,
+        window_K=config.exploration_bonus_window,
+    )
+    augmented_reward = rollout.rewards + bonus
+else:
+    augmented_reward = rollout.rewards
+
+advantages = compute_gae(augmented_reward, rollout.values, ...)
+```
+
+**Design notes.**
+- **Belief source is method-specific.** RL² passes its GRU hidden state as `belief_trajectory`; VariBAD passes latent-Gaussian means (μ only, per the mu-only finding from earlier work); Belief-PPO passes the analytical posterior. The bonus function doesn't care about the source — it operates on whatever belief-like vector the agent hands it.
+- **Coefficient frozen across methods.** Tuned once in M4; same value used across all factorial cells with `exploration_bonus: true`. Method-specific tuning would conflate "does exploration help?" with "does method X happen to have a favorable bonus coefficient?"
+- **Pure JAX, no Python loops.** The `vmap(bonus_at)(arange(T))` pattern computes all bonuses in parallel. No `for t in range(T)` anywhere.
+- **No episode-boundary handling here.** The exploration bonus is computed per-episode (each rollout is one episode's beliefs), so window slicing never crosses boundaries. If rollouts contain multiple episodes, the training loop splits them before calling this function.
+
 ### `envs/base.py`
 
 ```python
@@ -1056,7 +1281,7 @@ JSON for metrics, not pickle: human-readable, diff-able, stable across Python ve
 
 ## Plotting
 
-Plotting scripts take JSON paths as input, produce PNGs as output, have no dependency on training code. Regenerate all thesis figures via `scripts/make_figures.sh`.
+Plotting scripts take JSON paths as input, produce PNGs as output, have no dependency on training code. Regenerate all thesis figures via `uv run python -m plotting.regenerate_figures`.
 
 This decoupling means:
 - Figures can be iterated on during writing without re-running training.
@@ -1134,18 +1359,26 @@ Meta-RL and PPO have several well-known subtle bugs that silently produce wrong 
 
 **Value-network normalization drift.** Running reward/return normalization statistics computed during training can drift and produce misleading value estimates across seeds. Design rule: normalization statistics are per-seed (not shared across seeds in the same experiment), recomputed from scratch each run, and frozen before evaluation.
 
-## Sanity checks
+**Silent JIT recompilation.** Every shape-drifted call to a `jit`ed function triggers a recompilation; ten of these can double wall-clock time without any visible error. Design rule: all functions exposed to the rollout + update loop have fixed-shape inputs for an entire seed, enforced by the `JAX performance discipline` section. Verified via `stats_M{n}.timing.compile_ratio`, which should stay under 10% on full runs.
 
-Before trusting any meta-RL result, verify:
+**Python control flow inside JIT.** An `if x > 0:` inside a `jit`ed function is evaluated at *trace time* on an abstract array and silently produces wrong behavior (it takes one branch always). Design rule: use `jax.lax.cond`, `jax.lax.select`, `jax.lax.switch`, or masking. No Python `if/else` on array values inside `jit`.
 
-1. **R1 — regime-conditional policy divergence**: Oracle A (full-info VI) converges to a stable policy on the MM MDP, and the per-regime optimal policies disagree on a non-trivial fraction of the state space with substantial value loss from playing the wrong regime's policy.
-2. **R2 — PPO on locked regimes matches VI**: per-regime PPO trained on a locked regime matches the VI optimal policy on that regime. Must hold for every regime. If this fails, PPO implementation is broken and all downstream results are suspect.
-3. **R3 — mixed-regime PPO is strictly suboptimal**: regime-agnostic PPO on the full HMM trajectories settles below both Oracle-PPO and per-regime PPO, with the gap exceeding seed-level variation.
-4. **R4 — regime inferability from history**: Belief-PPO (analytical HMM posterior) closes a non-trivial fraction of the Oracle-PPO gap. If not, regimes are not inferable from history and no meta-RL method can succeed.
-5. **Analytical HMM posterior is correct**: forward algorithm output matches closed-form posterior on synthetic test sequences with known regime ground truth.
-6. **No ground-truth leaks**: agents that should not see regime (everything except Oracle-PPO, Belief-PPO, per-regime PPO) cannot achieve Oracle-PPO-level performance.
-7. **Validation suite passes**: each method exhibits published qualitative behavior on the 2-armed bandit and random-goal gridworld before being included in MM experiments. See "Implementation validation suite" above.
-8. **Toy validation**: all methods learn on the regime-switching bandit before being trusted on MM.
+**Non-reproducible randomness.** Creating `PRNGKey(seed)` inside a `jit`'d function bakes the seed in at compile time, so every call uses the same "random" values. Design rule: `PRNGKey` is called exactly once per seed in the outer loop; all subsequent randomness uses `jax.random.split` on keys threaded through function calls.
+
+## Correctness gates (where each one is enforced)
+
+Single-line reference to where each correctness property of the project is actually enforced. Nothing lives only in this section; each item points to the load-bearing implementation.
+
+- **R1 (policy divergence)** — enforced in M2 via `stats_M2_requirements.R1_policy_disagreement.pass`.
+- **R2 (locked-regime optimality)** — enforced in M2 diagnostic pass plus full-budget re-verification in M1 and M3.
+- **R3 (mixed-regime suboptimality)** — enforced in M2 via `R3_mixed_gap.pass` and re-established in M3 reference levels.
+- **R4 (regime inferability)** — enforced in M2 via `R4_inferability.pass`.
+- **HMM posterior correctness** — enforced by `tests/test_beliefs.py` (brute-force marginalization on short sequences).
+- **No ground-truth leakage** — enforced by `tests/test_leak.py` (regression test on observation dicts for non-oracle agents).
+- **Method behavioral validation** — enforced by M4 (published-ordering comparison on bandit + gridworld).
+- **Reference-level ordering** — enforced in M3 via `stats_M3_reference_levels.ordering_valid`.
+
+If any gate above is failing, downstream results are not trustworthy. The milestone gate discipline ensures this: passing M2 requires R1–R4; passing M3 requires the ordering; passing M4 requires method validation; passing tests is required for every milestone via `scripts/make_milestone.py`.
 
 ## Limitations and rigor disclosures
 
@@ -1391,7 +1624,7 @@ Each milestone specifies:
 
 This prevents burning hours on a full run only to find a typo.
 
-All artifacts saved under `results/milestones/M{n}/` (JSON) and `figures/milestones/M{n}/` (plots). Regenerated via `scripts/make_milestone.sh M{n}`.
+All artifacts saved under `results/milestones/M{n}/` (JSON) and `figures/milestones/M{n}/` (plots). Regenerated via `uv run python -m scripts.make_milestone M{n}`.
 
 ---
 
@@ -1415,7 +1648,7 @@ All artifacts saved under `results/milestones/M{n}/` (JSON) and `figures/milesto
 11. `plotting/load_results.py` — JSON parser.
 12. `plotting/learning_curves.py` — minimal learning-curve plotter.
 13. `tests/test_run_modes.py` — asserts `--super-fast` completes in <30s, `--fast` in <5min.
-14. `scripts/make_milestone.sh` — orchestration script.
+14. `scripts/make_milestone.py` — orchestration script.
 
 **Verification artifacts.**
 
@@ -1445,7 +1678,7 @@ All artifacts saved under `results/milestones/M{n}/` (JSON) and `figures/milesto
 - `super_fast_duration_seconds < 30`
 - `fast_duration_seconds < 300`
 - `schema_validates: true` (every output JSON passes the shared-schema validator)
-- `make_milestone_script_succeeded: true` (`scripts/make_milestone.sh M0` exits 0)
+- `make_milestone_script_succeeded: true` (`uv run python -m scripts.make_milestone M0` exits 0)
 
 The PNG (`fig_M0_dummy_learning_curve.png`) exists so you can eyeball that plotting works, but it is not part of the automated pass criteria.
 
@@ -1455,7 +1688,7 @@ uv sync
 uv run python -m training.train --config experiments/configs/m0_dummy.yaml --super-fast
 uv run python -m training.train --config experiments/configs/m0_dummy.yaml --fast
 uv run python -m training.train --config experiments/configs/m0_dummy.yaml
-uv run python -m plotting.make_milestone M0
+uv run python -m plotting.regenerate_figures M0
 ```
 
 **What to do if this fails.** This is infrastructure. Fix immediately; do not proceed. Common failures: jaxlib version mismatch on M4 (use the aarch64 wheel), config dataclass not serializable to JSON (add custom encoder), `lax.scan` shape inconsistencies (make env state shapes fully static).
@@ -1535,7 +1768,7 @@ uv run python -m training.train --config experiments/configs/m1_ppo_as.yaml --su
 uv run python -m training.train --config experiments/configs/m1_ppo_as.yaml --fast
 # tune hyperparameters, repeat --fast until curve looks good
 uv run python -m training.train --config experiments/configs/m1_ppo_as.yaml  # full run
-uv run python -m plotting.make_milestone M1
+uv run python -m plotting.regenerate_figures M1
 ```
 
 **Tweaking loop.** If return_ratio < 0.95, first increase iterations (maybe 100 is too few for this env size). If already plateaued, tune learning rate or network size in `--fast` mode before committing to a full run. Iterate until pass.
@@ -1661,7 +1894,7 @@ uv run python -m oracles.verify_requirements --env-config experiments/configs/en
 # see which R failed, edit env config, try again
 uv run python -m oracles.verify_requirements --env-config experiments/configs/envs/e2.yaml
 # ... etc until all_pass is true
-uv run python -m plotting.make_milestone M2
+uv run python -m plotting.regenerate_figures M2
 ```
 
 **Stop-and-reconsider rule.** If after 3 env iterations you still cannot get all four R's to pass, do not keep piling on structural complexity. Stop, review what's not working, and consider whether the env abstraction itself needs rethinking. Piling features tends to produce envs where requirements barely pass but results are uninterpretable.
@@ -1733,7 +1966,7 @@ uv run python -m training.train --config experiments/configs/m3_per_regime.yaml
 uv run python -m training.train --config experiments/configs/m3_oracle.yaml
 uv run python -m training.train --config experiments/configs/m3_belief.yaml
 uv run python -m training.train --config experiments/configs/m3_regime_agnostic.yaml
-uv run python -m plotting.make_milestone M3
+uv run python -m plotting.regenerate_figures M3
 ```
 
 **What to do if this fails.** See Contingency plans below under "M3 fails."
@@ -1871,7 +2104,7 @@ For each method/ablation combination: start with `--super-fast` to confirm the p
 uv run python -m training.train --config experiments/configs/m4_{method}_{task}.yaml --super-fast
 uv run python -m training.train --config experiments/configs/m4_{method}_{task}.yaml --fast
 uv run python -m training.train --config experiments/configs/m4_{method}_{task}.yaml
-uv run python -m plotting.make_milestone M4
+uv run python -m plotting.regenerate_figures M4
 ```
 
 **What to do if this fails.** See Contingency plans below under "M4 fails."
@@ -2012,7 +2245,7 @@ uv run python -m plotting.make_milestone M4
 **Story the plots tell (fills in RQ2 answer).** See RQ2 section above.
 
 **Build order.**
-1. `evaluation/posterior_compare.py` — computes bidirectional mapping error between a method's inferred belief and the analytical posterior.
+1. `evaluation/posterior_compare.py` — computes symmetric KL divergence between a method's inferred belief (probe-mapped to simplex) and the analytical posterior.
 2. `evaluation/metrics.py` — gap-closed fractions, regime classification accuracy, main-effects and interaction stats for the factorial.
 3. Experiment configs for each core ladder method on MM, frozen env from M2, reference levels from M3.
 4. Factorial configs — 2 belief sources × 2 integration × 2 exploration = 8 config files, composed from the shared base.
@@ -2043,7 +2276,7 @@ uv run python -m training.train --config experiments/configs/m5_factorial_variba
 # mu-only ablation:
 uv run python -m training.train --config experiments/configs/m5_mu_only_varibad_hypernet.yaml
 
-uv run python -m plotting.make_milestone M5
+uv run python -m plotting.regenerate_figures M5
 ```
 
 **What to do if this fails.** See Contingency plans below under "M5 fails."
@@ -2152,7 +2385,7 @@ If `signal_pattern == noise`, increase seeds per point and/or widen difficulty r
 uv run python -m scripts.run_sweep --axis persistence --config experiments/configs/m6_persistence_sweep.yaml
 uv run python -m scripts.run_sweep --axis distinguishability --config experiments/configs/m6_distinguishability_sweep.yaml
 uv run python -m evaluation.posterior_performance_analysis --inputs results/m6/
-uv run python -m plotting.make_milestone M6
+uv run python -m plotting.regenerate_figures M6
 # if compute allows:
 uv run python -m scripts.run_sweep --axis both --config experiments/configs/m6_heatmap.yaml
 ```
@@ -2187,7 +2420,7 @@ uv run python -m scripts.run_sweep --axis both --config experiments/configs/m6_h
 
 - Every milestone produces (a) JSON stats in `results/milestones/M{n}/`, (b) figures in `figures/milestones/M{n}/`, (c) a `PASS.md` or `FAIL.md` note committed after review.
 - Figures intended for the thesis are also copied to `figures/thesis/` with the `fig_rqN_*.png` naming (as noted above) so LaTeX references are stable.
-- Regenerate everything for a milestone with `scripts/make_milestone.sh M{n}`. This script runs training, dumps JSON, generates plots, in that order.
+- Regenerate everything for a milestone with `uv run python -m scripts.make_milestone M{n}`. This script runs training, dumps JSON, generates plots, in that order.
 - A failing milestone blocks downstream work. Do not proceed past a "probably fine" — fix the root cause.
 - Milestones are expected to be rerun as code evolves. Figures always reflect the current state of the repo; no stale artifacts.
 
@@ -2198,6 +2431,7 @@ uv run python -m scripts.run_sweep --axis both --config experiments/configs/m6_h
 - Python 3.11+, managed with **uv** (the package manager; see https://docs.astral.sh/uv/). The project uses uv exclusively for dependency management and script execution. No `pip install`, no manual venv activation.
 - JAX-native throughout; no PyTorch or NumPy-only agents.
 - Type hints on public interfaces.
+- **No shell scripts.** All orchestration (milestone runners, ladder batch runners, sweep runners) is Python, invoked via `uv run python -m ...`. Shell scripts bypass uv's locked environment, compose poorly with JSON output discipline, and are harder for Claude Code to debug than Python modules. The only shell commands in the project are the three-line clone-and-sync in README.md.
 
 ### Running scripts with uv
 
@@ -2266,6 +2500,24 @@ The base file `base/base_varibad.yaml` holds the tuned PPO core hyperparameters,
 
 This is what makes the hyperparameter discipline enforceable — if "PPO learning rate" appears in one place (`base_ppo.yaml`), it can't drift across runs. The alternative (one full config per experiment, hand-copied) is where silent parameter drift comes from.
 
+**Multiple extends.** When a config needs to compose two orthogonal bases (e.g., VariBAD agent + hypernet integration), `extends:` accepts a list:
+
+```yaml
+# experiments/configs/m5_factorial_varibad_hypernet_nobonus.yaml
+extends:
+  - base/base_varibad.yaml
+  - base/base_hypernet.yaml
+experiment_name: m5_factorial_varibad_hypernet_nobonus
+env:
+  extends: envs/e_final.yaml
+integration: hypernet
+exploration_bonus: false
+iterations: 100
+num_seeds: 5
+```
+
+Bases in the list are loaded and merged left-to-right; the experiment file's own fields override all bases. `load_config` handles both the string-form and list-form `extends`.
+
 **Schema validation.**
 
 Every YAML file is loaded into a Python dataclass with type hints (`ExperimentConfig`, `AgentConfig`, `EnvConfig`). If a field is missing or wrong-typed, the script fails at startup with a clear error — not deep into training. This also means autocomplete works when editing the config loader, which catches typos before they become silent bugs.
@@ -2286,7 +2538,7 @@ The JAX version is particularly important: on M4, the aarch64 CPU wheel has to b
 
 ### Test discipline
 
-Tests exist for load-bearing correctness properties — not full coverage, but the handful of things that, if wrong, silently invalidate research results. Each test file produces a script-output JSON and is run as part of `scripts/make_milestone.sh M0` (and optionally before every long training run).
+Tests exist for load-bearing correctness properties — not full coverage, but the handful of things that, if wrong, silently invalidate research results. Each test file produces a script-output JSON and is run as part of `uv run python -m scripts.make_milestone M0` (and optionally before every long training run).
 
 **Test categories and what each verifies:**
 
@@ -2301,6 +2553,8 @@ Tests exist for load-bearing correctness properties — not full coverage, but t
 - **Run-mode behavior** (`tests/test_run_modes.py`): `--super-fast` on the dummy env completes in <30 seconds; `--fast` in <5 minutes; both produce valid JSON matching the script-output schema.
 
 - **Script output schema** (`tests/test_script_output.py`): every `write_summary` call produces a JSON that validates against the shared schema defined in `utils/script_output.py`.
+
+- **JAX compilation behavior** (`tests/test_jax_perf.py`): runs a short dummy-agent rollout and asserts that the second iteration does not trigger a recompilation (measured via JIT cache hits, or by timing: `per_iter_time` on iteration 2 is within 2× of the median of iterations 2-10). Catches shape-drift bugs before they affect real training runs.
 
 Each test file prints `[test_{name}] OK | tests_run=N | tests_passed=N` on success. CI-style discipline: tests must pass before a milestone is declared passed. They run fast (seconds) and catch real bugs.
 
@@ -2324,7 +2578,7 @@ Each experiment run is fully reproducible from `{config.json, commit hash, seed}
 
 **Handling milestone re-runs.** Re-running an earlier milestone invalidates all downstream results. Workflow:
 - Revert to the earlier milestone's tag (`git checkout m{n}-passed`) or branch from current if the re-run is a forward change.
-- Re-run M{n} with `scripts/make_milestone.sh M{n}`.
+- Re-run M{n} with `uv run python -m scripts.make_milestone M{n}`.
 - If it passes, re-tag (force-move the tag or create `m{n}-passed-v2`). If it fails, document in `FAIL.md`.
 - Re-run every downstream milestone. This is expensive, which is why the milestone discipline aims to get each milestone right before moving on — but is unavoidable when fundamental changes are needed.
 - Record the re-run in `results/milestones/M{n}/REVISION_LOG.md`: what changed, why, what JSONs were invalidated, what was regenerated.
@@ -2339,4 +2593,4 @@ Every milestone produces:
 - A `PASS.md` or `FAIL.md` note committed after review
 - A git tag on pass: `git tag m{n}-passed`
 
-Regenerate everything for a milestone with `scripts/make_milestone.sh M{n}`. A failing milestone blocks downstream work. Milestones are rerun as code evolves; figures always reflect current state.
+Regenerate everything for a milestone with `uv run python -m scripts.make_milestone M{n}`. A failing milestone blocks downstream work. Milestones are rerun as code evolves; figures always reflect current state.

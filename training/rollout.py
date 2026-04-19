@@ -1,18 +1,23 @@
 """lax.scan-based rollout.
 
-The rollout is the inner-loop building block: `parallel_envs` copies of an env
-(via vmap) run for `rollout_length` steps (via scan). The compiled rollout is
-called once per training iteration; its signature is shape-stable so the whole
-per-iteration (rollout + update) step is a single JIT.
+`parallel_envs` copies of an env (via vmap) run for `rollout_length` steps
+(via scan). The compiled rollout is called once per training iteration; its
+signature is shape-stable so the whole per-iteration (rollout + GAE + update)
+step can be a single JIT.
+
+Returns:
+  trajectory: dict of stacked per-step arrays with shape [T, parallel_envs, ...].
+              Keys: `obs`, `action`, `reward`, `done`, plus every key returned
+              in `extras` from the agent's act().
+  final_obs:  observation array after the last step, per env. Shape
+              [parallel_envs, obs_size]. Used as the bootstrap point for GAE.
 """
 from __future__ import annotations
 
 from functools import partial
-from typing import Any
 
 import chex
 import jax
-import jax.numpy as jnp
 
 
 def _vmapped_reset(env, keys):
@@ -37,14 +42,7 @@ def rollout(
     key: chex.PRNGKey,
     parallel_envs: int,
     rollout_length: int,
-) -> dict[str, chex.Array]:
-    """Run `parallel_envs` envs for `rollout_length` steps.
-
-    Returns a dict of stacked per-step arrays with shape [rollout_length, parallel_envs, ...].
-    For the M0 dummy agent the dummy-agent path returns action-only; no policy
-    outputs are captured. The schema is intentionally minimal; richer agents
-    will extend it in later milestones.
-    """
+) -> tuple[dict[str, chex.Array], chex.Array]:
     reset_key, key = jax.random.split(key)
     reset_keys = jax.random.split(reset_key, parallel_envs)
     env_states, obs = _vmapped_reset(env, reset_keys)
@@ -53,8 +51,7 @@ def rollout(
         env_states, obs, key = carry
         act_key, step_key, key = jax.random.split(key, 3)
         act_keys = jax.random.split(act_key, parallel_envs)
-        # act returns per-env actions; agent_state is shared (static across envs)
-        actions, _ = _vmapped_act(agent, agent_state, obs, act_keys)
+        actions, extras, _ = _vmapped_act(agent, agent_state, obs, act_keys)
         step_keys = jax.random.split(step_key, parallel_envs)
         new_states, next_obs, rewards, dones, _info = _vmapped_step(
             env, env_states, actions, step_keys
@@ -65,9 +62,10 @@ def rollout(
             "reward": rewards,
             "done": dones,
         }
+        out.update({k: v for k, v in extras.items()})
         return (new_states, next_obs, key), out
 
     (final_states, final_obs, _), trajectory = jax.lax.scan(
         scan_step, (env_states, obs, key), xs=None, length=rollout_length
     )
-    return trajectory
+    return trajectory, final_obs

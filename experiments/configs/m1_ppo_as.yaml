@@ -1,0 +1,9 @@
+extends:
+  - base/base_ppo.yaml
+  - envs/e0_as_baseline.yaml
+experiment_name: m1_ppo_as
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 5
+seed_base: 0

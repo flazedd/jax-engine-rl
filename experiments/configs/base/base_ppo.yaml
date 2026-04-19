@@ -1,0 +1,18 @@
+# Base PPO hyperparameters.
+# Tuned once in M1 on the E0 AS baseline, then frozen project-wide. Every PPO-
+# based agent (vanilla PPO, Oracle-PPO, Belief-PPO, per-regime PPO, RL²'s
+# internal PPO, VariBAD's internal PPO) inherits these values. Changes here
+# invalidate all downstream milestone artifacts.
+agent:
+  name: ppo
+  params:
+    hidden_dim: 64
+    learning_rate: 3.0e-4
+    max_grad_norm: 0.5
+    clip_eps: 0.2
+    ent_coef: 0.0
+    vf_coef: 0.5
+    gamma: 0.99
+    lam: 0.95
+    epochs: 8
+    minibatch_size: 64

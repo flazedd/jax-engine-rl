@@ -67,7 +67,6 @@
       "Bash(git clean -fdx*)",
       "Bash(git filter-branch*)",
       "Bash(git update-ref -d*)",
-      "Bash(:(){ :|:& };:)",
       "Bash(dd *of=/dev/*)",
       "Bash(mkfs*)",
       "Bash(> /dev/sda*)",

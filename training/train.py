@@ -24,8 +24,13 @@ import numpy as np
 
 from agents.dummy import DummyAgent
 from agents.ppo import PPOAgent
+from agents.ppo_belief import PPOBeliefAgent
+from agents.ppo_oracle import PPOOracleAgent
+from agents.ppo_per_regime import PPOPerRegimeAgent
 from envs.mm_reduced import MMReducedEnv
 from envs.validation.dummy import DummyEnv
+from envs.wrappers.belief_obs import BeliefObsEnv
+from envs.wrappers.oracle_obs import OracleObsEnv
 from training.config import (
     CONFIG_ROOT,
     ExperimentConfig,
@@ -49,14 +54,27 @@ def _build_env(cfg: ExperimentConfig):
         return DummyEnv(**cfg.env.params)
     if cfg.env.name == "mm_reduced":
         return MMReducedEnv(**cfg.env.params)
+    if cfg.env.name == "mm_reduced_oracle":
+        return OracleObsEnv(inner=MMReducedEnv(**cfg.env.params))
+    if cfg.env.name == "mm_reduced_belief":
+        return BeliefObsEnv(inner=MMReducedEnv(**cfg.env.params))
     raise ValueError(f"unknown env: {cfg.env.name!r}")
+
+
+_PPO_AGENT_CLASSES = {
+    "ppo": PPOAgent,
+    "ppo_oracle": PPOOracleAgent,
+    "ppo_belief": PPOBeliefAgent,
+    "ppo_per_regime": PPOPerRegimeAgent,
+}
 
 
 def _build_agent(cfg: ExperimentConfig, env):
     if cfg.agent.name == "dummy":
         return DummyAgent(obs_size=env.obs_size, n_actions=env.n_actions)
-    if cfg.agent.name == "ppo":
-        return PPOAgent(
+    if cfg.agent.name in _PPO_AGENT_CLASSES:
+        cls = _PPO_AGENT_CLASSES[cfg.agent.name]
+        return cls(
             obs_size=env.obs_size,
             n_actions=env.n_actions,
             **cfg.agent.params,

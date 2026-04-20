@@ -265,9 +265,178 @@ def make_m1() -> dict:
     return stats
 
 
+def _stream_subprocess(cmd: list[str], prefix: str) -> tuple[int, float]:
+    """Run `cmd`, streaming stdout/stderr line-by-line with a prefix.
+
+    Returns (returncode, elapsed_seconds). Output is not captured — it goes
+    straight to this process's stdout so the user sees progress live.
+    """
+    t0 = time.perf_counter()
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,  # line-buffered
+    )
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        # Strip trailing newline, we'll add our own via print.
+        sys.stdout.write(f"{prefix}{line}")
+        sys.stdout.flush()
+    proc.wait()
+    elapsed = time.perf_counter() - t0
+    return proc.returncode, elapsed
+
+
+def make_m2() -> dict:
+    """Run R1–R4 verification on the current E_final env in all three modes.
+
+    Regen figures from the last (full-mode) run's JSON. Full mode is the one
+    that actually carries statistical power; super_fast and fast are sanity
+    checks that the pipeline is wiring-compatible.
+    """
+    env_cfg_path = CONFIG_ROOT / "envs" / "e_final.yaml"
+
+    # Per-mode budget, used for the ETA breakdown.
+    budgets = {
+        "super_fast": dict(iterations=2, parallel_envs=16, num_seeds=1),
+        "fast":       dict(iterations=20, parallel_envs=128, num_seeds=1),
+        "full":       dict(iterations=40, parallel_envs=256, num_seeds=3),
+    }
+    rough_estimates = {"super_fast": 5, "fast": 20, "full": 240}
+    n_ppo_runs = 6  # 3 per-regime + regime-agnostic + oracle + belief
+
+    print(
+        "[make_milestone] M2 orchestration plan:\n"
+        "[make_milestone]   3 modes × (VI + 6 PPO runs + posterior sim + figures)\n"
+        f"[make_milestone]   super_fast: {budgets['super_fast']['iterations']} iter × "
+        f"{budgets['super_fast']['parallel_envs']} envs × "
+        f"{budgets['super_fast']['num_seeds']} seeds → ~{rough_estimates['super_fast']}s\n"
+        f"[make_milestone]   fast:       {budgets['fast']['iterations']} iter × "
+        f"{budgets['fast']['parallel_envs']} envs × "
+        f"{budgets['fast']['num_seeds']} seeds → ~{rough_estimates['fast']}s\n"
+        f"[make_milestone]   full:       {budgets['full']['iterations']} iter × "
+        f"{budgets['full']['parallel_envs']} envs × "
+        f"{budgets['full']['num_seeds']} seeds → ~{rough_estimates['full']}s (~4 min)\n"
+        f"[make_milestone]   total rough: ~{sum(rough_estimates.values())}s",
+        flush=True,
+    )
+
+    durations: dict[str, float] = {}
+    pass_per_mode: dict[str, bool] = {}
+    stats_per_mode: dict[str, dict] = {}
+    exit_zero_all = True
+    t_start = time.perf_counter()
+
+    for i, mode in enumerate(("super_fast", "fast", "full"), start=1):
+        elapsed_so_far = time.perf_counter() - t_start
+        eta_remaining = sum(
+            rough_estimates[m] for m in ("super_fast", "fast", "full") if m not in durations
+        )
+        print(
+            f"\n[make_milestone] ===== mode {i}/3: {mode} "
+            f"(elapsed={elapsed_so_far:.1f}s, eta_remaining≈{eta_remaining}s) =====",
+            flush=True,
+        )
+        print(
+            f"[make_milestone]   expected: ~{n_ppo_runs} PPO runs "
+            f"(~{rough_estimates[mode] / n_ppo_runs:.1f}s each + VI + posterior sim)",
+            flush=True,
+        )
+
+        flag = "--super-fast" if mode == "super_fast" else ("--fast" if mode == "fast" else "")
+        cmd = [
+            sys.executable,
+            "-m",
+            "oracles.verify_requirements",
+            "--env-config",
+            str(env_cfg_path),
+        ]
+        if flag:
+            cmd.append(flag)
+
+        rc, elapsed = _stream_subprocess(cmd, prefix=f"[{mode}] ")
+        durations[mode] = elapsed
+        # verify_requirements returns 1 when all_pass is False — still a valid
+        # orchestrator run; we record the per-R pass from the stats JSON.
+        exit_zero_all &= (rc in (0, 1))
+        delta_vs_estimate = elapsed - rough_estimates[mode]
+        print(
+            f"[make_milestone]   mode={mode} done in {elapsed:.1f}s "
+            f"(Δ vs rough estimate: {delta_vs_estimate:+.1f}s, rc={rc})",
+            flush=True,
+        )
+
+        stats_path = (
+            RESULTS_ROOT / "milestones" / "M2" / "stats_M2_requirements.json"
+        )
+        if stats_path.exists():
+            with open(stats_path) as f:
+                s = json.load(f)
+            pass_per_mode[mode] = bool(s.get("all_pass", False))
+            stats_per_mode[mode] = s
+            print(
+                f"[make_milestone]   {mode} R1={s['R1_policy_disagreement']['pass']} "
+                f"R2={s['R2_per_regime_ppo_vs_vi']['pass']} "
+                f"R3={s['R3_mixed_gap']['pass']} "
+                f"R4={s['R4_inferability']['pass']} "
+                f"→ all_pass={s.get('all_pass', False)}",
+                flush=True,
+            )
+        else:
+            pass_per_mode[mode] = False
+            stats_per_mode[mode] = {}
+            print(f"[make_milestone]   {mode} stats JSON missing — treating as fail", flush=True)
+
+    total_elapsed = time.perf_counter() - t_start
+    print(
+        f"\n[make_milestone] all modes done in {total_elapsed:.1f}s "
+        f"(super_fast={durations['super_fast']:.1f}s, "
+        f"fast={durations['fast']:.1f}s, full={durations['full']:.1f}s) → regenerating figures",
+        flush=True,
+    )
+
+    figures_ok = _regenerate_figures("M2")
+
+    final = stats_per_mode.get("full", {})
+    R1 = bool(final.get("R1_policy_disagreement", {}).get("pass", False))
+    R2 = bool(final.get("R2_per_regime_ppo_vs_vi", {}).get("pass", False))
+    R3 = bool(final.get("R3_mixed_gap", {}).get("pass", False))
+    R4 = bool(final.get("R4_inferability", {}).get("pass", False))
+    all_pass_full = bool(final.get("all_pass", False))
+
+    stats = {
+        "env_version": final.get("env_version", "unknown"),
+        "R1": R1,
+        "R2": R2,
+        "R3": R3,
+        "R4": R4,
+        "all_pass_full_mode": all_pass_full,
+        "super_fast_duration_seconds": round(durations["super_fast"], 3),
+        "fast_duration_seconds": round(durations["fast"], 3),
+        "full_duration_seconds": round(durations["full"], 3),
+        "pass_per_mode": pass_per_mode,
+        "figures_regenerated": bool(figures_ok),
+        "all_scripts_exit_zero": bool(exit_zero_all),
+        "make_milestone_script_succeeded": bool(
+            all_pass_full and figures_ok and exit_zero_all
+        ),
+        # Diagnostic details from the full-mode run.
+        "full_mode_stats": {
+            "R1_policy_disagreement": final.get("R1_policy_disagreement", {}),
+            "R2_per_regime_ppo_vs_vi": final.get("R2_per_regime_ppo_vs_vi", {}),
+            "R3_mixed_gap": final.get("R3_mixed_gap", {}),
+            "R4_inferability": final.get("R4_inferability", {}),
+        },
+    }
+    return stats
+
+
 _MILESTONE_HANDLERS = {
     "M0": make_m0,
     "M1": make_m1,
+    "M2": make_m2,
 }
 
 
@@ -311,6 +480,12 @@ def main() -> int:
         "return_ratio",
         "converged",
         "policy_shape_matches",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "all_pass_full_mode",
+        "env_version",
     ):
         if k in stats:
             print_stats[k] = stats[k]

@@ -1,0 +1,28 @@
+# E1 — Regime-switching volatility (scale-only distinction).
+#
+# Three regimes (quiet, normal, volatile) that differ only in overall fill
+# *intensity*, not direction. Expected to fail R1 because the optimal action
+# at each inventory is dominated by the symmetric penalty — scaling fill
+# probabilities uniformly shifts the value but not the argmax. Documented as
+# the first env iteration; typically R1 fails here and we move to E2.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    # All regimes symmetric (bid/ask same); only scale differs.
+    regime_p_tight_bid: [0.3, 0.6, 0.85]
+    regime_p_wide_bid:  [0.1, 0.2, 0.35]
+    regime_p_tight_ask: [0.3, 0.6, 0.85]
+    regime_p_wide_ask:  [0.1, 0.2, 0.35]
+    initial_distribution: [0.333, 0.333, 0.334]

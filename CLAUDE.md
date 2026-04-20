@@ -84,14 +84,14 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 
 - [x] M0 — infrastructure skeleton
 - [x] M1 — PPO on AS baseline
-- [ ] M2 — regime-switching env, R1–R4 verified
+- [x] M2 — regime-switching env, R1–R4 verified
 - [ ] M3 — reference levels (answers RQ1)
 - [ ] M4 — implementation validation
 - [ ] M5 — ladder + factorial on MM (answers RQ2)
 - [ ] M6 — difficulty sweep + decoupling (answers RQ3)
 - [ ] M7 — supplementary ablations (optional)
 
-Current env version: `E_final = ???` (symlink to the env config that passed R1–R4 in M2).
+Current env version: `E_final = e2_fill_switched` (symlink at `experiments/configs/envs/e_final.yaml`). E2 is regime-switched directional fill intensities (noise/bull/bear). Passed R1–R4 in M2 full-mode.
 
 ## Glossary
 

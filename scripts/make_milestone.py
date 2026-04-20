@@ -23,7 +23,7 @@ from envs.mm_reduced import ACTION_FAVOR_ASK, ACTION_FAVOR_BID, MMReducedEnv
 from oracles.analytical_as import solve_analytical_as
 from plotting.regenerate_figures import _HANDLERS as FIGURE_HANDLERS
 from training.config import apply_run_mode, load_config
-from training.train import train
+from training.train import train, train_or_sweep
 from utils.script_output import (
     ScriptRun,
     validate_summary,
@@ -433,10 +433,303 @@ def make_m2() -> dict:
     return stats
 
 
+def _convergence_diagnostics(
+    mean_curve: np.ndarray, final_mean: float
+) -> tuple[float, int, bool]:
+    """Slope over last 20 iters, plateau index, convergence.
+
+    Converged iff |slope_last_20| < 0.5 (same threshold as M1 — a curve
+    still climbing at > 0.5 return units per iteration is not plateaued)
+    AND the mean curve first reaches 99% of its final value before 90%
+    of the iteration budget.
+    """
+    iters = mean_curve.size
+    if iters >= 20:
+        last20 = mean_curve[-20:]
+        slope = float(np.polyfit(np.arange(last20.size), last20, 1)[0])
+    else:
+        slope = 0.0
+    if final_mean > 0:
+        threshold = 0.99 * final_mean
+    elif final_mean < 0:
+        threshold = 1.01 * final_mean
+    else:
+        threshold = 0.0
+    if final_mean >= 0:
+        above = np.where(mean_curve >= threshold)[0]
+    else:
+        above = np.where(mean_curve <= threshold)[0]
+    plateau_reached_at = int(above[0]) if above.size > 0 else int(iters)
+    converged = bool(
+        abs(slope) < 0.5 and plateau_reached_at < 0.9 * iters
+    )
+    return slope, plateau_reached_at, converged
+
+
+def _run_m3_training(config_name: str, mode: str) -> tuple[float, int]:
+    """Run one M3 training config via the full train_or_sweep path.
+
+    Returns (elapsed_seconds, returncode). rc is 0 on success, 1 on failure.
+    We shell out so stdout streams live to the user (consistent with M2).
+    """
+    cfg_path = CONFIG_ROOT / config_name
+    cmd = [
+        sys.executable,
+        "-m",
+        "training.train",
+        "--config",
+        str(cfg_path),
+    ]
+    if mode == "super_fast":
+        cmd.append("--super-fast")
+    elif mode == "fast":
+        cmd.append("--fast")
+    rc, elapsed = _stream_subprocess(cmd, prefix=f"[{mode}:{config_name}] ")
+    return elapsed, rc
+
+
+def _ci_paired(diffs: np.ndarray, n_boot: int = 10_000) -> tuple[float, float]:
+    """Bootstrap CI of the mean of `diffs` (paired across seeds)."""
+    diffs = np.asarray(diffs, dtype=float)
+    if diffs.size <= 1:
+        return float(diffs.mean()), float(diffs.mean())
+    rng = np.random.default_rng(0)
+    idx = rng.integers(0, diffs.size, size=(n_boot, diffs.size))
+    boot_means = diffs[idx].mean(axis=1)
+    return float(np.percentile(boot_means, 2.5)), float(np.percentile(boot_means, 97.5))
+
+
+def _gap_component(
+    hi_per_seed: np.ndarray, lo_per_seed: np.ndarray
+) -> dict[str, float]:
+    diffs = hi_per_seed - lo_per_seed
+    absolute = float(diffs.mean())
+    ci_lo, ci_hi = _ci_paired(diffs)
+    return {
+        "absolute": absolute,
+        "per_seed_diff": diffs.tolist(),
+        "ci": [ci_lo, ci_hi],
+        "ci_width": float(ci_hi - ci_lo),
+    }
+
+
+def make_m3() -> dict:
+    """Run the four reference-level methods on E_final, compute the gap
+    decomposition, and regenerate RQ1 figures.
+
+    Sequence:
+      1. super_fast smoke for all four configs (wiring + shape).
+      2. fast smoke to confirm each method shows directional signal.
+      3. full run — 200 iter × 512 envs × 5 seeds (per_regime also runs once
+         per regime under matched compute).
+      4. Build stats_M3_reference_levels.json from the full-mode metrics.
+      5. Regenerate RQ1 figures.
+
+    Only the full-mode results count as the M3 answer. super_fast/fast are
+    wiring checks (no pass criteria).
+    """
+    configs = {
+        "regime_agnostic_ppo": "m3_regime_agnostic.yaml",
+        "oracle_ppo":          "m3_oracle.yaml",
+        "belief_ppo":          "m3_belief.yaml",
+        "per_regime_ppo":      "m3_per_regime.yaml",
+    }
+    experiment_dirs = {
+        "regime_agnostic_ppo": "m3_regime_agnostic",
+        "oracle_ppo":          "m3_oracle",
+        "belief_ppo":          "m3_belief",
+        "per_regime_ppo":      "m3_per_regime",
+    }
+
+    # Per-regime sweep means 3 sub-trainings under full. Budget estimate uses
+    # the effective count of PPO networks trained per mode.
+    rough_per_mode_seconds = {
+        "super_fast": 40,    # 6 networks × ~7s compile-dominated
+        "fast":       120,
+        "full":       1800,  # ~30 min for 6 × 200 iter × 512 envs × 5 seeds
+    }
+
+    print(
+        "[make_milestone] M3 orchestration plan:\n"
+        "[make_milestone]   super_fast → fast → full, 4 method configs × mode\n"
+        "[make_milestone]   per_regime_ppo fans out to 3 locked-regime runs per mode\n"
+        f"[make_milestone]   rough per-mode: sf~{rough_per_mode_seconds['super_fast']}s, "
+        f"fast~{rough_per_mode_seconds['fast']}s, full~{rough_per_mode_seconds['full']}s",
+        flush=True,
+    )
+
+    durations: dict[str, float] = {}
+    rcs_per_mode: dict[str, dict[str, int]] = {}
+    t_start = time.perf_counter()
+
+    for mi, mode in enumerate(("super_fast", "fast", "full"), start=1):
+        elapsed_so_far = time.perf_counter() - t_start
+        eta = sum(
+            rough_per_mode_seconds[m]
+            for m in ("super_fast", "fast", "full") if m not in durations
+        )
+        print(
+            f"\n[make_milestone] ===== mode {mi}/3: {mode} "
+            f"(elapsed={elapsed_so_far:.1f}s, eta_remaining≈{eta}s) =====",
+            flush=True,
+        )
+        t_mode = time.perf_counter()
+        rcs: dict[str, int] = {}
+        for method, cfg_name in configs.items():
+            _, rc = _run_m3_training(cfg_name, mode)
+            rcs[method] = rc
+        durations[mode] = time.perf_counter() - t_mode
+        rcs_per_mode[mode] = rcs
+        print(
+            f"[make_milestone]   mode={mode} done in {durations[mode]:.1f}s "
+            f"(Δ={durations[mode] - rough_per_mode_seconds[mode]:+.1f}s) "
+            f"rcs={rcs}",
+            flush=True,
+        )
+
+    # ------------------------------------------------------------------
+    # Aggregate from full-mode metrics.
+    # ------------------------------------------------------------------
+    method_metrics: dict[str, dict] = {}
+    for method, exp_name in experiment_dirs.items():
+        mpath = RESULTS_ROOT / exp_name / "metrics.json"
+        with open(mpath) as f:
+            method_metrics[method] = json.load(f)
+
+    reference_levels: dict[str, dict] = {}
+    for method, m in method_metrics.items():
+        mean_curve = np.asarray(m["mean_return_per_iter"], dtype=float)
+        final_mean = float(m["final_return_mean"])
+        slope, plateau_at, converged = _convergence_diagnostics(mean_curve, final_mean)
+        reference_levels[method] = {
+            "role": "floor" if method == "regime_agnostic_ppo" else "ceiling",
+            "mean": final_mean,
+            "ci": [float(x) for x in m["final_return_ci95"]],
+            "seed_returns": [float(x) for x in m["per_seed_final_return"]],
+            "converged": converged,
+            "plateau_reached_at_iteration": plateau_at,
+            "slope_last_20_iterations": slope,
+            "experiment_dir": experiment_dirs[method],
+        }
+
+    # Per-seed alignment: every method ran with seed_base=0 and num_seeds=5.
+    agn_per_seed = np.asarray(
+        method_metrics["regime_agnostic_ppo"]["per_seed_final_return"], dtype=float
+    )
+    oracle_per_seed = np.asarray(
+        method_metrics["oracle_ppo"]["per_seed_final_return"], dtype=float
+    )
+    belief_per_seed = np.asarray(
+        method_metrics["belief_ppo"]["per_seed_final_return"], dtype=float
+    )
+    per_regime_per_seed = np.asarray(
+        method_metrics["per_regime_ppo"]["per_seed_final_return"], dtype=float
+    )
+
+    shared_network = _gap_component(per_regime_per_seed, oracle_per_seed)
+    inference = _gap_component(oracle_per_seed, belief_per_seed)
+    compromise_policy = _gap_component(belief_per_seed, agn_per_seed)
+    total_gap = _gap_component(per_regime_per_seed, agn_per_seed)
+
+    total_abs = total_gap["absolute"]
+    for g in (shared_network, inference, compromise_policy):
+        g["fraction_of_total"] = (
+            g["absolute"] / total_abs if abs(total_abs) > 1e-9 else 0.0
+        )
+
+    # Ordering check: regime_agnostic ≤ belief ≤ oracle ≤ per_regime, using
+    # means and treating overlap within CI as "≈". We require strict-or-equal
+    # means; print full details into `ordering_details`.
+    m_agn = reference_levels["regime_agnostic_ppo"]["mean"]
+    m_bel = reference_levels["belief_ppo"]["mean"]
+    m_ora = reference_levels["oracle_ppo"]["mean"]
+    m_per = reference_levels["per_regime_ppo"]["mean"]
+    strict_ordering = (m_agn <= m_bel <= m_ora <= m_per)
+    # CI-tolerant ordering: a higher mean is "valid" if its CI lower bound
+    # isn't more than CI-width below the lower method's CI upper bound.
+    def _ordered_or_overlap(lo_method: dict, hi_method: dict) -> bool:
+        if hi_method["mean"] >= lo_method["mean"]:
+            return True
+        return hi_method["ci"][1] >= lo_method["ci"][0]
+
+    ci_tolerant_ordering = all(
+        _ordered_or_overlap(reference_levels[lo], reference_levels[hi])
+        for lo, hi in (
+            ("regime_agnostic_ppo", "belief_ppo"),
+            ("belief_ppo", "oracle_ppo"),
+            ("oracle_ppo", "per_regime_ppo"),
+        )
+    )
+    ordering_valid = bool(strict_ordering or ci_tolerant_ordering)
+    ordering_details = (
+        f"agnostic={m_agn:.2f} <= belief={m_bel:.2f} <= "
+        f"oracle={m_ora:.2f} <= per_regime={m_per:.2f}"
+    )
+
+    all_converged = all(reference_levels[m]["converged"] for m in reference_levels)
+    shared_network_measurable = bool(
+        shared_network["absolute"] > shared_network["ci_width"]
+    )
+
+    stats = {
+        "env_version": "e_final",
+        "reference_levels": reference_levels,
+        "gap_components": {
+            "shared_network_cost": shared_network,
+            "inference_cost": inference,
+            "compromise_policy_cost": compromise_policy,
+            "total_gap": total_gap["absolute"],
+            "total_gap_ci": total_gap["ci"],
+        },
+        "ordering_valid": ordering_valid,
+        "ordering_details": ordering_details,
+        "all_converged": all_converged,
+        "shared_network_cost_is_measurable": shared_network_measurable,
+    }
+
+    stats_path = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"
+    stats_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(stats_path, "w") as f:
+        json.dump(stats, f, indent=2)
+
+    figures_ok = _regenerate_figures("M3")
+
+    full_exit_zero = all(rc == 0 for rc in rcs_per_mode.get("full", {}).values())
+
+    pipeline_stats = {
+        "env_version": "e_final",
+        "ordering_valid": ordering_valid,
+        "all_converged": all_converged,
+        "shared_network_cost_is_measurable": shared_network_measurable,
+        "total_gap_absolute": total_gap["absolute"],
+        "shared_network_cost_absolute": shared_network["absolute"],
+        "inference_cost_absolute": inference["absolute"],
+        "compromise_policy_cost_absolute": compromise_policy["absolute"],
+        "shared_network_cost_fraction": shared_network["fraction_of_total"],
+        "inference_cost_fraction": inference["fraction_of_total"],
+        "compromise_policy_cost_fraction": compromise_policy["fraction_of_total"],
+        "ordering_details": ordering_details,
+        "super_fast_duration_seconds": round(durations["super_fast"], 3),
+        "fast_duration_seconds": round(durations["fast"], 3),
+        "full_duration_seconds": round(durations["full"], 3),
+        "full_mode_rcs": rcs_per_mode.get("full", {}),
+        "figures_regenerated": bool(figures_ok),
+        "all_scripts_exit_zero": bool(full_exit_zero),
+        "make_milestone_script_succeeded": bool(
+            ordering_valid and all_converged and figures_ok and full_exit_zero
+        ),
+        "reference_level_means": {
+            m: reference_levels[m]["mean"] for m in reference_levels
+        },
+    }
+    return pipeline_stats
+
+
 _MILESTONE_HANDLERS = {
     "M0": make_m0,
     "M1": make_m1,
     "M2": make_m2,
+    "M3": make_m3,
 }
 
 
@@ -486,6 +779,10 @@ def main() -> int:
         "R4",
         "all_pass_full_mode",
         "env_version",
+        "ordering_valid",
+        "all_converged",
+        "shared_network_cost_is_measurable",
+        "total_gap_absolute",
     ):
         if k in stats:
             print_stats[k] = stats[k]

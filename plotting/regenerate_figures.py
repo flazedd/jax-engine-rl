@@ -29,6 +29,11 @@ from plotting.m2_plots import (
     plot_posterior_entropy,
     plot_value_loss_distribution,
 )
+from plotting.m3_plots import (
+    plot_rq1_ceilings_bar,
+    plot_rq1_gap_fractions,
+    plot_rq1_learning_curves,
+)
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -148,10 +153,50 @@ def regenerate_m2(run: ScriptRun) -> dict:
     }
 
 
+def regenerate_m3(run: ScriptRun) -> dict:
+    stats_path = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"
+    with open(stats_path) as f:
+        stats = json.load(f)
+
+    reference_levels = stats["reference_levels"]
+    gap_components = stats["gap_components"]
+
+    fig_dir = FIGURES_ROOT / "milestones" / "M3"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+
+    # Per-method learning curves pulled from the per-experiment metrics.json.
+    per_method_curves: dict[str, dict] = {}
+    experiment_names = {
+        "regime_agnostic_ppo": "m3_regime_agnostic",
+        "oracle_ppo": "m3_oracle",
+        "belief_ppo": "m3_belief",
+        "per_regime_ppo": "m3_per_regime",
+    }
+    for method, exp_name in experiment_names.items():
+        mpath = RESULTS_ROOT / exp_name / "metrics.json"
+        with open(mpath) as f:
+            per_method_curves[method] = json.load(f)
+
+    p_ceilings = fig_dir / "fig_rq1_ceilings_bar.png"
+    plot_rq1_ceilings_bar(reference_levels, gap_components, p_ceilings)
+    run.add_output(str(p_ceilings))
+
+    p_curves = fig_dir / "fig_rq1_learning_curves.png"
+    plot_rq1_learning_curves(per_method_curves, p_curves)
+    run.add_output(str(p_curves))
+
+    p_gaps = fig_dir / "fig_rq1_gap_fractions.png"
+    plot_rq1_gap_fractions(gap_components, p_gaps)
+    run.add_output(str(p_gaps))
+
+    return {"figures": [str(p) for p in run.outputs[-3:]]}
+
+
 _HANDLERS = {
     "M0": regenerate_m0,
     "M1": regenerate_m1,
     "M2": regenerate_m2,
+    "M3": regenerate_m3,
 }
 
 

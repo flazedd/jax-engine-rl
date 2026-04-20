@@ -12,6 +12,7 @@ reuse the cache.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import subprocess
 import time
@@ -328,6 +329,142 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
     return metrics
 
 
+def _stationary_distribution_np(T: np.ndarray) -> np.ndarray:
+    """Stationary distribution of a row-stochastic matrix T (shape [n, n])."""
+    n = T.shape[0]
+    b = np.ones(n) / n
+    for _ in range(5000):
+        b = b @ T
+    return b
+
+
+def train_per_regime_sweep(cfg: ExperimentConfig) -> dict[str, Any]:
+    """Train per-regime PPO: N separate instances, one per locked regime.
+
+    Each locked-regime run gets the full iteration budget (matched compute,
+    not divided). Seeds are held fixed across regimes so per-seed combined
+    returns can be computed by stationary-weighted sum across regimes.
+
+    Writes:
+      - results/<cfg.experiment_name>_r{r}/    — per-regime metrics (one dir each)
+      - results/<cfg.experiment_name>/metrics.json — aggregate metrics with a
+        combined (stationary-weighted) learning curve and per-seed final return.
+
+    The aggregate metrics JSON follows the same schema as `train()`'s output
+    so downstream consumers (orchestrator, plotting) can treat per-regime PPO
+    as a single method.
+    """
+    base_env_params = dict(cfg.env.params)
+    n_regimes = int(base_env_params.get("n_regimes", 1))
+    if n_regimes < 1:
+        raise ValueError("per-regime sweep requires n_regimes >= 1")
+
+    T = np.asarray(
+        base_env_params.get("transition_matrix", [1.0]), dtype=np.float64
+    ).reshape(n_regimes, n_regimes)
+    stationary = _stationary_distribution_np(T)
+
+    per_regime_metrics: list[dict[str, Any]] = []
+    for r in range(n_regimes):
+        sub_cfg = copy.deepcopy(cfg)
+        sub_cfg.experiment_name = f"{cfg.experiment_name}_r{r}"
+        sub_cfg.env.name = "mm_reduced"  # locked env, not a wrapper
+        sub_cfg.env.params = {**base_env_params, "lock_regime": r}
+        # Underlying trainer accepts only vanilla ppo agent — the _PerRegime_
+        # label is our convention, not a loss change. Dispatch as plain PPO.
+        sub_cfg.agent.name = "ppo"
+        print(
+            f"\n[train_per_regime] --- regime {r+1}/{n_regimes} "
+            f"(lock_regime={r}) — experiment={sub_cfg.experiment_name} ---",
+            flush=True,
+        )
+        m = train(sub_cfg)
+        per_regime_metrics.append(m)
+
+    num_iters = int(cfg.iterations)
+    num_seeds = int(cfg.num_seeds)
+
+    per_seed_curves = np.zeros((num_seeds, num_iters), dtype=np.float64)
+    for r, m in enumerate(per_regime_metrics):
+        arr = np.asarray(m["per_seed_mean_return_per_iter"], dtype=np.float64)
+        per_seed_curves += stationary[r] * arr
+    mean_curve = per_seed_curves.mean(axis=0)
+    var_curve = per_seed_curves.var(axis=0)
+
+    final_per_seed = [float(per_seed_curves[s, -1]) for s in range(num_seeds)]
+    ci_lo, ci_hi = _ci_across_seeds(final_per_seed)
+
+    combined = {
+        "experiment_name": cfg.experiment_name,
+        "run_mode": cfg.run_mode,
+        "agent": "ppo_per_regime",
+        "env": cfg.env.name,
+        "iterations": num_iters,
+        "num_seeds": num_seeds,
+        "parallel_envs": int(cfg.parallel_envs),
+        "rollout_length": int(cfg.rollout_length),
+        "stationary_weights": stationary.tolist(),
+        "mean_return_per_iter": mean_curve.tolist(),
+        "var_return_per_iter": var_curve.tolist(),
+        "per_seed_mean_return_per_iter": per_seed_curves.tolist(),
+        "per_seed_final_return": final_per_seed,
+        "final_return_mean": float(np.mean(final_per_seed)),
+        "final_return_ci95": [ci_lo, ci_hi],
+        "per_regime_final_return_means": [
+            float(m["final_return_mean"]) for m in per_regime_metrics
+        ],
+        "per_regime_experiment_names": [
+            m["experiment_name"] for m in per_regime_metrics
+        ],
+    }
+
+    exp_dir = RESULTS_ROOT / cfg.experiment_name
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = exp_dir / "metrics.json"
+    with open(metrics_path, "w") as f:
+        json.dump(combined, f, indent=2)
+
+    # Same shared-schema wrapper as train(): config + summary + eval.
+    cfg_dict = cfg.to_dict()
+    cfg_dict["commit_hash"] = _commit_hash()
+    with open(exp_dir / "config.json", "w") as f:
+        json.dump(cfg_dict, f, indent=2, default=str)
+    with open(exp_dir / "eval.json", "w") as f:
+        json.dump(
+            {
+                "final_return_mean": combined["final_return_mean"],
+                "final_return_ci95": combined["final_return_ci95"],
+            },
+            f,
+            indent=2,
+        )
+
+    run = ScriptRun(script="train", run_mode=cfg.run_mode, config_used=cfg_dict)
+    run.add_output(str(metrics_path))
+    run.ok(
+        key_stats={
+            "method": "ppo_per_regime",
+            "env": cfg.env.name,
+            "final_return": round(combined["final_return_mean"], 4),
+            "iterations": num_iters,
+            "num_seeds": num_seeds,
+        },
+        summary_path=exp_dir / "summary.json",
+        print_stats={
+            "method": "ppo_per_regime",
+            "env": cfg.env.name,
+            "final_return": round(combined["final_return_mean"], 4),
+        },
+    )
+    return combined
+
+
+def train_or_sweep(cfg: ExperimentConfig) -> dict[str, Any]:
+    if cfg.agent.name == "ppo_per_regime":
+        return train_per_regime_sweep(cfg)
+    return train(cfg)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="training.train")
     parser.add_argument("--config", required=True, help="path to experiment YAML")
@@ -341,7 +478,7 @@ def main() -> None:
 
     cfg = load_config(args.config)
     apply_run_mode(cfg, mode)
-    train(cfg)
+    train_or_sweep(cfg)
 
 
 if __name__ == "__main__":

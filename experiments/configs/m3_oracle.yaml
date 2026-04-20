@@ -1,0 +1,13 @@
+extends:
+  - base/base_ppo.yaml
+  - envs/e_final.yaml
+experiment_name: m3_oracle
+env:
+  name: mm_reduced_oracle
+agent:
+  name: ppo_oracle
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 5
+seed_base: 0

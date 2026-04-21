@@ -1,0 +1,45 @@
+# E4 — H6 persistence + deep wide-side asymmetry.
+#
+# Built on E3 tight-fill asymmetry (bull extreme, bear moderate), but with:
+#   1. Persistence biased away from noise: [0.90, 0.995, 0.995]. Stationary
+#      distribution ~[0.024, 0.488, 0.488] — bull+bear share ~97% of episode
+#      time, so the compromise policy can no longer hide in noise's SYM.
+#   2. Initial distribution set to stationary, so the compromise bleeds from
+#      step 1 rather than warming up via a 1/3 noise visit.
+#   3. Wide-side fill extremes deepened (bull wide_ask 0.60→0.70, bear
+#      wide_bid 0.30→0.40; wide off-side rails shrunk) so each regime's
+#      preferred FAVOR action earns more and wrong-regime actions cost more.
+#
+# VI sweep (scripts/env_gap_sweep_i.py, I7 candidate) widens the analytical
+# gap from E3's total=20.96 to total=59.61 (77% of oracle return):
+#   oracle_vi=77.4  belief_qmdp=73.1  compromise_vi=17.8
+#   inference_cost=4.4  compromise_cost=55.3  total_gap=59.6
+#
+# Per-regime VI returns [152.3, 36.7, 93.9] — tight fills (and so R1/R2
+# locked-regime stories) virtually unchanged vs E3. The widening comes
+# entirely from structural levers (persistence, init, wide-side fills).
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    # Persistence biased away from noise: noise jittery, bull+bear sticky.
+    # Stationary ≈ [0.024, 0.488, 0.488].
+    transition_matrix: [
+      0.90,   0.05,   0.05,
+      0.0025, 0.995,  0.0025,
+      0.0025, 0.0025, 0.995,
+    ]
+    # Tight fills identical to E3 (preserves per-regime locked returns).
+    regime_p_tight_bid: [0.60, 0.10, 0.75]
+    regime_p_tight_ask: [0.60, 0.95, 0.20]
+    # Wide fills pushed to deeper asymmetry (bull ask-deep, bear bid-deep).
+    regime_p_wide_bid:  [0.20, 0.01, 0.40]
+    regime_p_wide_ask:  [0.20, 0.70, 0.03]
+    # Stationary init — compromise bleeds immediately, no warm-up via noise.
+    initial_distribution: [0.02439024, 0.48780488, 0.48780488]

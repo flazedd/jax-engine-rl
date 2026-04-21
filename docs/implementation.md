@@ -26,7 +26,7 @@ thesis/
 │   │                                #   floor AND, wrapped with stack_obs, for stacked-obs PPO.
 │   ├── ppo_oracle.py                # PPO conditioned on true regime one-hot
 │   ├── ppo_belief.py                # PPO conditioned on analytical HMM posterior
-│   ├── ppo_per_regime.py            # PPO trained on locked single regime (wraps ppo.py N times)
+│   ├── ppo_per_regime.py            # PPO trained on locked single regime — env-validation tool only (R2 check); not a method in the ladder or a reference level
 │   ├── rl2.py                       # RL² (recurrent PPO with prev action/reward)
 │   ├── varibad.py                   # VariBAD (variational belief + PPO + ELBO)
 │   └── modules/                     # composable ablation components (not standalone agents)
@@ -127,7 +127,6 @@ thesis/
 │       │   └── e_final.yaml         # symlink to whichever env version passed R1–R4
 │       ├── m0_dummy.yaml            # M0 pipeline test
 │       ├── m1_ppo_as.yaml           # M1: PPO on AS baseline
-│       ├── m3_per_regime.yaml       # M3: reference levels
 │       ├── m3_oracle.yaml
 │       ├── m3_belief.yaml
 │       ├── m3_regime_agnostic.yaml
@@ -145,7 +144,6 @@ thesis/
 │       ├── m5_ladder_varibad.yaml
 │       ├── m5_ladder_belief_ppo.yaml
 │       ├── m5_ladder_oracle_ppo.yaml
-│       ├── m5_ladder_per_regime_ppo.yaml
 │       ├── m5_factorial_rl2_concat_bonus.yaml          # M5 factorial (6 extra cells;
 │       ├── m5_factorial_rl2_hypernet_nobonus.yaml      #   rl2_concat_nobonus and
 │       ├── m5_factorial_rl2_hypernet_bonus.yaml        #   varibad_concat_nobonus overlap
@@ -222,11 +220,11 @@ These appear in the layout only if the corresponding scope decision goes "yes":
 
 **Stacked-obs PPO = PPO + wrapper.** No separate `ppo_stacked.py`. The ladder rung "stacked-obs PPO" is `ppo.py` running on an env wrapped by `envs/wrappers/stack_obs.py`, selected via config.
 
-**Per-regime PPO = PPO × N.** `agents/ppo_per_regime.py` is a thin wrapper that trains N independent instances of `ppo.py` on locked regimes, then reports either the regime-conditional optimum (evaluation on the matching regime) or an oracle-switched composite.
+**Per-regime PPO is not a reference level or method-ladder rung.** `agents/ppo_per_regime.py` is kept as an env-validation tool used in M2 to verify R2 (locked-regime optimality against VI). It is not evaluated in M3, M5, or M6.
 
 **All composition is in configs, not code.** Whether an RL² run uses hypernet or concat, bonus or no bonus, is a config value. The same `rl2.py` file serves all factorial cells.
 
-**One update file per distinct loss structure, not per agent.** `ppo_update.py` covers every agent whose loss is pure PPO: vanilla PPO, Oracle-PPO, Belief-PPO, per-regime PPO, *and RL²*. RL² differs from vanilla PPO in architecture (recurrent) and minibatching (trajectory-level to preserve temporal order), not in the loss function — so it uses the same update file with `is_recurrent=True`. Only VariBAD has a different loss structure (joint PPO + ELBO with two optimizers on two parameter groups), so only VariBAD gets its own `varibad_update.py`. Hypernet and exploration bonus don't warrant their own update files either: hypernet adds parameters that are trained through the same backward pass, and exploration bonus adds an extra reward term that flows through normal advantage computation.
+**One update file per distinct loss structure, not per agent.** `ppo_update.py` covers every agent whose loss is pure PPO: vanilla PPO, Oracle-PPO, Belief-PPO, *and RL²*. RL² differs from vanilla PPO in architecture (recurrent) and minibatching (trajectory-level to preserve temporal order), not in the loss function — so it uses the same update file with `is_recurrent=True`. Only VariBAD has a different loss structure (joint PPO + ELBO with two optimizers on two parameter groups), so only VariBAD gets its own `varibad_update.py`. Hypernet and exploration bonus don't warrant their own update files either: hypernet adds parameters that are trained through the same backward pass, and exploration bonus adds an extra reward term that flows through normal advantage computation.
 
 **Milestone artifacts have two homes.** `results/milestones/M{n}/` for JSONs and `figures/milestones/M{n}/` for PNGs. Thesis figures are additionally copied to `figures/thesis/` under the `fig_rqN_*.png` name.
 
@@ -527,7 +525,6 @@ These are concrete, committed choices. No fighting matplotlib over them per figu
 - `varibad`: `#FF7F0E` (orange)
 - `belief_ppo`: `#2CA02C` (green)
 - `oracle_ppo`: `#000000` (black)
-- `per_regime_ppo`: `#9467BD` (purple)
 
 **Reference lines style.** Ceiling / floor reference lines as horizontal dashed lines, dash pattern `(5, 5)`, line width 1.0, color matching the method (so Oracle-PPO ceiling line is black, Belief-PPO ceiling line is green). Labeled at the right edge of the plot with the method name in the method's color.
 

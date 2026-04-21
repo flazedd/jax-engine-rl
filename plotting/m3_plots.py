@@ -14,27 +14,23 @@ import numpy as np
 from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
 
 
-_METHOD_ORDER = ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo", "per_regime_ppo")
+_METHOD_ORDER = ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo")
 _METHOD_LABELS = {
     "regime_agnostic_ppo": "regime-agnostic",
     "belief_ppo": "Belief-PPO",
     "oracle_ppo": "Oracle-PPO",
-    "per_regime_ppo": "per-regime",
 }
 _METHOD_COLORS = {
     "regime_agnostic_ppo": COLORS.get("ppo", "#1f77b4"),
     "belief_ppo": COLORS.get("belief_ppo", "#9467bd"),
     "oracle_ppo": COLORS.get("oracle_ppo", "#8c564b"),
-    "per_regime_ppo": COLORS.get("per_regime_ppo", "#17becf"),
 }
 
 _GAP_COLORS = {
-    "shared_network_cost": "#17becf",
     "inference_cost": "#8c564b",
     "compromise_policy_cost": "#1f77b4",
 }
 _GAP_LABELS = {
-    "shared_network_cost": "shared-network",
     "inference_cost": "inference",
     "compromise_policy_cost": "compromise-policy",
 }
@@ -69,15 +65,13 @@ def plot_rq1_ceilings_bar(
     ax.set_ylabel("episode return (mean over seeds)")
     ax.set_title("RQ1 — reference levels and gap decomposition")
 
-    # Brackets labeling the three gap components between consecutive bars.
-    # Order of bars is [agnostic, belief, oracle, per_regime], so:
-    #   agnostic→belief:    compromise_policy_cost
-    #   belief→oracle:      inference_cost
-    #   oracle→per_regime:  shared_network_cost
+    # Brackets labeling the two gap components between consecutive bars.
+    # Order of bars is [agnostic, belief, oracle], so:
+    #   agnostic→belief: compromise_policy_cost
+    #   belief→oracle:   inference_cost
     bracket_pairs = [
         (0, 1, "compromise_policy_cost"),
         (1, 2, "inference_cost"),
-        (2, 3, "shared_network_cost"),
     ]
     top = max(ci[1] for ci in cis)
     span = top - min(m - e for m, e in zip(means, errs_lo))
@@ -145,7 +139,7 @@ def plot_rq1_gap_fractions(
 ) -> None:
     """Single stacked bar showing fractional contribution of each gap component."""
     apply_style()
-    order = ("compromise_policy_cost", "inference_cost", "shared_network_cost")
+    order = ("compromise_policy_cost", "inference_cost")
     fractions = [max(0.0, float(gap_components[n]["fraction_of_total"])) for n in order]
     absolutes = [float(gap_components[n]["absolute"]) for n in order]
 

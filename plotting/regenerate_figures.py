@@ -23,7 +23,6 @@ from plotting.learning_curves import plot_learning_curve
 from plotting.m1_plots import plot_learning_curve_with_ceiling, plot_policy_vs_as
 from plotting.m2_plots import (
     plot_belief_ppo_gap,
-    plot_mixed_gap,
     plot_per_regime_ppo,
     plot_policy_heatmap,
     plot_posterior_entropy,
@@ -101,26 +100,11 @@ def regenerate_m2(run: ScriptRun) -> dict:
     plot_per_regime_ppo(per_regime_metrics, per_regime_optima, p_curves)
     run.add_output(str(p_curves))
 
-    # R3 figure — mixed-gap bars (regime-agnostic, oracle, per-regime mean).
-    r3 = stats["R3_mixed_gap"]
-    per_regime_means = [float(m["final_return_mean"]) for m in per_regime_metrics]
-    per_regime_ci_lo = [float(m["final_return_ci95"][0]) for m in per_regime_metrics]
-    per_regime_ci_hi = [float(m["final_return_ci95"][1]) for m in per_regime_metrics]
-    p_mixed = fig_dir / "fig_M2_R3_mixed_gap.png"
-    plot_mixed_gap(
-        {
-            "regime_agnostic": (r3["regime_agnostic_return_mean"], r3["regime_agnostic_return_ci"]),
-            "oracle": (r3["oracle_ppo_return_mean"], r3["oracle_ppo_return_ci"]),
-            "per_regime_mean": (
-                float(np.mean(per_regime_means)),
-                [float(np.mean(per_regime_ci_lo)), float(np.mean(per_regime_ci_hi))],
-            ),
-        },
-        p_mixed,
-    )
-    run.add_output(str(p_mixed))
+    # R3 has no figure — the R4 belief_ppo_gap chart is a strict superset,
+    # and R3's pass criterion is the JSON field (gap_to_ci_ratio).
 
     # R4 figures.
+    r3 = stats["R3_mixed_gap"]
     r4 = stats["R4_inferability"]
     # Re-simulate entropy curve — this is cheap (random-policy scan).
     from oracles.verify_requirements import (
@@ -149,7 +133,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
 
     return {
         "env_version": env_version,
-        "figures": [str(p) for p in run.outputs[-6:]],
+        "figures": [str(p) for p in run.outputs[-5:]],
     }
 
 
@@ -170,7 +154,6 @@ def regenerate_m3(run: ScriptRun) -> dict:
         "regime_agnostic_ppo": "m3_regime_agnostic",
         "oracle_ppo": "m3_oracle",
         "belief_ppo": "m3_belief",
-        "per_regime_ppo": "m3_per_regime",
     }
     for method, exp_name in experiment_names.items():
         mpath = RESULTS_ROOT / exp_name / "metrics.json"

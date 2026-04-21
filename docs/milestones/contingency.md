@@ -45,7 +45,6 @@ If after all of the above PPO still fails, there is a bug in the PPO implementat
 
 - **Belief-PPO ≥ Oracle-PPO** → probably a training-budget artifact (Belief-PPO's posterior is richer than a one-hot, so it can sometimes converge faster). Run both for longer. If it persists, check whether the one-hot regime encoding in Oracle-PPO is being processed correctly (is it passed through an embedding? is there a bug where it's always zero?).
 - **Regime-agnostic > Belief-PPO** → Belief-PPO is broken. Check the posterior input is what you think (log the values, compare to analytical forward algorithm output). Check the policy network is actually consuming the posterior (inspect gradients).
-- **Per-regime < Oracle-PPO** → surprising but possible if per-regime PPO got less training data per regime than Oracle-PPO got across all regimes. **Training budget must be matched across reference levels in compute terms, not trajectory terms**: each of the N per-regime PPO instances gets the same number of iterations as Oracle-PPO (not 1/N of them). Check that `per_regime_ppo.total_training_iterations` equals `oracle_ppo.total_training_iterations`. If yes and per-regime still underperforms, try more iterations. If it persists even with more iterations, the finding is real (possibly shared-representation in Oracle-PPO actually helps via regularization) and reportable.
 
 ### M4 fails (a method doesn't learn validation tasks)
 

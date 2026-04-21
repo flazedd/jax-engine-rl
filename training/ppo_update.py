@@ -1,8 +1,8 @@
 """Shared PPO update step.
 
-Used by every PPO-based agent (vanilla PPO, Oracle-PPO, Belief-PPO, per-regime
-PPO, and RL² — whose loss is ordinary PPO loss with recurrent architecture).
-VariBAD has a different joint PPO+ELBO update, so it owns its own file.
+Used by every PPO-based agent (vanilla PPO, Oracle-PPO, Belief-PPO, and RL² —
+whose loss is ordinary PPO loss with recurrent architecture). VariBAD has a
+different joint PPO+ELBO update, so it owns its own file.
 
 Functions in this module are pure and JIT-compatible: they take params and
 optimizer state, return updated params / opt_state / metrics. The agent wires
@@ -67,12 +67,11 @@ def _ppo_loss(
 
     ratio = jnp.exp(lp_new - batch["log_prob"])
     adv = batch["advantage"]
-    # Normalize advantages per-minibatch (standard PPO practice).
     adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
     unclipped = ratio * adv
     clipped = jnp.clip(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * adv
-    policy_loss = -jnp.mean(jnp.minimum(unclipped, clipped))
+    policy_loss = -jnp.minimum(unclipped, clipped).mean()
 
     value_loss = 0.5 * jnp.mean((values - batch["return"]) ** 2)
 
@@ -81,8 +80,8 @@ def _ppo_loss(
 
     loss = policy_loss + vf_coef * value_loss - ent_coef * entropy
 
-    approx_kl = jnp.mean(batch["log_prob"] - lp_new)
-    clipped_frac = jnp.mean((jnp.abs(ratio - 1.0) > clip_eps).astype(jnp.float32))
+    approx_kl = (batch["log_prob"] - lp_new).mean()
+    clipped_frac = (jnp.abs(ratio - 1.0) > clip_eps).astype(jnp.float32).mean()
 
     metrics = {
         "ppo/policy_loss": policy_loss,

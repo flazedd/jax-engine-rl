@@ -1,0 +1,43 @@
+# E3 — Regime-switching directional fill intensities with asymmetric bull/bear.
+#
+# Breaks the E2 bull/bear mirror to widen the analytical optimality gap.
+# VI sweep (scripts/env_gap_sweep.py, C2 candidate) showed total_gap grows
+# from 6.7 (E2) to 21.7 units (25.4% of compromise return) while divergence
+# stays high (0.82) and all three regimes remain distinguishable via fills.
+#
+# Three regimes:
+#   0 (noise) — symmetric fills, same as E0/E2.
+#   1 (bull)  — extreme customer buy pressure: ask nearly always fills,
+#               bid barely fills at all. Makes inventory shedding very hard
+#               and raises the cost of wrong-regime action choice.
+#   2 (bear)  — moderate customer sell pressure: bid fills well, ask
+#               fills poorly (less extreme than bull).
+#
+# The asymmetry means the compromise policy can no longer straddle both
+# regimes with a single inventory-only action — regime information becomes
+# strictly necessary to hit the per-regime optimum.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    # Diagonal-dominant: expected regime length ≈ 50 steps → roughly
+    # 2.5 regime transitions per 128-step episode.
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    # Regime 0 (noise): symmetric.
+    # Regime 1 (bull):  bid very low, ask very high (extreme).
+    # Regime 2 (bear):  bid high, ask low (moderate).
+    regime_p_tight_bid: [0.60, 0.10, 0.75]
+    regime_p_wide_bid:  [0.20, 0.02, 0.30]
+    regime_p_tight_ask: [0.60, 0.95, 0.20]
+    regime_p_wide_ask:  [0.20, 0.60, 0.05]
+    initial_distribution: [0.333, 0.333, 0.334]

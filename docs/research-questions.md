@@ -17,48 +17,47 @@ Each RQ below specifies (a) the question, (b) the experimental protocol, (c) the
 
 ---
 
-### RQ1. How does the optimality gap in regime-switching market making decompose into shared-network, inference, and compromise-policy costs?
+### RQ1. How does the optimality gap in regime-switching market making decompose into inference and compromise-policy costs?
 
-**Terminology.** The four points below are collectively **reference performance levels** (or just *reference levels*). "Ceiling" refers specifically to an upper bound — so Oracle-PPO, Belief-PPO, and per-regime PPO are *ceilings*; regime-agnostic PPO is the *floor*, not a ceiling. The document uses "ceiling" only for actual upper bounds from here on.
+**Terminology.** The three points below are collectively **reference performance levels** (or just *reference levels*). "Ceiling" refers specifically to an upper bound — so Oracle-PPO and Belief-PPO are *ceilings*; regime-agnostic PPO is the *floor*, not a ceiling. The document uses "ceiling" only for actual upper bounds from here on.
 
-**Protocol.** Establish four reference performance levels on a single reference parameterization of the MM env:
-- **Per-regime PPO** (ceiling) — N separate networks, each trained on a locked regime. Upper bound on regime-conditional performance with no shared-network constraint.
+**Protocol.** Establish three reference performance levels on a single reference parameterization of the MM env:
 - **Oracle-PPO** (ceiling) — single network conditioned on true regime one-hot. Upper bound under the shared-network constraint with ground-truth regime.
 - **Belief-PPO** (ceiling) — single network conditioned on analytical HMM posterior (computed via the forward algorithm). Upper bound under the shared-network constraint when regime must be inferred from history.
 - **Regime-agnostic PPO** (floor) — single network, no regime information. Compromise-policy baseline — the bottom of the gap.
 
 Each trained with matched compute (same iteration count, same parallel env count, same hyperparameter search). 5 seeds per method minimum.
 
-**Decomposition:**
-- **Shared-network cost** = Per-regime − Oracle
-- **Inference cost** = Oracle − Belief
-- **Total belief value** = Belief − Regime-agnostic
+**Decomposition (2-way):**
+- **Inference cost** = Oracle − Belief (how much imperfect inference costs relative to knowing the true regime)
+- **Compromise-policy cost** = Belief − Regime-agnostic (how much a regime-aware policy improves over the best compromise policy)
+- **Total gap** = Oracle − Regime-agnostic = inference cost + compromise-policy cost
 
 **Plots that answer RQ1.**
 
 - `fig_rq1_ceilings_bar.png`
-  - *What it shows.* Four vertical bars on one axis, one per reference level (per-regime PPO, Oracle-PPO, Belief-PPO, regime-agnostic PPO), with error bars showing seed-level confidence intervals. Brackets drawn between consecutive bar tops label each gap component (shared-network cost, inference cost, compromise-policy cost). Per-regime PPO is the highest (regime-conditional ceiling); regime-agnostic PPO is the lowest (compromise-policy floor).
-  - *What it tells you.* The total optimality gap and how it splits into its three named components at a glance. The height of each bracket is the size of that component.
-  - *Why it matters.* This is the numerical answer to RQ1. It makes the decomposition visually obvious: whether inference cost dominates, or the shared-network constraint is the real bottleneck, or the compromise-policy cost is most of the story. The rest of the thesis evaluates meta-RL methods against these specific gap components, so this figure is the reference frame readers return to.
+  - *What it shows.* Three vertical bars on one axis, one per reference level (Oracle-PPO, Belief-PPO, regime-agnostic PPO), with error bars showing seed-level confidence intervals. Brackets drawn between consecutive bar tops label each gap component (inference cost, compromise-policy cost). Oracle-PPO is the highest (regime-info ceiling); regime-agnostic PPO is the lowest (compromise-policy floor).
+  - *What it tells you.* The total optimality gap and how it splits into its two named components at a glance. The height of each bracket is the size of that component.
+  - *Why it matters.* This is the numerical answer to RQ1. It makes the decomposition visually obvious: whether inference cost dominates, or whether the compromise-policy cost is most of the story. The rest of the thesis evaluates meta-RL methods against these specific gap components, so this figure is the reference frame readers return to.
 
 - `fig_rq1_learning_curves.png`
-  - *What it shows.* Four line plots on one set of axes, one per reference level. X-axis is iteration (0–100); y-axis is mean return across seeds; each line has a shaded CI band.
+  - *What it shows.* Three line plots on one set of axes, one per reference level. X-axis is iteration (0–100); y-axis is mean return across seeds; each line has a shaded CI band.
   - *What it tells you.* Whether each reference level has actually converged (flat region at the end), and whether the gap ordering is stable throughout training or only emerges late.
   - *Why it matters.* The bar chart compresses training into a single final number. If two methods are still climbing at iteration 100, the reported gap is undercooked. This plot is the diagnostic that rules that out — or flags that more iterations are needed before the bar chart is trustworthy.
 
 - `fig_rq1_gap_fractions.png`
-  - *What it shows.* A single stacked bar (or equivalent pie) whose total height is the full regime-agnostic-to-per-regime gap, split into three colored segments labeled by gap component and sized by their fractional contribution.
+  - *What it shows.* A single stacked bar whose total height is the full regime-agnostic-to-Oracle gap, split into two colored segments labeled by gap component and sized by their fractional contribution.
   - *What it tells you.* The relative importance of each gap component as a proportion, not an absolute.
   - *Why it matters.* Two parameterizations might have similar total gaps but very different decompositions. The fraction view makes the *structure* of the problem visible independent of its scale — useful when comparing across difficulty settings in RQ3.
 
 **The story these plots tell.**
-*"The total gap between regime-agnostic PPO and per-regime PPO is X. Of this, the shared-network cost contributes Y%, the intrinsic inference cost Z%, and the compromise-policy cost W%. Inference is [the / not the] dominant source of lost performance. This decomposition is the reference frame for evaluating meta-RL methods in RQ2."*
+*"The total gap between regime-agnostic PPO and Oracle-PPO is X. Of this, the intrinsic inference cost contributes Y%, and the compromise-policy cost Z%. Inference is [the / not the] dominant source of lost performance. This decomposition is the reference frame for evaluating meta-RL methods in RQ2."*
 
 ---
 
 ### RQ2. How much of each gap component can meta-RL methods close from interaction history, and where do they fall short?
 
-**Protocol.** On the reference parameterization, run the 7-rung core method ladder (regime-agnostic PPO, stacked-obs PPO, RL², VariBAD, Belief-PPO, Oracle-PPO, per-regime PPO) at the default configuration: concat integration, no exploration bonus. This is the clean "method X vs method Y" comparison where the only thing that varies is the belief source.
+**Protocol.** On the reference parameterization, run the 6-rung core method ladder (regime-agnostic PPO, stacked-obs PPO, RL², VariBAD, Belief-PPO, Oracle-PPO) at the default configuration: concat integration, no exploration bonus. This is the clean "method X vs method Y" comparison where the only thing that varies is the belief source.
 
 Then, on the two belief-learning methods (RL², VariBAD), run a 2×2 factorial over two orthogonal ablation axes: integration mechanism (concat vs hypernet) and exploration bonus (off vs on). 8 cells total.
 
@@ -77,7 +76,7 @@ The mu-only vs full-posterior ablation is separate (it's a question about what p
 **Plots that answer RQ2.**
 
 - `fig_rq2_ladder_returns.png`
-  - *What it shows.* Bar chart across the full method ladder (regime-agnostic PPO through Oracle-PPO), each bar showing final mean return with seed-level CI error bars. Horizontal dashed lines mark RQ1's ceilings (Belief-PPO, Oracle-PPO, per-regime PPO).
+  - *What it shows.* Bar chart across the full method ladder (regime-agnostic PPO through Oracle-PPO), each bar showing final mean return with seed-level CI error bars. Horizontal dashed lines mark RQ1's ceilings (Belief-PPO, Oracle-PPO).
   - *What it tells you.* How each meta-RL method ranks relative to every other and relative to the ceilings. The ceiling lines turn absolute returns into interpretable positions — "VariBAD sits between Belief-PPO and Oracle-PPO" is meaningful; "VariBAD got 12.4 return" alone is not.
   - *Why it matters.* This is the main RQ2 comparison figure. Every later claim about method ranking cites this plot.
 
@@ -131,7 +130,7 @@ The mu-only vs full-posterior ablation is separate (it's a question about what p
 - **Difficulty axis 1 — regime persistence**: per-step transition probability, swept across 3 points (easy / medium / hard).
 - **Difficulty axis 2 — regime distinguishability**: separation between regime-conditional fill probabilities, swept across 3 points (easy / medium / hard).
 - **Methods swept**: reduced core set (RL², VariBAD, Belief-PPO, Oracle-PPO, regime-agnostic PPO). Both belief-learning methods run at concat integration with no exploration bonus — the configuration that appears in the M5 core ladder. Factorial ablations are not re-run at every sweep point.
-- **Per difficulty point**: re-compute RQ1's four reference levels locally (Oracle, Belief-PPO, per-regime, and regime-agnostic all change with parameterization), run the method ladder, measure gap-closure and posterior error.
+- **Per difficulty point**: re-compute RQ1's three reference levels locally (Oracle, Belief-PPO, and regime-agnostic all change with parameterization), run the method ladder, measure gap-closure and posterior error.
 
 **Two sub-questions answered here.**
 
@@ -181,7 +180,7 @@ At each difficulty point and for each method, plot gap-closure (y) vs posterior 
 ### Integration across RQs
 
 The three RQs together produce a coherent story:
-1. **RQ1** establishes the reference frame (four reference levels — three ceilings plus a floor — and three gap components).
+1. **RQ1** establishes the reference frame (three reference levels — two ceilings plus a floor — and two gap components).
 2. **RQ2** measures meta-RL methods against that frame on one parameterization.
 3. **RQ3** generalizes: how does the answer change with difficulty, and is belief quality mechanistically what matters?
 
@@ -192,25 +191,24 @@ Each RQ's plots stand alone (readable by a skimmer) but build on the previous (t
 
 ## Reference levels (quick reference table)
 
-Quick reference for the four reference levels defined under RQ1. Oracle-PPO, Belief-PPO, and per-regime PPO are ceilings (upper bounds). Regime-agnostic PPO is the floor. See RQ1 for full discussion.
+Quick reference for the three reference levels defined under RQ1. Oracle-PPO and Belief-PPO are ceilings (upper bounds). Regime-agnostic PPO is the floor. See RQ1 for full discussion.
 
 | Reference | Role | Information | Constraint | Purpose |
 |---|---|---|---|---|
-| Per-regime PPO | Ceiling | True regime (locked) | N separate networks | Regime-conditional optimum, no shared-representation cost |
 | Oracle-PPO | Ceiling | True regime (one-hot) | Single shared network | Upper bound under shared-network constraint |
 | Belief-PPO | Ceiling | Analytical HMM posterior | Single shared network | Upper bound under inferred-belief constraint |
 | Regime-agnostic PPO | Floor | None | Single shared network | Compromise-policy floor |
 
-Gap components:
-- **Shared-network cost** = Per-regime − Oracle
+Gap components (2-way decomposition):
 - **Inference cost** = Oracle − Belief
-- **Total belief value** = Belief − Regime-agnostic
+- **Compromise-policy cost** = Belief − Regime-agnostic
+- **Total gap** = Oracle − Regime-agnostic = inference cost + compromise-policy cost
 
 ## Method ladder
 
 The project treats meta-RL method design as three orthogonal axes: **belief source** (how the belief is obtained), **integration mechanism** (how the belief reaches the policy), and **exploration bonus** (whether belief-novelty is rewarded during training). Separating these axes is what makes the contribution rigorous — prior meta-RL work tends to bundle them into named methods, which makes it impossible to attribute observed gains to the right source.
 
-### Core ladder (7 methods, each architecturally distinct)
+### Core ladder (6 methods, each architecturally distinct)
 
 Evaluated in order of increasing belief explicitness:
 
@@ -220,7 +218,6 @@ Evaluated in order of increasing belief explicitness:
 4. **VariBAD** — explicit variational Gaussian belief from RNN encoder, trained with ELBO (reconstruction + KL). Architecturally and training-signal distinct from RL².
 5. **Belief-PPO** — analytical HMM posterior fed directly into PPO. No learned inference.
 6. **Oracle-PPO** — true regime one-hot fed into PPO. No inference needed.
-7. **Per-regime PPO** — N separate PPOs, each on a locked regime.
 
 Each rung tests a clearly distinct representational claim. The ladder is *only* about belief source — integration and exploration are handled as ablation axes, not ladder rungs.
 
@@ -238,7 +235,7 @@ Each rung tests a clearly distinct representational claim. The ladder is *only* 
 
 ### Factorial design for RQ2
 
-Core factorial: 2 belief sources × 2 integration × 2 exploration = 8 cells, on belief-learning methods RL² and VariBAD. Reference levels (PPO, stacked-obs PPO, Belief-PPO, Oracle-PPO, per-regime PPO) run only at concat/no-bonus for the ladder figures; optional confirmatory cells on Belief-PPO with hypernet and/or exploration if compute allows.
+Core factorial: 2 belief sources × 2 integration × 2 exploration = 8 cells, on belief-learning methods RL² and VariBAD. Reference levels (PPO, stacked-obs PPO, Belief-PPO, Oracle-PPO) run only at concat/no-bonus for the ladder figures; optional confirmatory cells on Belief-PPO with hypernet and/or exploration if compute allows.
 
 ### Excluded methods and why
 
@@ -250,9 +247,9 @@ Core factorial: 2 belief sources × 2 integration × 2 exploration = 8 cells, on
 ### Scope pre-commitment
 
 M4 CPU compute budget is the binding constraint. Main-body experiments cover:
-- All 7 core ladder rungs (single configuration each: concat integration, no exploration bonus).
+- All 6 core ladder rungs (single configuration each: concat integration, no exploration bonus).
 - 2×2×2 factorial (RL², VariBAD × concat, hypernet × off, on) = 8 additional runs.
 
-That is 15 configurations total for the reference parameterization in M5, each with 5 seeds. If compute is tight, the exploration axis is the first to drop (run factorial at 2×2×1 = 4 cells, with exploration bonus as a supplementary single comparison).
+That is 14 configurations total for the reference parameterization in M5, each with 5 seeds. If compute is tight, the exploration axis is the first to drop (run factorial at 2×2×1 = 4 cells, with exploration bonus as a supplementary single comparison).
 - **Full LOB microstructure simulator**: destroys analytical posterior tractability, not the right abstraction for the object of study.
 

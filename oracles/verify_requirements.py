@@ -37,7 +37,6 @@ from oracles.value_iteration import (
 )
 from plotting.m2_plots import (
     plot_belief_ppo_gap,
-    plot_mixed_gap,
     plot_per_regime_ppo,
     plot_policy_heatmap,
     plot_posterior_entropy,
@@ -397,28 +396,6 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     )
     plot_per_regime_ppo(
         per_regime_metrics, per_regime_optima, fig_dir / "fig_M2_R2_per_regime_ppo.png"
-    )
-    plot_mixed_gap(
-        {
-            "regime_agnostic": (agn_mean, agn_ci),
-            "oracle": (oracle_mean, oracle_ci),
-            "per_regime_mean": (
-                float(np.mean([m["final_return_mean"] for m in per_regime_metrics])),
-                [
-                    float(
-                        np.mean(
-                            [m["final_return_ci95"][0] for m in per_regime_metrics]
-                        )
-                    ),
-                    float(
-                        np.mean(
-                            [m["final_return_ci95"][1] for m in per_regime_metrics]
-                        )
-                    ),
-                ],
-            ),
-        },
-        fig_dir / "fig_M2_R3_mixed_gap.png",
     )
     plot_posterior_entropy(ent_curve, fig_dir / "fig_M2_R4_posterior_entropy.png")
     plot_belief_ppo_gap(

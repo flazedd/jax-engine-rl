@@ -39,12 +39,16 @@ class VIResult:
     # Q[inv, regime, action] — action-value function.
     Q: np.ndarray
     # Expected undiscounted per-step reward under optimal policy, per regime,
-    # computed by forward rollout from q=0 with the regime locked to r.
+    # = per_regime_expected_episode_return / episode_length.
     per_regime_expected_step_reward: np.ndarray
-    # Expected episode return = per_step * episode_length, per regime.
+    # Expected undiscounted T-step return under the optimal policy with the
+    # regime locked to r, starting from the reset inventory (q=0 when
+    # reset_inventory_range=0). Computed by forward rollout of the policy-
+    # induced Markov chain — matches what PPO measures with lock_regime=r.
     per_regime_expected_episode_return: np.ndarray
-    # Expected episode return under the mixed policy (regime sampled from
-    # initial distribution at each reset).
+    # Expected undiscounted T-step return under the optimal policy on the
+    # full regime-switching env, with initial regime drawn from
+    # env.initial_distribution and initial inventory q=0.
     mixed_expected_episode_return: float
 
 
@@ -162,51 +166,77 @@ def _stationary_distribution(P_pi: np.ndarray) -> np.ndarray:
     return pi_d / total
 
 
-def _per_step_reward_under_policy(
+def _expected_episode_return_under_policy(
     P: np.ndarray,
     R: np.ndarray,
     policy: np.ndarray,
+    episode_length: int,
+    init_inv_idx: int,
     regime_lock: int | None,
+    initial_distribution: np.ndarray | None = None,
 ) -> float:
-    """Expected undiscounted per-step reward under `policy`.
+    """Expected undiscounted T-step return under `policy`.
 
-    If `regime_lock` is given, restrict to that regime (per-regime evaluation).
-    Otherwise average over the full (inv, regime) stationary distribution.
+    Forward-rolls the policy-induced Markov chain starting from inventory
+    `init_inv_idx` (matching the env's reset behaviour, see
+    `reset_inventory_range`), summing expected per-step reward over
+    `episode_length` steps. Matches exactly what PPO measures as
+    `final_return_mean`, so VI returns can be used as a true ceiling.
+
+    If `regime_lock` is an integer, the regime is pinned to that value and the
+    inventory-only chain evolves (used for R2). Otherwise the full (inv, regime)
+    chain evolves and the initial regime is drawn from `initial_distribution`
+    (used for the mixed / regime-agnostic case).
+
+    The previous implementation used the stationary distribution, which is
+    correct only in the limit T → ∞; for T=128 with bull/bear regimes where
+    inventory drifts hard toward the bounds, the stationary estimate
+    systematically understates the actual 128-step-from-q=0 return and made
+    PPO look like it was beating VI on R2.
     """
     n_inv, n_reg, n_act, _, _ = P.shape
-    # Build induced transition matrix on the chosen state space.
-    if regime_lock is None:
-        # Full (inv × regime) chain.
+    # BLAS raises spurious FP-status flags (overflow/divide-by-zero) on
+    # denormal-heavy sparse-ish stochastic matrices even when the math is
+    # exact — row sums stay at 1 and outputs are correct. Silence locally.
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        if regime_lock is not None:
+            r = regime_lock
+            T_inv = np.zeros((n_inv, n_inv), dtype=np.float64)
+            r_inv = np.zeros(n_inv, dtype=np.float64)
+            for s in range(n_inv):
+                a = int(policy[s, r])
+                # Marginalize regime transitions: when the env has
+                # lock_regime=r, the regime stays at r for the whole episode,
+                # so the effective next-state distribution is the inventory
+                # marginal.
+                T_inv[s] = P[s, r, a].sum(axis=1)
+                r_inv[s] = R[s, r, a]
+            d = np.zeros(n_inv, dtype=np.float64)
+            d[init_inv_idx] = 1.0
+            total = 0.0
+            for _ in range(episode_length):
+                total += float(np.dot(d, r_inv))
+                d = d @ T_inv
+            return total
+
+        if initial_distribution is None:
+            initial_distribution = np.ones(n_reg, dtype=np.float64) / n_reg
         n_s = n_inv * n_reg
         P_pi = np.zeros((n_s, n_s), dtype=np.float64)
         r_pi = np.zeros(n_s, dtype=np.float64)
         for s in range(n_inv):
             for r in range(n_reg):
                 a = int(policy[s, r])
-                row = P[s, r, a].reshape(n_s)
-                idx = s * n_reg + r
-                P_pi[idx] = row
-                r_pi[idx] = R[s, r, a]
-        pi_d = _stationary_distribution(P_pi)
-        return float(np.dot(pi_d, r_pi))
-
-    # Restrict to single regime: transitions projected into (s, r_lock).
-    r = regime_lock
-    n_s = n_inv
-    P_proj = np.zeros((n_s, n_s), dtype=np.float64)
-    r_proj = np.zeros(n_s, dtype=np.float64)
-    for s in range(n_inv):
-        a = int(policy[s, r])
-        # Sum over r' → s' conditioning on staying in regime r (since locked).
-        # Equivalent to marginalizing the regime transition out: treat regime
-        # as frozen by setting regime dynamics to identity. We instead take
-        # the inventory-only transition from the action dynamics.
-        # P[s, r, a, s', r']: sum over r' to get inventory marginal.
-        inv_row = P[s, r, a].sum(axis=1)  # [n_inv]
-        P_proj[s] = inv_row
-        r_proj[s] = R[s, r, a]
-    pi_d = _stationary_distribution(P_proj)
-    return float(np.dot(pi_d, r_proj))
+                P_pi[s * n_reg + r] = P[s, r, a].reshape(n_s)
+                r_pi[s * n_reg + r] = R[s, r, a]
+        d = np.zeros(n_s, dtype=np.float64)
+        for r in range(n_reg):
+            d[init_inv_idx * n_reg + r] = initial_distribution[r]
+        total = 0.0
+        for _ in range(episode_length):
+            total += float(np.dot(d, r_pi))
+            d = d @ P_pi
+        return total
 
 
 def solve_value_iteration(env: MMReducedEnv) -> VIResult:
@@ -216,13 +246,29 @@ def solve_value_iteration(env: MMReducedEnv) -> VIResult:
     policy = np.argmax(Q, axis=-1).astype(np.int64)
     n_reg = max(1, env.n_regimes)
 
-    per_regime_step = np.zeros(n_reg, dtype=np.float64)
-    for r in range(n_reg):
-        per_regime_step[r] = _per_step_reward_under_policy(P, R, policy, r)
-    per_regime_ep = per_regime_step * env.episode_length
+    # Expected episode return is evaluated as what PPO would measure: a
+    # forward rollout of the policy-induced chain from the reset state
+    # (q=0 when reset_inventory_range=0) for `episode_length` steps.
+    # reset_inventory_range>0 isn't used in M2/M3 runs, so we take q=0.
+    init_inv_idx = int(env.inventory_max)
+    init_dist = np.asarray(env.initial_distribution, dtype=np.float64)
 
-    mixed_step = _per_step_reward_under_policy(P, R, policy, None)
-    mixed_ep = mixed_step * env.episode_length
+    per_regime_ep = np.zeros(n_reg, dtype=np.float64)
+    for r in range(n_reg):
+        per_regime_ep[r] = _expected_episode_return_under_policy(
+            P, R, policy, env.episode_length, init_inv_idx, regime_lock=r
+        )
+    per_regime_step = per_regime_ep / env.episode_length
+
+    mixed_ep = _expected_episode_return_under_policy(
+        P,
+        R,
+        policy,
+        env.episode_length,
+        init_inv_idx,
+        regime_lock=None,
+        initial_distribution=init_dist,
+    )
 
     return VIResult(
         V=V,
@@ -264,20 +310,138 @@ def compromise_policy_expected_returns(
         Q_marg = np.einsum("sra,r->sa", vi.Q, w)
         compromise = np.argmax(Q_marg, axis=-1).astype(np.int64)
 
-    # Evaluate this policy's per-regime and mixed return.
-    # Build policy[s, r] = compromise[s] (regime-agnostic).
+    # Evaluate this policy's per-regime and mixed return using the same
+    # finite-horizon forward-rollout metric as solve_value_iteration.
     per_regime_policy = np.broadcast_to(compromise[:, None], (n_inv, n_reg)).astype(
         np.int64
     )
-    per_regime_step = np.zeros(n_reg, dtype=np.float64)
+    init_inv_idx = int(env.inventory_max)
+    init_dist = np.asarray(env.initial_distribution, dtype=np.float64)
+    per_regime_ep = np.zeros(n_reg, dtype=np.float64)
     for r in range(n_reg):
-        per_regime_step[r] = _per_step_reward_under_policy(
-            P, R, per_regime_policy, r
+        per_regime_ep[r] = _expected_episode_return_under_policy(
+            P, R, per_regime_policy, env.episode_length, init_inv_idx, regime_lock=r
         )
-    per_regime_ep = per_regime_step * env.episode_length
-    mixed_step = _per_step_reward_under_policy(P, R, per_regime_policy, None)
-    mixed_ep = mixed_step * env.episode_length
+    mixed_ep = _expected_episode_return_under_policy(
+        P,
+        R,
+        per_regime_policy,
+        env.episode_length,
+        init_inv_idx,
+        regime_lock=None,
+        initial_distribution=init_dist,
+    )
     return per_regime_ep, float(mixed_ep), compromise
+
+
+def belief_qmdp_expected_return(
+    env: MMReducedEnv,
+    Q: np.ndarray,
+    n_trajectories: int = 2000,
+    seed: int = 0,
+) -> float:
+    """Monte Carlo expected episode return under the Q-MDP belief policy.
+
+    At each step, the agent acts according to
+        a* = argmax_a E_{r ~ belief_t}[Q(s_t, r, a)].
+    Belief is updated by the exact HMM forward filter (filter + predict),
+    matching `beliefs.hmm_posterior`. The true regime and fill outcomes are
+    sampled from the env's generative process. This is the Q-MDP
+    approximation of the optimal belief-conditioned policy — a well-known
+    lower bound on the true POMDP optimum and a reasonable analytical
+    proxy for a converged Belief-PPO ceiling.
+
+    Used for cheap env-design sweeps (seconds per candidate, no training).
+    """
+    if env.n_regimes <= 1:
+        vi = solve_value_iteration(env)
+        return float(vi.mixed_expected_episode_return)
+
+    rng = np.random.default_rng(seed)
+    T = env.episode_length
+    n_reg = env.n_regimes
+    n_act = N_ACTIONS
+    I_max = int(env.inventory_max)
+    kappa = float(env.inventory_penalty)
+
+    init_dist = np.asarray(env.initial_distribution, dtype=np.float64)
+    trans = np.asarray(env.transition_matrix, dtype=np.float64).reshape(n_reg, n_reg)
+
+    # Precompute per (action, regime) fill probabilities and per-action spreads.
+    fill = np.zeros((n_act, n_reg, 2), dtype=np.float64)
+    spreads = np.zeros((n_act, 2), dtype=np.float64)
+    for a in range(n_act):
+        for r in range(n_reg):
+            pb, pa = _fill_probs_np(env, a, r)
+            fill[a, r, 0] = pb
+            fill[a, r, 1] = pa
+        bs, as_ = _bid_ask_spreads(a)
+        spreads[a, 0] = bs
+        spreads[a, 1] = as_
+
+    N = n_trajectories
+    # Sample initial true regimes from initial distribution.
+    regimes = rng.choice(n_reg, size=N, p=init_dist)
+    q = np.zeros(N, dtype=np.int64)  # inventory = 0 at reset
+    # Agent's belief starts at init_dist (predicted, no evidence yet).
+    beliefs = np.tile(init_dist, (N, 1)).astype(np.float64)
+    total = np.zeros(N, dtype=np.float64)
+
+    # BLAS raises spurious FP-status flags on near-degenerate stochastic
+    # matmul rows; outputs are mathematically correct (rows still sum to 1).
+    errstate = np.errstate(over="ignore", divide="ignore", invalid="ignore")
+    errstate.__enter__()
+    for _ in range(T):
+        s = q + I_max  # inventory index
+        # Q-MDP: average Q over belief, argmax over actions.
+        Q_at_s = Q[s]  # [N, n_reg, n_act]
+        Q_avg = np.einsum("nr,nra->na", beliefs, Q_at_s)  # [N, n_act]
+        actions = Q_avg.argmax(axis=-1).astype(np.int64)  # [N]
+
+        # Sample fills from the true regime.
+        pb_true = fill[actions, regimes, 0]
+        pa_true = fill[actions, regimes, 1]
+        bid_ok = q < I_max
+        ask_ok = q > -I_max
+        bf = (rng.random(N) < pb_true) & bid_ok
+        af = (rng.random(N) < pa_true) & ask_ok
+        bf_eff = bf.astype(np.int64)
+        af_eff = af.astype(np.int64)
+
+        # Reward.
+        bid_sp = spreads[actions, 0]
+        ask_sp = spreads[actions, 1]
+        capture = bf_eff * bid_sp + af_eff * ask_sp
+        q_next = q + bf_eff - af_eff
+        inv_pen = kappa * q_next.astype(np.float64) ** 2
+        total += capture - inv_pen
+
+        # Belief update matching beliefs.hmm_posterior exactly:
+        # effective p = raw p × can_fill; bernoulli likelihood per regime.
+        pb_all = fill[actions, :, 0]  # [N, n_reg]
+        pa_all = fill[actions, :, 1]  # [N, n_reg]
+        pb_eff = pb_all * bid_ok[:, None].astype(np.float64)
+        pa_eff = pa_all * ask_ok[:, None].astype(np.float64)
+        bf_col = bf_eff[:, None].astype(np.float64)
+        af_col = af_eff[:, None].astype(np.float64)
+        lik_bid = pb_eff * bf_col + (1.0 - pb_eff) * (1.0 - bf_col)
+        lik_ask = pa_eff * af_col + (1.0 - pa_eff) * (1.0 - af_col)
+        lik = lik_bid * lik_ask  # [N, n_reg]
+
+        post = beliefs * lik
+        post_sum = post.sum(axis=-1, keepdims=True)
+        post = np.where(post_sum > 0, post / np.maximum(post_sum, 1e-12), beliefs)
+        beliefs = post @ trans  # predict forward
+
+        # Sample next true regime.
+        cum = trans[regimes].cumsum(axis=-1)
+        u = rng.random(N)[:, None]
+        regimes = (u < cum).argmax(axis=-1)
+
+        q = q_next
+
+    errstate.__exit__(None, None, None)
+    return float(total.mean())
 
 
 def policy_disagreement(vi: VIResult) -> tuple[float, np.ndarray]:
@@ -360,7 +524,15 @@ def wrong_regime_value_loss(
                 continue
             pol = policy.copy()
             pol[:, r_true] = policy[:, r_other]
-            wrong_step = _per_step_reward_under_policy(P, R_tab, pol, r_true)
+            wrong_ep = _expected_episode_return_under_policy(
+                P,
+                R_tab,
+                pol,
+                env.episode_length,
+                int(env.inventory_max),
+                regime_lock=r_true,
+            )
+            wrong_step = wrong_ep / env.episode_length
             opt_step = float(per_regime_opt[r_true])
             loss = max(opt_step - wrong_step, 0.0)
             abs_losses.append(loss)

@@ -13,7 +13,6 @@ COLORS: dict[str, str] = {
     "varibad": "#d62728",
     "belief_ppo": "#9467bd",
     "oracle_ppo": "#8c564b",
-    "per_regime_ppo": "#17becf",
 }
 
 

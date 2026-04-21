@@ -514,14 +514,13 @@ def _gap_component(
 
 
 def make_m3() -> dict:
-    """Run the four reference-level methods on E_final, compute the gap
+    """Run the three reference-level methods on E_final, compute the gap
     decomposition, and regenerate RQ1 figures.
 
     Sequence:
-      1. super_fast smoke for all four configs (wiring + shape).
+      1. super_fast smoke for all three configs (wiring + shape).
       2. fast smoke to confirm each method shows directional signal.
-      3. full run — 200 iter × 512 envs × 5 seeds (per_regime also runs once
-         per regime under matched compute).
+      3. full run — 200 iter × 512 envs × 5 seeds.
       4. Build stats_M3_reference_levels.json from the full-mode metrics.
       5. Regenerate RQ1 figures.
 
@@ -532,27 +531,22 @@ def make_m3() -> dict:
         "regime_agnostic_ppo": "m3_regime_agnostic.yaml",
         "oracle_ppo":          "m3_oracle.yaml",
         "belief_ppo":          "m3_belief.yaml",
-        "per_regime_ppo":      "m3_per_regime.yaml",
     }
     experiment_dirs = {
         "regime_agnostic_ppo": "m3_regime_agnostic",
         "oracle_ppo":          "m3_oracle",
         "belief_ppo":          "m3_belief",
-        "per_regime_ppo":      "m3_per_regime",
     }
 
-    # Per-regime sweep means 3 sub-trainings under full. Budget estimate uses
-    # the effective count of PPO networks trained per mode.
     rough_per_mode_seconds = {
-        "super_fast": 40,    # 6 networks × ~7s compile-dominated
-        "fast":       120,
-        "full":       1800,  # ~30 min for 6 × 200 iter × 512 envs × 5 seeds
+        "super_fast": 25,
+        "fast":       90,
+        "full":       1200,
     }
 
     print(
         "[make_milestone] M3 orchestration plan:\n"
-        "[make_milestone]   super_fast → fast → full, 4 method configs × mode\n"
-        "[make_milestone]   per_regime_ppo fans out to 3 locked-regime runs per mode\n"
+        "[make_milestone]   super_fast → fast → full, 3 method configs × mode\n"
         f"[make_milestone]   rough per-mode: sf~{rough_per_mode_seconds['super_fast']}s, "
         f"fast~{rough_per_mode_seconds['fast']}s, full~{rough_per_mode_seconds['full']}s",
         flush=True,
@@ -622,31 +616,23 @@ def make_m3() -> dict:
     belief_per_seed = np.asarray(
         method_metrics["belief_ppo"]["per_seed_final_return"], dtype=float
     )
-    per_regime_per_seed = np.asarray(
-        method_metrics["per_regime_ppo"]["per_seed_final_return"], dtype=float
-    )
 
-    shared_network = _gap_component(per_regime_per_seed, oracle_per_seed)
     inference = _gap_component(oracle_per_seed, belief_per_seed)
     compromise_policy = _gap_component(belief_per_seed, agn_per_seed)
-    total_gap = _gap_component(per_regime_per_seed, agn_per_seed)
+    total_gap = _gap_component(oracle_per_seed, agn_per_seed)
 
     total_abs = total_gap["absolute"]
-    for g in (shared_network, inference, compromise_policy):
+    for g in (inference, compromise_policy):
         g["fraction_of_total"] = (
             g["absolute"] / total_abs if abs(total_abs) > 1e-9 else 0.0
         )
 
-    # Ordering check: regime_agnostic ≤ belief ≤ oracle ≤ per_regime, using
-    # means and treating overlap within CI as "≈". We require strict-or-equal
-    # means; print full details into `ordering_details`.
+    # Ordering check: regime_agnostic ≤ belief ≤ oracle, CI-tolerant.
     m_agn = reference_levels["regime_agnostic_ppo"]["mean"]
     m_bel = reference_levels["belief_ppo"]["mean"]
     m_ora = reference_levels["oracle_ppo"]["mean"]
-    m_per = reference_levels["per_regime_ppo"]["mean"]
-    strict_ordering = (m_agn <= m_bel <= m_ora <= m_per)
-    # CI-tolerant ordering: a higher mean is "valid" if its CI lower bound
-    # isn't more than CI-width below the lower method's CI upper bound.
+    strict_ordering = (m_agn <= m_bel <= m_ora)
+
     def _ordered_or_overlap(lo_method: dict, hi_method: dict) -> bool:
         if hi_method["mean"] >= lo_method["mean"]:
             return True
@@ -657,25 +643,19 @@ def make_m3() -> dict:
         for lo, hi in (
             ("regime_agnostic_ppo", "belief_ppo"),
             ("belief_ppo", "oracle_ppo"),
-            ("oracle_ppo", "per_regime_ppo"),
         )
     )
     ordering_valid = bool(strict_ordering or ci_tolerant_ordering)
     ordering_details = (
-        f"agnostic={m_agn:.2f} <= belief={m_bel:.2f} <= "
-        f"oracle={m_ora:.2f} <= per_regime={m_per:.2f}"
+        f"agnostic={m_agn:.2f} <= belief={m_bel:.2f} <= oracle={m_ora:.2f}"
     )
 
     all_converged = all(reference_levels[m]["converged"] for m in reference_levels)
-    shared_network_measurable = bool(
-        shared_network["absolute"] > shared_network["ci_width"]
-    )
 
     stats = {
         "env_version": "e_final",
         "reference_levels": reference_levels,
         "gap_components": {
-            "shared_network_cost": shared_network,
             "inference_cost": inference,
             "compromise_policy_cost": compromise_policy,
             "total_gap": total_gap["absolute"],
@@ -684,7 +664,6 @@ def make_m3() -> dict:
         "ordering_valid": ordering_valid,
         "ordering_details": ordering_details,
         "all_converged": all_converged,
-        "shared_network_cost_is_measurable": shared_network_measurable,
     }
 
     stats_path = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"

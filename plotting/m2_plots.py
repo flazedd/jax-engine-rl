@@ -1,6 +1,9 @@
 """M2 figures: R1 policy heatmap + value-loss distribution, R2 per-regime
-learning curves, R3 mixed-gap bars, R4 posterior-entropy curve + Belief-PPO
-bars.
+learning curves, R4 posterior-entropy curve + Belief-PPO bars.
+
+R3 has no figure of its own — the R4 Belief-PPO bar chart is a strict
+superset (regime_agnostic → belief → oracle), and R3's pass criterion is
+the JSON field `gap_to_ci_ratio` rather than anything visual.
 
 Every plot takes plain numpy / dict inputs and writes a PNG. Claude Code
 reads the stats JSON produced by verify_requirements.py; these plots exist
@@ -140,36 +143,6 @@ def plot_per_regime_ppo(
         ax.legend(loc="lower right", fontsize=8)
     fig.suptitle("M2 R2 — per-regime PPO vs VI-optimal")
     fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path)
-    plt.close(fig)
-
-
-def plot_mixed_gap(
-    bars: dict[str, tuple[float, list[float]]], output_path: Path
-) -> None:
-    """Bar chart: regime-agnostic vs oracle vs per-regime means, with CIs."""
-    apply_style()
-    # Preserve ordering as provided.
-    names = list(bars.keys())
-    means = [bars[k][0] for k in names]
-    cis = [bars[k][1] for k in names]
-    errs_lo = [m - ci[0] for m, ci in zip(means, cis)]
-    errs_hi = [ci[1] - m for m, ci in zip(means, cis)]
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
-    xs = np.arange(len(names))
-    palette = {
-        "regime_agnostic": COLORS.get("ppo", "#1f77b4"),
-        "oracle": COLORS.get("oracle_ppo", "#8c564b"),
-        "belief": COLORS.get("belief_ppo", "#9467bd"),
-        "per_regime_mean": COLORS.get("per_regime_ppo", "#17becf"),
-    }
-    colors = [palette.get(n, "#888") for n in names]
-    ax.bar(xs, means, yerr=[errs_lo, errs_hi], capsize=5, color=colors, edgecolor="black")
-    ax.set_xticks(xs)
-    ax.set_xticklabels(names, rotation=0)
-    ax.set_ylabel("episode return")
-    ax.set_title("M2 R3 — regime-agnostic vs oracle vs per-regime")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)

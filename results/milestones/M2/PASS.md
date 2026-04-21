@@ -39,7 +39,6 @@ Under `figures/milestones/M2/`:
 - `fig_M2_R1_policy_heatmap.png` — VI-optimal action per (regime, inventory); regimes select different actions at most inventory levels.
 - `fig_M2_R1_value_loss_distribution.png` — histogram of relative policy-commitment loss `(V^π_true − V^π_other) / V^π_true` over (r_true, r_other, inventory) buckets; trimodal (~0 / ~0.30 / ~0.75), mean 0.384.
 - `fig_M2_R2_per_regime_ppo.png` — three subplots, PPO learning curve vs VI dashed line on each locked regime. Bull/bear show clear learning; noise is flat because random-symmetric play is already near-optimal there.
-- `fig_M2_R3_mixed_gap.png` — bar chart: regime-agnostic / oracle / per-regime mean with seed CIs.
 - `fig_M2_R4_posterior_entropy.png` — mean posterior entropy across random-policy rollouts; drops rapidly to ~0.42 then plateaus. Terminal step trimmed (the belief-obs wrapper resets on `done`).
 - `fig_M2_R4_belief_ppo_gap.png` — bar chart: regime-agnostic / Belief-PPO / Oracle-PPO with seed CIs.
 

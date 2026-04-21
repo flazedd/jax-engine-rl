@@ -33,14 +33,13 @@ Never read more than 2–3 docs in a single session unless the task genuinely sp
 - **RQ2** — How much of each gap component do meta-RL methods close?
 - **RQ3** — How does method performance scale with problem difficulty, and does posterior approximation quality predict task performance?
 
-**Method ladder (7 methods, each architecturally distinct):**
+**Method ladder (6 methods, each architecturally distinct):**
 1. Regime-agnostic PPO (floor)
 2. Stacked-obs PPO (= PPO + `stack_obs` wrapper)
 3. RL²
 4. VariBAD
 5. Belief-PPO (analytical HMM posterior, ceiling)
 6. Oracle-PPO (true regime, ceiling)
-7. Per-regime PPO (ceiling)
 
 Plus two orthogonal ablation axes composed via config flags, not separate agent files:
 - **Integration** — concat vs hypernet
@@ -50,18 +49,17 @@ Full ladder + ablation spec in `docs/research-questions.md` → "Method ladder".
 
 ## Reference levels (quick reference)
 
-Four reference performance levels, established in M3 (see `docs/milestones/m3.md`):
+Three reference performance levels, established in M3 (see `docs/milestones/m3.md`):
 
 | Level | Role | Regime info |
 |---|---|---|
-| **Per-regime PPO** | ceiling | trained on locked regime, reports conditional optimum |
 | **Oracle-PPO** | ceiling | conditioned on true regime one-hot |
 | **Belief-PPO** | ceiling | conditioned on analytical HMM posterior |
 | **Regime-agnostic PPO** | floor | no regime information |
 
-Expected ordering: `regime_agnostic ≤ belief ≤ oracle ≤ per_regime`.
+Expected ordering: `regime_agnostic ≤ belief ≤ oracle`.
 
-The three *ceilings* (per-regime, oracle, belief) minus the *floor* (regime-agnostic) gives the total optimality gap that meta-RL methods are asked to close.
+Total optimality gap = `oracle − regime_agnostic`, decomposed 2-way into **inference cost** (`oracle − belief`) and **compromise-policy cost** (`belief − agnostic`). Meta-RL methods in M5 are evaluated against these components.
 
 ## Critical conventions (applied every turn)
 
@@ -84,14 +82,14 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 
 - [x] M0 — infrastructure skeleton
 - [x] M1 — PPO on AS baseline
-- [x] M2 — regime-switching env, R1–R4 verified
+- [x] M2 — regime-switching env, R1–R4 verified on E3_asymmetric (new E_final; E2 also passed)
 - [ ] M3 — reference levels (answers RQ1)
 - [ ] M4 — implementation validation
 - [ ] M5 — ladder + factorial on MM (answers RQ2)
 - [ ] M6 — difficulty sweep + decoupling (answers RQ3)
 - [ ] M7 — supplementary ablations (optional)
 
-Current env version: `E_final = e2_fill_switched` (symlink at `experiments/configs/envs/e_final.yaml`). E2 is regime-switched directional fill intensities (noise/bull/bear). Passed R1–R4 in M2 full-mode.
+Current env version: `E_final = e3_asymmetric` (symlink at `experiments/configs/envs/e_final.yaml`). E3 is regime-switched directional fill intensities with asymmetric bull/bear (bull extreme, bear moderate) — chosen via `scripts/env_gap_sweep.py` to widen the analytical oracle-vs-compromise gap from ~6.7 (E2) to ~21.7 units while keeping all three regimes inferable. Full-mode M2 on E3: agnostic=84.7, belief=97.6, oracle=104.5 → total gap 19.8 (compromise-policy cost 12.9, inference cost 6.9). All R1–R4 pass.
 
 ## Glossary
 

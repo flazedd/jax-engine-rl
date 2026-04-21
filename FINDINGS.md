@@ -146,3 +146,31 @@ at `results/milestones/M3/stats_M3_reference_levels.json` to confirm numbers
 haven't drifted, then pick the option. If option 2, the implementation
 anchor is a new agent class alongside `ppo_oracle` that masks its PPO update
 to samples where `regime == self.my_regime`.
+
+---
+
+## 2026-04-21 — Per-regime PPO dropped as a reference level and method-ladder rung
+
+**Decision.** Remove per-regime PPO from RQ1's decomposition, M3's reference levels, and M5's method ladder. Reformulate RQ1 as a **2-way** decomposition: `total_gap = inference_cost + compromise_policy_cost` where `inference_cost = oracle − belief` and `compromise_policy_cost = belief − agnostic`.
+
+**Why.**
+- On E_final, `shared_network_cost = per_regime − oracle = −1.10` with CI `[−2.30, +0.51]` — the CI crosses zero, so the component is not measurable. The 3-way decomposition's third slice is indistinguishable from noise.
+- Per-regime PPO with N hard-dispatched heads does not correspond to any realistic deployable method; oracle-PPO already captures "knows the regime, single shared network." Keeping it as a pure architectural probe added narrative burden without insight.
+- A wider-network oracle absorbs whatever architectural capacity cost per-regime was meant to isolate, making the component a design-parameter artifact rather than a fundamental property of the problem.
+
+**What changed.**
+- Removed `agents/ppo_per_regime_mixed.py`, `experiments/configs/m3_per_regime*.yaml`, `scripts/m3_splice_per_regime_mixed.py`.
+- Reverted the per-sample `weight` feature in `training/ppo_update.py` (only `_mixed` used it).
+- Rewrote `results/milestones/M3/stats_M3_reference_levels.json` with 3 reference levels and 2-way gap decomposition; ordering_valid remains true (`agnostic=122.78 ≤ belief=122.80 ≤ oracle=129.99`).
+- Updated `CLAUDE.md`, `docs/research-questions.md`, `docs/milestones/m3.md`, `docs/milestones/m5.md`, `docs/milestones/contingency.md`, `docs/implementation.md`, and the M3 plotting module to reflect 3 reference levels / 6-rung ladder.
+
+**What stays.**
+- `agents/ppo_per_regime.py` (locked-regime wrapper) is kept as an **env-validation tool** only — used by `oracles/verify_requirements.py` for M2's R2 check (locked-regime PPO reaches VI optimum). Not a reference level, not a method.
+- `stats_M3_reference_levels_locked_regime.json` and the `results/m3_per_regime*` result directories are retained as audit trail; not referenced by downstream tooling.
+
+**Implications for the thesis.**
+- RQ1 decomposition is now cleaner (every component is measurable), and the thesis reports 2-way instead of 3-way.
+- RQ2 method-ladder figures lose one horizontal reference line (per-regime ceiling).
+- M6 difficulty sweep re-computes only 3 reference levels per difficulty point (was 4).
+
+**Still open.** The observed total gap on E_final is only ~7 return units (5.6% of regime-agnostic mean). RQ2's statistical power depends on the gap being wider on at least some points in the M6 sweep. Env redesign for M6 (asymmetric regimes, wider fill-rate spreads, or lower persistence) remains to be drafted.

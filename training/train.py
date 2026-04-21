@@ -59,6 +59,10 @@ def _build_env(cfg: ExperimentConfig):
         return OracleObsEnv(inner=MMReducedEnv(**cfg.env.params))
     if cfg.env.name == "mm_reduced_belief":
         return BeliefObsEnv(inner=MMReducedEnv(**cfg.env.params))
+    if cfg.env.name == "mm_reduced_belief_constant":
+        return BeliefObsEnv(
+            inner=MMReducedEnv(**cfg.env.params), constant_belief=True
+        )
     raise ValueError(f"unknown env: {cfg.env.name!r}")
 
 

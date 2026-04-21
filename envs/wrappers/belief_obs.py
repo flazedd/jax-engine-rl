@@ -24,6 +24,9 @@ from envs.mm_reduced import MMReducedEnv
 @dataclass(frozen=True)
 class BeliefObsEnv:
     inner: MMReducedEnv
+    # D2 ablation: if True, agent sees `initial_distribution` at every step.
+    # Internal belief tracking still runs so logging is unaffected.
+    constant_belief: bool = False
 
     @property
     def n_inventory_states(self) -> int:
@@ -46,6 +49,8 @@ class BeliefObsEnv:
         return self.inner.gamma
 
     def _augment(self, base_obs: chex.Array, belief: chex.Array) -> chex.Array:
+        if self.constant_belief:
+            belief = initial_belief(self.inner)
         return jnp.concatenate([base_obs, belief], axis=-1)
 
     def reset(self, key: chex.PRNGKey) -> tuple[chex.ArrayTree, chex.Array]:

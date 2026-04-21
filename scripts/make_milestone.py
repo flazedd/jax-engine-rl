@@ -679,12 +679,9 @@ def make_m3() -> dict:
         "env_version": "e_final",
         "ordering_valid": ordering_valid,
         "all_converged": all_converged,
-        "shared_network_cost_is_measurable": shared_network_measurable,
         "total_gap_absolute": total_gap["absolute"],
-        "shared_network_cost_absolute": shared_network["absolute"],
         "inference_cost_absolute": inference["absolute"],
         "compromise_policy_cost_absolute": compromise_policy["absolute"],
-        "shared_network_cost_fraction": shared_network["fraction_of_total"],
         "inference_cost_fraction": inference["fraction_of_total"],
         "compromise_policy_cost_fraction": compromise_policy["fraction_of_total"],
         "ordering_details": ordering_details,
@@ -760,7 +757,6 @@ def main() -> int:
         "env_version",
         "ordering_valid",
         "all_converged",
-        "shared_network_cost_is_measurable",
         "total_gap_absolute",
     ):
         if k in stats:

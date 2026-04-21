@@ -51,7 +51,7 @@ The 2×2×2 factorial has 3 main effects and 4 interactions. Main effects are th
 
 Before any M5/M6 experiment runs, these hypotheses are committed in writing. Results on these are the "primary" findings; everything else is exploratory and labeled as such in the thesis.
 
-**RQ1 primary hypothesis.** The four reference levels order as regime-agnostic < belief-PPO ≤ oracle-PPO ≤ per-regime PPO, with non-zero gaps between the strict inequalities. Pre-committed: if belief-PPO ≈ oracle-PPO (CI overlap), inference cost is trivially small and the RQ2 motivation is weaker.
+**RQ1 primary hypothesis.** The three reference levels order as regime-agnostic < belief-PPO ≤ oracle-PPO, with a non-zero gap between regime-agnostic and oracle. Pre-committed: if belief-PPO ≈ oracle-PPO (CI overlap), inference cost is trivially small and the RQ2 motivation is weaker.
 
 **RQ2 primary hypotheses (pre-committed before running M5):**
 1. VariBAD's final return > regime-agnostic PPO's final return (paired Wilcoxon, Holm-corrected).

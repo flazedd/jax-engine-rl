@@ -125,6 +125,8 @@ Within the space of parameterizations satisfying R1–R4, parameters are hand-ch
 
 Transition frequency and regime distinguishability are also natural ablation axes — running experiments across a sweep is an expected robustness check for RQ2 (how posterior approximation quality depends on task difficulty).
 
+**Synthetic-testbed framing.** This env is a synthetic POMDP testbed for meta-RL, not a calibrated market simulator. Some parameter choices in `E_final` (E6e) are mathematically convenient rather than physically standard — most notably R0 (the wide-favoring regime) has `p_wide > p_tight`, meaning wide quotes fill more often than tight ones. In a real market the ordering is usually reversed (counterparties prefer tighter quotes). The choice is justified because what matters for RQ1/RQ2 is the *structural* property that the optimal action class (sym vs favor_X) differs across regimes while inventory direction does not leak regime information — physical realism of the per-regime fill distribution is orthogonal to the meta-RL well-posedness conditions in R1–R4. Calibration to real markets is excluded by design (consistent with the "real markets do X" anti-pattern above).
+
 ### Regime locking
 
 Env accepts `lock_regime: int | None`. When set, regime transitions are disabled — used for per-regime PPO training and for targeted evaluation.

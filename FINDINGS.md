@@ -233,7 +233,7 @@ T = 0.98 diagonal-dominant 3×3, episode 128, inv_max=5, κ=0.05.
 - `CLAUDE.md` "Current env version" line updated.
 
 **Still open.**
-- Decide whether the p_wide > p_tight in R0 needs a defense in `docs/environment.md` or if pointing to "synthetic testbed" framing is sufficient.
+- ~~Decide whether the p_wide > p_tight in R0 needs a defense in `docs/environment.md`~~. Resolved 2026-04-25: defense paragraph added to `docs/environment.md` "Parameter-choice discipline" section under "Synthetic-testbed framing".
 
 ## 2026-04-25 — M3 full re-run on E6e (passes, ordering valid, all converged)
 

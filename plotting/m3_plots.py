@@ -16,7 +16,7 @@ from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
 
 _METHOD_ORDER = ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo")
 _METHOD_LABELS = {
-    "regime_agnostic_ppo": "regime-agnostic",
+    "regime_agnostic_ppo": "Regime-agnostic PPO",
     "belief_ppo": "Belief-PPO",
     "oracle_ppo": "Oracle-PPO",
 }

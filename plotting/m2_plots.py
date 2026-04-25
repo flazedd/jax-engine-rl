@@ -189,14 +189,20 @@ def plot_belief_ppo_gap(
         "belief": COLORS.get("belief_ppo", "#9467bd"),
         "oracle": COLORS.get("oracle_ppo", "#8c564b"),
     }
+    label_map = {
+        "regime_agnostic": "Regime-agnostic PPO",
+        "belief": "Belief-PPO",
+        "oracle": "Oracle-PPO",
+    }
     colors = [palette.get(n, "#888") for n in names]
+    display_labels = [label_map.get(n, n) for n in names]
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
     xs = np.arange(len(names))
     ax.bar(xs, means, yerr=[errs_lo, errs_hi], capsize=5, color=colors, edgecolor="black")
     ax.set_xticks(xs)
-    ax.set_xticklabels(names, rotation=0)
+    ax.set_xticklabels(display_labels, rotation=0)
     ax.set_ylabel("episode return")
-    ax.set_title("M2 R4 — regime-agnostic vs Belief-PPO vs Oracle-PPO")
+    ax.set_title("M2 R4 — Regime-agnostic PPO vs Belief-PPO vs Oracle-PPO")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)

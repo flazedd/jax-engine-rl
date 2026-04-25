@@ -1,0 +1,31 @@
+# E6c — Option 3 (mild): E3 with κ=0.05 (5× E3's inv penalty).
+#
+# Hypothesis. Higher inventory penalty forces the agent to keep |inv|
+# small. If inv stays near 0, it carries less regime info → regime-agnostic
+# PPO can't decode regime from inv → gap to belief widens.
+#
+# Caveat. E3's fills are directional within regime, so the agent can't
+# fully prevent inv drift in bull/bear (one side fills 6× more than the
+# other regardless of action). High κ makes the agent suffer more when
+# inv saturates but doesn't necessarily prevent saturation. This tests
+# whether punishment alone breaks the coupling.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.60, 0.10, 0.75]
+    regime_p_wide_bid:  [0.20, 0.02, 0.30]
+    regime_p_tight_ask: [0.60, 0.95, 0.20]
+    regime_p_wide_ask:  [0.20, 0.60, 0.05]
+    initial_distribution: [0.333, 0.333, 0.334]

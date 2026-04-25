@@ -142,6 +142,8 @@ def apply_run_mode(cfg: ExperimentConfig, mode: str) -> ExperimentConfig:
 
     - super_fast: 2 iters, 16 envs, rollout 32, 1 seed — pipeline smoke test.
     - fast:       20 iters, 128 envs, rollout 128, 1 seed — directional signal.
+    - mid:        100 iters, 256 envs, rollout 128, 1 seed — single-seed plateau,
+                  enough to read the converged gap when iterating env designs.
     - full:       config defaults — production run.
     """
     if mode == "super_fast":
@@ -152,6 +154,11 @@ def apply_run_mode(cfg: ExperimentConfig, mode: str) -> ExperimentConfig:
     elif mode == "fast":
         cfg.iterations = 20
         cfg.parallel_envs = 128
+        cfg.rollout_length = 128
+        cfg.num_seeds = 1
+    elif mode == "mid":
+        cfg.iterations = 100
+        cfg.parallel_envs = 256
         cfg.rollout_length = 128
         cfg.num_seeds = 1
     elif mode == "full":

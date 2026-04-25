@@ -1,0 +1,53 @@
+# E6a — Option 1 (mild): symmetric fills within regime, regime affects
+# optimal *action class* (sym vs favor_X), not fill direction.
+#
+# Hypothesis. In E3-style envs the regime drives directional fill bias →
+# inventory drifts deterministically with regime → inv becomes a near-
+# sufficient statistic for regime → regime-agnostic PPO matches belief PPO.
+# E6a removes the directional bias: fills are symmetric on bid/ask within
+# each regime, so inventory random-walks regardless of regime. Regime info
+# is no longer leaked through inventory.
+#
+# What still varies by regime: the (p_tight, p_wide) magnitudes, which
+# determine whether sym or favor_X is the better action class.
+#
+# Three regimes:
+#   0 ("wide wins") — wide quotes fill almost as well as tight, so favor_X
+#       is best despite the directional skew. Optimal: alternate favor_ask
+#       / favor_bid based on inv sign.
+#   1 ("tight wins") — wide quotes barely fill, sym dominates (capture
+#       both sides at high rate, no directional bleed).
+#   2 ("dead") — fills rare on both ends; sym best (small but positive).
+#
+# Per-step capture under sym vs favor_X (q=0):
+#   R0:  sym=0.60   favor_X=2.25   → favor_X dominant
+#   R1:  sym=1.60   favor_X=0.95   → sym dominant
+#   R2:  sym=1.00   favor_X=0.56   → sym dominant
+#
+# Compromise (regime-agnostic) must pick one action class per inv. avg
+# capture sym=1.07, favor_X=1.25 → compromise picks favor_X, losing big
+# in R1 and modest in R2. Belief PPO can switch action class per regime.
+# Critically, since fills are symmetric within regime, inv carries
+# essentially no regime info → agnostic PPO cannot route around the
+# compromise via inv-conditioning.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    # Symmetric: bid side == ask side within each regime.
+    regime_p_tight_bid: [0.30, 0.80, 0.50]
+    regime_p_wide_bid:  [0.65, 0.05, 0.02]
+    regime_p_tight_ask: [0.30, 0.80, 0.50]
+    regime_p_wide_ask:  [0.65, 0.05, 0.02]
+    initial_distribution: [0.333, 0.333, 0.334]

@@ -174,3 +174,93 @@ to samples where `regime == self.my_regime`.
 - M6 difficulty sweep re-computes only 3 reference levels per difficulty point (was 4).
 
 **Still open.** The observed total gap on E_final is only ~7 return units (5.6% of regime-agnostic mean). RQ2's statistical power depends on the gap being wider on at least some points in the M6 sweep. Env redesign for M6 (asymmetric regimes, wider fill-rate spreads, or lower persistence) remains to be drafted.
+
+---
+
+## 2026-04-25 — E_final replaced (E3 → E6e); inv-regime coupling identified as cause of E3's collapsed gap
+
+**Decision.** Repoint `E_final` from `e3_asymmetric` to `e6e_symmetric_kappa05`. E6e: symmetric within-regime fills + κ=0.05 inventory penalty + 3-regime quality contrast.
+
+**Why E3 had a near-zero measured compromise gap despite analytical comp_cost=21.**
+
+Diagnostic chain (this session):
+- M3 mid-mode on E3 (100 iter × 256 envs × 1 seed): agnostic=107.4, belief=107.0 → measured gap = −0.3.
+- Analytical `compromise_VI(E3)` = 91.7. Yet PPO regime-agnostic reaches 107.4 — 15 units *above* analytical compromise. Same for E5b: PPO agnostic=70.6 vs analytical compromise_VI=17.8 (4× overshoot).
+- Obs is genuinely just one-hot inv (no regime leak; verified at `envs/mm_reduced.py:131`).
+- **Mechanism.** E3's regime drives fills on a single side (bull → ask fills only, bear → bid fills only). After ~30 sticky-regime steps, inventory deterministically saturates at one bound. Inv ≈ −5 essentially identifies bull; inv ≈ +5 identifies bear. A *stochastic memoryless* PPO conditioned only on inv is implicitly regime-conditioned via inventory's history — it routes around the analytical compromise's deterministic-policy class.
+- The 21-unit `compromise_VI − oracle_VI` gap thus measures the gap *of the deterministic regime-agnostic policy class*, not of any reasonable PPO baseline.
+
+**Implication for env design.** To get a measurable empirical compromise gap, the env must **decouple inventory from regime** — i.e., the regime cannot mechanically drive inv in one direction.
+
+**Options screened (`scripts/quick_env_gap.py`, `--mode mid`).**
+
+| candidate | mechanism | agnostic | belief | gap | %agn |
+|-----------|-----------|----------|--------|-----|------|
+| e3_asymmetric (baseline) | — | 107.4 | 107.0 | −0.3 | ~0% |
+| e6a_symmetric_fills | sym fills (mild contrast) | 145.8 | 172.1 | 26.3 | 18.0% |
+| e6b_symmetric_strong | sym fills (strong contrast) | 159.4 | 200.3 | 40.9 | 25.7% |
+| e6c_e3_kappa05 | E3 + κ=0.05 | 49.1 | 50.5 | 1.4 | 2.9% |
+| e6d_e3_kappa15 | E3 + κ=0.15 | −149.6 | −147.0 | 2.6 | — |
+| **e6e_symmetric_kappa05** | sym fills + κ=0.05 | **118.4** | **165.2** | **46.8** | **39.6%** |
+
+- Symmetric fills (option 1) work: E6a/b show 26–41 unit gaps. Inv random-walks regardless of regime → inv carries no regime info → agnostic PPO can't route around the compromise.
+- High-κ alone (option 3) fails: in E3-style directional envs, κ amplifies suffering without breaking the coupling. E6d's −150 score shows the agent is being crushed.
+- **Hybrid sym + κ=0.05 (E6e) wins both absolute gap (47) and %gap (39.6%).** The κ=0.05 forces inv near 0; belief PPO can pick the right action class per regime, agnostic must commit.
+
+**E6e parameter design.** 3 regimes with symmetric bid/ask fills:
+- R0 (wide-favoring): p_tight=0.30, p_wide=0.65 → favor_X best per step
+- R1 (tight-only): p_tight=0.80, p_wide=0.05 → sym best
+- R2 (dead): p_tight=0.50, p_wide=0.02 → sym best
+
+T = 0.98 diagonal-dominant 3×3, episode 128, inv_max=5, κ=0.05.
+
+**Caveat.** R0 has p_wide > p_tight (wide quote fills more than tight). Physically unusual for MM (counterparties usually prefer tighter quotes). Defensible because the env is a **synthetic POMDP testbed** for meta-RL, not a calibrated market simulator. The mathematical structure (regime affects optimal action class without affecting inventory direction) is what matters for RQ1/RQ2.
+
+**M2 verify on E6e (40 iter × 256 envs × 3 seeds).**
+- R1: disagree=1.000, rel_loss=0.943 — PASS
+- R2: per-regime ratios = [0.850, 0.854, 0.900], min=0.850 — PASS (just over threshold)
+- R3: agnostic=101.7, oracle=141.1, gap=39.4 — PASS
+- R4: ent decay=0.504 — PASS
+- 2-way decomposition at M2 budget: total=39.4 = compromise(25.6) + inference(13.8). Compromise share 65%.
+
+**Files changed.**
+- `experiments/configs/envs/e6a_symmetric_fills.yaml`, `e6b_symmetric_strong.yaml`, `e6c_e3_kappa05.yaml`, `e6d_e3_kappa15.yaml`, `e6e_symmetric_kappa05.yaml` (new candidates).
+- `experiments/configs/envs/e_final.yaml` symlink: `e3_asymmetric.yaml` → `e6e_symmetric_kappa05.yaml`.
+- `scripts/quick_env_gap.py` (new) — fast iteration wrapper: probe + agnostic PPO + belief PPO per env, swaps the e_final symlink, restores at exit.
+- `training/config.py` — added `mid` run mode (100 iter × 256 envs × 1 seed) for plateau screening between `--fast` and `--full`.
+- `training/train.py` — added `--mid` CLI flag.
+- `utils/script_output.py` — added `mid` to `_VALID_RUN_MODES`.
+- `CLAUDE.md` "Current env version" line updated.
+
+**Still open.**
+- Decide whether the p_wide > p_tight in R0 needs a defense in `docs/environment.md` or if pointing to "synthetic testbed" framing is sufficient.
+
+## 2026-04-25 — M3 full re-run on E6e (passes, ordering valid, all converged)
+
+After re-pointing E_final to E6e, ran `make_milestone M3` end-to-end (super_fast → fast → full; full = 200 iter × 512 envs × 5 seeds × 3 methods, ~40 min wall).
+
+**Converged reference levels (mean | 95% bootstrap CI across 5 seeds):**
+
+| method | mean | CI | plateau iter | slope last 20 |
+|--------|------|----|--------------|---------------|
+| regime_agnostic | 136.23 | [132.78, 139.27] | 57 | −0.05 |
+| belief          | 168.50 | [166.35, 170.82] | 39 | −0.05 |
+| oracle          | 180.14 | [175.13, 185.04] | 39 | +0.00 |
+
+Ordering `agnostic ≤ belief ≤ oracle` ✓.
+
+**Gap decomposition (paired across seeds):**
+
+| component | absolute | CI | fraction of total |
+|-----------|----------|----|-------------------|
+| compromise_policy_cost (belief − agnostic) | 32.27 | [30.00, 34.83] | 73.5% |
+| inference_cost         (oracle − belief)   | 11.64 | [6.43, 16.02]  | 26.5% |
+| **total_gap**          (oracle − agnostic) | **43.91** | [36.45, 50.93] | 100% |
+
+**Notes.**
+- All three methods converged before iter 60; full budget was sufficient. The M2-verify numbers (40 iter, agnostic=101.7) understated each level by ~30–40 units — full convergence is well above what M2 saw.
+- Compromise-policy cost is now the dominant component (73.5%). This is the intended regime: E6e's symmetric fills + κ=0.05 successfully prevent inv from being a sufficient statistic for regime, so the agnostic policy genuinely pays a compromise penalty rather than routing around it via inv-conditioning.
+- Inference-cost CI is well-separated from zero ([6.4, 16.0]) but wider than the compromise CI — driven by seed 0 of belief (per-seed inference diff: 1.81 vs 10–18 for the others). Expected: belief PPO's posterior decoding has more variance across initializations than oracle PPO's exact-regime input.
+- `stats_M3_reference_levels.json` holds the canonical numbers used downstream by M5 (gap-component closure metrics).
+- `make_milestone M3` exit 0; `make_milestone_script_succeeded=True`.
+

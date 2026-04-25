@@ -1,0 +1,41 @@
+# E5a — symmetric bull/bear mirror, equal-stationary regimes.
+#
+# Concept. The simplest fix to E3's narrow belief−agnostic gap: restore the
+# bull/bear symmetry that E3 broke. E3 made bear *moderate* while bull was
+# extreme; the resulting Q-magnitude asymmetry let the compromise policy
+# ride bull's actions without paying much in bear. E5a re-imposes a strict
+# mirror — bull and bear are equally extreme, opposite-direction regimes.
+#
+# Three regimes, equal stationary distribution (~33% each):
+#   0 (noise) — symmetric fills, same as E0/E2/E3.
+#   1 (bull)  — extreme buy pressure (bid almost never fills, ask nearly
+#               always fills). Same as E3 bull.
+#   2 (bear)  — exact mirror of bull (bid nearly always fills, ask almost
+#               never fills). E3 had this asymmetric.
+#
+# Sweep evidence (env_gap_sweep_e5: M1_mirror3_kappa01):
+#   oracle_VI=103.7  belief_QMDP=98.1  compromise_VI=76.8
+#   inference_cost=5.7  compromise_cost=21.3  ratio=3.77  min_per_regime=37.2
+# vs E3 reference: comp=16.4, ratio=3.6 → +30% compromise_cost on a clean
+# all-regimes-profitable env.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    # Noise stays symmetric. Bull and bear are exact mirrors, both extreme.
+    regime_p_tight_bid: [0.60, 0.10, 0.95]
+    regime_p_wide_bid:  [0.20, 0.02, 0.60]
+    regime_p_tight_ask: [0.60, 0.95, 0.10]
+    regime_p_wide_ask:  [0.20, 0.60, 0.02]
+    initial_distribution: [0.333, 0.333, 0.334]

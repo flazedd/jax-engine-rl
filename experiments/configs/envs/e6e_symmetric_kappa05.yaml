@@ -1,0 +1,33 @@
+# E6e — Hybrid (Option 1 + Option 3): symmetric fills + κ=0.05.
+#
+# Combines E6a's symmetric fills (no regime-induced inv drift) with a
+# moderate inv penalty. The penalty isn't needed to "break" the coupling
+# (E6a already does that) but compresses the inv distribution further,
+# making the regime-agnostic policy's choice purely about action class
+# (not about inv-position). This is the cleanest setup for the gap to
+# materialize.
+#
+# Predicted measured behavior:
+#   - belief PPO converges fast to "favor_X in R0, sym in R1, sym in R2"
+#   - agnostic PPO is forced to one action class for most inv, bleeds in
+#     R1 (sym best) when committed to favor_X.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.30, 0.80, 0.50]
+    regime_p_wide_bid:  [0.65, 0.05, 0.02]
+    regime_p_tight_ask: [0.30, 0.80, 0.50]
+    regime_p_wide_ask:  [0.65, 0.05, 0.02]
+    initial_distribution: [0.333, 0.333, 0.334]

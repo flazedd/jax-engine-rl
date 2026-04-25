@@ -30,7 +30,7 @@ REQUIRED_FIELDS = (
 )
 
 _VALID_STATUSES = ("OK", "FAIL")
-_VALID_RUN_MODES = ("super_fast", "fast", "full", "n/a")
+_VALID_RUN_MODES = ("super_fast", "fast", "mid", "full", "n/a")
 
 
 def iso_now() -> str:

@@ -82,14 +82,14 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 
 - [x] M0 — infrastructure skeleton
 - [x] M1 — PPO on AS baseline
-- [x] M2 — regime-switching env, R1–R4 verified on E3_asymmetric (new E_final; E2 also passed)
-- [ ] M3 — reference levels (answers RQ1)
+- [x] M2 — regime-switching env, R1–R4 verified on E6e_symmetric_kappa05 (current E_final; E2/E3 also passed)
+- [x] M3 — reference levels on E6e (agnostic=136.2, belief=168.5, oracle=180.1; gap=43.9, compromise=32.3 / inference=11.6)
 - [ ] M4 — implementation validation
 - [ ] M5 — ladder + factorial on MM (answers RQ2)
 - [ ] M6 — difficulty sweep + decoupling (answers RQ3)
 - [ ] M7 — supplementary ablations (optional)
 
-Current env version: `E_final = e3_asymmetric` (symlink at `experiments/configs/envs/e_final.yaml`). E3 is regime-switched directional fill intensities with asymmetric bull/bear (bull extreme, bear moderate) — chosen via `scripts/env_gap_sweep.py` to widen the analytical oracle-vs-compromise gap from ~6.7 (E2) to ~21.7 units while keeping all three regimes inferable. Full-mode M2 on E3: agnostic=84.7, belief=97.6, oracle=104.5 → total gap 19.8 (compromise-policy cost 12.9, inference cost 6.9). All R1–R4 pass.
+Current env version: `E_final = e6e_symmetric_kappa05` (symlink at `experiments/configs/envs/e_final.yaml`). E6e is symmetric within-regime fills (bid-side prob == ask-side prob) so regime no longer drives directional inventory drift, paired with κ=0.05 inventory penalty. Three regimes vary the per-regime (p_tight, p_wide) magnitudes so the optimal *action class* (sym vs favor_X) differs across regimes — but inventory does not leak regime info to a memoryless policy. M2 verify (40 iter × 256 envs × 3 seeds): agnostic=101.7, belief=127.3, oracle=141.1 → total gap 39.4 (compromise-policy cost 25.6, inference cost 13.8). Mid-mode (100 iter × 1 seed) gap was 47 vs E3's ~0. All R1–R4 pass. Replaces E3 because E3's regime-driven directional fills made inventory a near-sufficient statistic for regime, collapsing the empirical compromise gap to ~0 even though analytical compromise_VI predicted 21.
 
 ## Glossary
 

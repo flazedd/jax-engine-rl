@@ -474,11 +474,17 @@ def main() -> None:
     parser.add_argument("--config", required=True, help="path to experiment YAML")
     parser.add_argument("--super-fast", action="store_true")
     parser.add_argument("--fast", action="store_true")
+    parser.add_argument("--mid", action="store_true")
     args = parser.parse_args()
 
-    if args.super_fast and args.fast:
-        raise SystemExit("--super-fast and --fast are mutually exclusive")
-    mode = "super_fast" if args.super_fast else "fast" if args.fast else "full"
+    if sum([args.super_fast, args.fast, args.mid]) > 1:
+        raise SystemExit("--super-fast / --fast / --mid are mutually exclusive")
+    mode = (
+        "super_fast" if args.super_fast
+        else "fast" if args.fast
+        else "mid" if args.mid
+        else "full"
+    )
 
     cfg = load_config(args.config)
     apply_run_mode(cfg, mode)

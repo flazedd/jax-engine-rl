@@ -1,0 +1,34 @@
+# E6b — Option 1 (strong): symmetric fills, extreme regime contrast.
+#
+# Same mechanism as E6a but with sharper distinction between regimes.
+# R0 makes favor_X almost free money; R1 makes sym essential; R2 is sparse.
+# Compromise policy is forced to a strong commitment that bleeds in 2/3
+# regimes.
+#
+# Per-step capture under sym vs favor_X (q=0):
+#   R0:  sym=0.20   favor_X=2.65   → favor_X massively dominant
+#   R1:  sym=1.90   favor_X=1.01   → sym dominant
+#   R2:  sym=0.80   favor_X=0.55   → sym
+#
+# avg sym=0.97, favor_X=1.40 → compromise picks favor_X, losing 0.9/step
+# in R1 (a third of the episode). Belief switches action class.
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.10, 0.95, 0.40]
+    regime_p_wide_bid:  [0.85, 0.02, 0.05]
+    regime_p_tight_ask: [0.10, 0.95, 0.40]
+    regime_p_wide_ask:  [0.85, 0.02, 0.05]
+    initial_distribution: [0.333, 0.333, 0.334]

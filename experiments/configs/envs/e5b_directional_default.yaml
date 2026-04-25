@@ -1,0 +1,66 @@
+# E5b — "the market is directional by default."
+#
+# Concept. E0–E3 all treat noise/neutral as a base case the agent spends
+# substantial time in. E5b inverts that: bull and bear regimes are highly
+# persistent (0.995); the noise regime is a brief transitional state
+# (persistence 0.90, stationary ~2.4% of episodes). Most of every episode
+# is spent oscillating between strong-buy and strong-sell pressure. The
+# noise regime becomes an inferential cue — "a fill just happened on the
+# unfavored side → we're transiting" — not a regime to *act in*.
+#
+# Two design innovations layered on E3:
+#
+#   1) Rare-noise / asymmetric persistence. T-matrix:
+#        noise → noise=0.90, → bull=0.05, → bear=0.05
+#        bull  → noise=0.0025, → bull=0.995, → bear=0.0025
+#        bear  → noise=0.0025, → bull=0.0025, → bear=0.995
+#      Stationary ≈ [0.024, 0.488, 0.488]. Bull and bear dominate.
+#
+#   2) Deep wide-side asymmetry. E3 only made the *tight* quote regime-
+#      dependent strongly; the wide quote had milder asymmetry. E5b pushes
+#      wide-side fills to extremes too: bull's wide-bid drops to 0.01,
+#      bear's wide-ask drops to 0.03. Even defensive quoting bleeds under
+#      the wrong regime.
+#
+# Why this widens belief−agnostic specifically. With noise rare and both
+# directional regimes extreme on both spread sides, the compromise policy
+# is forced to either pick a side (bleeds half the time in the opposite
+# regime) or play sym (suboptimal in both). Belief-PPO with even imperfect
+# regime info can switch tactically and recover most of the loss. Why it
+# doesn't widen oracle−belief much: 0.995 persistence and aggressive
+# wide-side asymmetry make every fill (or its absence) extremely
+# diagnostic, so the HMM posterior concentrates fast and stays
+# concentrated.
+#
+# Sweep evidence (env_gap_sweep_i: I7_deep_wide):
+#   oracle_VI=77.4  belief_QMDP=73.1  compromise_VI=17.8
+#   inference_cost=4.4  compromise_cost=55.3  ratio=12.7  min_per_regime=36.7
+# vs E3 reference: comp=16.4, ratio=3.6 → 3.4× compromise_cost and 3.5×
+# ratio. Trade-off: oracle drops 113 → 77 (~30% lower absolute returns).
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    # Asymmetric persistence: noise is fragile (0.90), bull/bear are sticky
+    # (0.995). Stationary ≈ [0.0244, 0.4878, 0.4878].
+    transition_matrix: [
+      0.90,   0.05,   0.05,
+      0.0025, 0.995,  0.0025,
+      0.0025, 0.0025, 0.995,
+    ]
+    # Tight fills (E3-style): noise symmetric, bull extreme ask-side, bear
+    # moderate bid-side. Wide fills push to extremes (vs E3's milder wide
+    # asymmetry): bull's wide-bid 0.01, bear's wide-ask 0.03.
+    regime_p_tight_bid: [0.60, 0.10, 0.75]
+    regime_p_wide_bid:  [0.20, 0.01, 0.40]
+    regime_p_tight_ask: [0.60, 0.95, 0.20]
+    regime_p_wide_ask:  [0.20, 0.70, 0.03]
+    # Initial distribution = stationary of T (so episodes start in the
+    # correct regime mix, no transient warmup bias).
+    initial_distribution: [0.0244, 0.4878, 0.4878]

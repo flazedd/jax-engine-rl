@@ -1,0 +1,50 @@
+# E5c — pure 2-regime mirror, no neutral.
+#
+# Concept. E5b makes noise rare; E5c removes it entirely. The market is
+# always either strong-buy or strong-sell pressure, with persistence 0.97.
+# Without a neutral regime to anchor the posterior, this is the most
+# aggressive structural change: the compromise policy has only two regimes
+# to balance, and they pull in exactly opposite directions, so the optimal
+# regime-agnostic action collapses to sym (optimal in neither regime).
+#
+# Two regimes:
+#   0 (bull) — extreme buy pressure (bid almost never fills, ask nearly
+#              always fills).
+#   1 (bear) — exact mirror.
+#
+# Trade-offs vs E5a/b:
+#   + Largest absolute belief−agnostic gap (analytical comp_cost=30.1, vs
+#     E3's 16.4 and E5a's 21.3). Compromise can no longer "ride" the
+#     dominant regime — both regimes have equal stationary mass and pull
+#     opposite directions.
+#   − Higher inference_cost (11.7 vs E3's 4.5). Without a neutral regime
+#     as anchor, the posterior tracks one of two opposite hypotheses with
+#     less diagnostic signal during transitions. Belief-PPO loses more
+#     ground to Oracle-PPO than in E5a/b.
+#   − Structural break from E0–E4: every prior env had ≥3 regimes. May
+#     require re-validating M2's R1–R4 harness (some thresholds were
+#     calibrated against 3-regime posterior dynamics).
+#
+# Sweep evidence (env_gap_sweep_e5: T1_mirror2_kappa01):
+#   oracle_VI=106.1  belief_QMDP=94.4  compromise_VI=64.3
+#   inference_cost=11.7  compromise_cost=30.1  ratio=2.57
+env:
+  name: mm_reduced
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.01
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 2
+    transition_matrix: [
+      0.97, 0.03,
+      0.03, 0.97,
+    ]
+    #                   bull  bear
+    regime_p_tight_bid: [0.10, 0.95]
+    regime_p_wide_bid:  [0.02, 0.60]
+    regime_p_tight_ask: [0.95, 0.10]
+    regime_p_wide_ask:  [0.60, 0.02]
+    initial_distribution: [0.5, 0.5]

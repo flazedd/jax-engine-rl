@@ -84,7 +84,7 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 - [x] M1 — PPO on AS baseline
 - [x] M2 — regime-switching env, R1–R4 verified on E6e_symmetric_kappa05 (current E_final; E2/E3 also passed)
 - [x] M3 — reference levels on E6e (agnostic=136.2, belief=168.5, oracle=180.1; gap=43.9, compromise=32.3 / inference=11.6)
-- [ ] M4 — implementation validation
+- [x] M4 — implementation validation (RL² & VariBAD clear PPO floor on bandit/gridworld/regime_bandit at full budget; see `results/milestones/M4/method_ranking.json`)
 - [ ] M5 — ladder + factorial on MM (answers RQ2)
 - [ ] M6 — difficulty sweep + decoupling (answers RQ3)
 - [ ] M7 — supplementary ablations (optional)

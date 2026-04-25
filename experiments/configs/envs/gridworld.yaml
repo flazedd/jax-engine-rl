@@ -1,0 +1,11 @@
+# Random-goal gridworld meta-task — M4 validation env.
+# 5×5 grid, agent starts at center; goal is sampled uniformly from the 24
+# non-center cells per episode. Reward is 1 on every step the agent sits on
+# the goal, 0 otherwise. Obs is normalized (x, y); the goal is hidden.
+# Vanilla PPO (no history) cannot localize the goal across episodes; RL² /
+# VariBAD should explore early and exploit late within an episode.
+env:
+  name: gridworld
+  params:
+    grid_size: 5
+    episode_length: 50

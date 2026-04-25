@@ -1,0 +1,20 @@
+# M4 — vanilla PPO baseline on the regime-switching bandit validation task.
+#
+# Purpose: establish the no-history floor on a within-episode online-filtering
+# task. PPO has no recurrence and no posterior, so its policy is a fixed
+# action distribution conditioned on a constant zero observation. Best it can
+# do is play the marginal-best arm, which under symmetric regime priors is
+# 50/50 → expected per-step reward 0.5 → episode return ~50.
+#
+# Above that floor is signal that recurrence (RL²) or a posterior (VariBAD)
+# adds. Perfect regime tracking earns ~90/episode (0.9/step). M4 pass
+# criterion for PPO is `learns == false` here.
+extends:
+  - base/base_ppo.yaml
+  - envs/regime_bandit.yaml
+experiment_name: m4_ppo_regime_bandit
+iterations: 200
+parallel_envs: 512
+rollout_length: 100     # 1 episode per env per iteration
+num_seeds: 3
+seed_base: 0

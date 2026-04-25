@@ -1,0 +1,19 @@
+# M4 — RL² on the Bernoulli bandit validation task.
+#
+# RL²'s GRU consumes (obs=zero, prev_action_one_hot, prev_reward, prev_done)
+# and updates its hidden state every step. Within an episode, the hidden
+# state acts as an implicit posterior over arm probabilities; across
+# episodes (= meta-trial boundaries), the hidden state resets.
+#
+# Predicted: well above the random-arm floor (5.0/episode) toward the
+# Bayes-optimal ceiling (~6.5/episode). M4 pass criterion: `learns == true`,
+# i.e. final return > 5.5/episode (clears floor by a meaningful margin).
+extends:
+  - base/base_rl2.yaml
+  - envs/bandit.yaml
+experiment_name: m4_rl2_bandit
+iterations: 200
+parallel_envs: 512
+rollout_length: 80      # 8 episodes per env per iteration
+num_seeds: 3
+seed_base: 0

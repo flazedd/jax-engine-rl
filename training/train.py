@@ -28,16 +28,23 @@ from agents.ppo import PPOAgent
 from agents.ppo_belief import PPOBeliefAgent
 from agents.ppo_oracle import PPOOracleAgent
 from agents.ppo_per_regime import PPOPerRegimeAgent
+from agents.rl2 import RL2Agent
+from agents.varibad import VariBADAgent
 from envs.mm_reduced import MMReducedEnv
+from envs.validation.bandit import BanditEnv
 from envs.validation.dummy import DummyEnv
+from envs.validation.gridworld import GridworldEnv
+from envs.validation.regime_bandit import RegimeBanditEnv
 from envs.wrappers.belief_obs import BeliefObsEnv
 from envs.wrappers.oracle_obs import OracleObsEnv
+from envs.wrappers.rl2_obs import RL2ObsEnv
 from training.config import (
     CONFIG_ROOT,
     ExperimentConfig,
     apply_run_mode,
     load_config,
 )
+from training.recurrent_rollout import recurrent_rollout
 from training.rollout import rollout
 from utils.script_output import ScriptRun, iso_now
 
@@ -53,6 +60,12 @@ RESULTS_ROOT = REPO_ROOT / "results"
 def _build_env(cfg: ExperimentConfig):
     if cfg.env.name == "dummy":
         return DummyEnv(**cfg.env.params)
+    if cfg.env.name == "bandit":
+        return BanditEnv(**cfg.env.params)
+    if cfg.env.name == "gridworld":
+        return GridworldEnv(**cfg.env.params)
+    if cfg.env.name == "regime_bandit":
+        return RegimeBanditEnv(**cfg.env.params)
     if cfg.env.name == "mm_reduced":
         return MMReducedEnv(**cfg.env.params)
     if cfg.env.name == "mm_reduced_oracle":
@@ -84,7 +97,28 @@ def _build_agent(cfg: ExperimentConfig, env):
             n_actions=env.n_actions,
             **cfg.agent.params,
         )
+    if cfg.agent.name == "rl2":
+        return RL2Agent(
+            obs_size=env.obs_size,
+            n_actions=env.n_actions,
+            **cfg.agent.params,
+        )
+    if cfg.agent.name == "varibad":
+        return VariBADAgent(
+            obs_size=env.obs_size,
+            n_actions=env.n_actions,
+            **cfg.agent.params,
+        )
     raise ValueError(f"unknown agent: {cfg.agent.name!r}")
+
+
+def _maybe_wrap_env_for_agent(cfg: ExperimentConfig, env):
+    """RL² and VariBAD both consume the augmented
+    (obs, prev_action, prev_reward, prev_done) observation.
+    """
+    if cfg.agent.name in ("rl2", "varibad"):
+        return RL2ObsEnv(inner=env)
+    return env
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +137,32 @@ def _commit_hash() -> str:
 
 
 def _make_iter_step(env, agent, parallel_envs: int, rollout_length: int) -> Callable:
-    """Return a JIT'd (rollout + update) step closure."""
+    """Return a JIT'd (rollout + update) step closure.
+
+    Dispatches on `agent.is_recurrent`: recurrent agents use `recurrent_rollout`
+    which threads a per-env carry through the scan and resets it on episode
+    boundaries; their `update` consumes `init_carry` / `final_carry` for BPTT.
+    """
+    if getattr(agent, "is_recurrent", False):
+        @jax.jit
+        def step(agent_state, key):
+            rollout_key, key = jax.random.split(key)
+            initial_carry = agent.init_carry(parallel_envs)
+            traj, final_obs, init_carry, final_carry = recurrent_rollout(
+                env, agent, agent_state, initial_carry, rollout_key,
+                parallel_envs=parallel_envs, rollout_length=rollout_length,
+            )
+            new_state, update_metrics = agent.update(
+                agent_state, traj, final_obs, init_carry, final_carry
+            )
+            per_env_return = traj["reward"].sum(axis=0)
+            metrics = {
+                **update_metrics,
+                "mean_return": per_env_return.mean(),
+                "var_return": per_env_return.var(),
+            }
+            return new_state, key, metrics
+        return step
 
     @jax.jit
     def step(agent_state, key):
@@ -141,6 +200,7 @@ def _policy_action_probs(agent, agent_state) -> np.ndarray | None:
 
 def _train_one_seed(cfg: ExperimentConfig, seed: int, seed_idx: int, num_seeds: int) -> dict[str, Any]:
     env = _build_env(cfg)
+    env = _maybe_wrap_env_for_agent(cfg, env)
     agent = _build_agent(cfg, env)
 
     key = jax.random.PRNGKey(seed)

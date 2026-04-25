@@ -1,0 +1,20 @@
+# M4 — RL² on the regime-switching Bernoulli bandit validation task.
+#
+# Hardest of the 3 validation envs: latent state is non-stationary within an
+# episode (HMM regime switches every ~20 steps on average under stay=0.95).
+# RL²'s GRU must do online filtering — continuously updating its belief as
+# the regime drifts. The true Bayes posterior would forget old (action,
+# reward) evidence as it ages; RL² has to learn this implicitly.
+#
+# Predicted: clearly above the marginal-best-arm floor (~50/episode, 0.5/step)
+# toward the perfect-tracking ceiling (~90/episode, 0.9/step). M4 pass:
+# `learns == true`, final return > 60/episode.
+extends:
+  - base/base_rl2.yaml
+  - envs/regime_bandit.yaml
+experiment_name: m4_rl2_regime_bandit
+iterations: 200
+parallel_envs: 512
+rollout_length: 100     # 1 episode per env per iteration
+num_seeds: 3
+seed_base: 0

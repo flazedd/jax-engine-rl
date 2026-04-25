@@ -1,0 +1,10 @@
+# M4 — VariBAD on the regime-switching Bernoulli bandit validation task.
+extends:
+  - base/base_varibad.yaml
+  - envs/regime_bandit.yaml
+experiment_name: m4_varibad_regime_bandit
+iterations: 200
+parallel_envs: 512
+rollout_length: 100
+num_seeds: 3
+seed_base: 0

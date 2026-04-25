@@ -1,0 +1,10 @@
+# M4 — VariBAD on the random-goal gridworld validation task.
+extends:
+  - base/base_varibad.yaml
+  - envs/gridworld.yaml
+experiment_name: m4_varibad_gridworld
+iterations: 200
+parallel_envs: 512
+rollout_length: 100
+num_seeds: 3
+seed_base: 0

@@ -1,0 +1,9 @@
+# Bernoulli bandit meta-task — M4 validation env.
+# Two arms with Bernoulli reward probabilities sampled IID Uniform[0,1] each
+# episode. Episode horizon 10 (canonical RL² / VariBAD setup). Vanilla PPO
+# (no history) plateaus at the random-arm floor (~5.0 episode return).
+env:
+  name: bandit
+  params:
+    n_arms: 2
+    episode_length: 10

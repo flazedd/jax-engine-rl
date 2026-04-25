@@ -1,0 +1,20 @@
+# M4 — vanilla PPO baseline on the Bernoulli bandit validation task.
+#
+# Purpose: establish the "no-history" floor. PPO has no recurrence and no
+# explicit belief, so its policy is a fixed action distribution conditioned
+# on a constant zero observation. Best it can do is play the marginal-best
+# arm (~50/50 under the symmetric Uniform[0,1] prior) → expected per-step
+# reward ~0.5, episode return ~5.0 over 10 steps.
+#
+# Above that floor is signal that recurrence (RL²) or a posterior (VariBAD)
+# adds. M4 pass criterion for PPO is `learns == false` here (it should NOT
+# learn within-episode adaptation; if it does, the env is leaking state).
+extends:
+  - base/base_ppo.yaml
+  - envs/bandit.yaml
+experiment_name: m4_ppo_bandit
+iterations: 200
+parallel_envs: 512
+rollout_length: 80      # 8 episodes per env per iteration
+num_seeds: 3
+seed_base: 0

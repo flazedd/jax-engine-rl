@@ -1,0 +1,13 @@
+# Regime-switching Bernoulli bandit — M4 validation env.
+# 2 regimes × 2 arms with sticky HMM transitions (stay 0.95, switch 0.05).
+# Regime 0 favors arm 0 ([0.9, 0.1]); regime 1 favors arm 1 ([0.1, 0.9]).
+# Episode length 100 → ~5 regime switches per episode in expectation.
+# Marginal-best policy (no history) → 0.5/step → 50/episode floor.
+# Perfect regime tracking → 0.9/step → 90/episode ceiling.
+env:
+  name: regime_bandit
+  params:
+    n_regimes: 2
+    n_arms: 2
+    episode_length: 100
+    stay_prob: 0.95

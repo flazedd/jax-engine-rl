@@ -1,0 +1,21 @@
+# M4 — vanilla PPO baseline on the random-goal gridworld validation task.
+#
+# Purpose: establish the no-history floor for the spatial meta-task. Without
+# memory, PPO sees only (x, y) and cannot localize the goal across episodes.
+# The best memoryless policy is essentially uniform exploration — expected
+# return is the expected number of steps the agent happens to land on the
+# goal during a 50-step random walk on a 5×5 grid (≈2/episode in practice).
+#
+# Above that floor is signal that recurrence (RL²) or a posterior (VariBAD)
+# adds. M4 pass criterion for PPO is `learns == false` here (it should NOT
+# learn within-episode goal localization; if it does, the env is leaking the
+# goal through obs).
+extends:
+  - base/base_ppo.yaml
+  - envs/gridworld.yaml
+experiment_name: m4_ppo_gridworld
+iterations: 200
+parallel_envs: 512
+rollout_length: 100     # 2 episodes per env per iteration
+num_seeds: 3
+seed_base: 0

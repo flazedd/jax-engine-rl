@@ -264,3 +264,50 @@ Ordering `agnostic ≤ belief ≤ oracle` ✓.
 - `stats_M3_reference_levels.json` holds the canonical numbers used downstream by M5 (gap-component closure metrics).
 - `make_milestone M3` exit 0; `make_milestone_script_succeeded=True`.
 
+---
+
+## 2026-04-25 — M4 implementation validation passes (RL² and VariBAD clear PPO floor on all three validation envs)
+
+**Artifacts.**
+- `results/milestones/M4/method_ranking.json` (canonical numbers + per-seed finals)
+- `figures/milestones/M4/m4_method_ranking.png` (grouped bar chart)
+- `scripts/m4_full_eval.py` (orchestrator) + `scripts/m4_full_eval_aggregate.py` (post-hoc aggregator from on-disk metrics)
+
+**Setup.** 9 (method × validation env) configs at full budget: 200 iter × 512 envs × 3 seeds. Methods: PPO (regime-agnostic floor), RL² (recurrent meta-RL, GRU on `[obs, prev_action_oh, prev_reward, prev_done]`), VariBAD (variational meta-RL with explicit posterior `q(m | τ_{:t})` and Bernoulli reward decoder). Validation envs:
+- `bandit` — 2-arm Bernoulli, episode 10. Per-episode arm probs sampled.
+- `gridworld` — 5×5 random-goal, episode 50. Reward 1 at goal else 0.
+- `regime_bandit` — 2-regime × 2-arm sticky HMM bandit, episode 100, stay 0.95.
+
+Total wall: 64 min on 9 runs. Per-run budget identical across methods.
+
+**Headline table** (final episode return, mean over 3 seeds | 95% bootstrap CI):
+
+| env | PPO floor | RL² | VariBAD |
+|---|---|---|---|
+| bandit | 40.27 [40.1, 40.5] | 48.19 [48.1, 48.4] | 48.21 [48.0, 48.4] |
+| gridworld | 4.47 [4.3, 4.9] | 46.98 [45.8, 48.8] | 17.15 [16.6, 17.7] |
+| regime_bandit | 49.65 [49.3, 50.4] | 65.83 [62.2, 72.7] | 63.44 [63.2, 63.6] |
+
+**Pass criterion** (M4: meta-RL implementations clear the regime-agnostic PPO floor on each validation env, with non-overlapping CIs): met for all 6 method/env combinations. RL² and VariBAD CIs sit strictly above the PPO CI on every env.
+
+**Observations worth noting forward.**
+- **bandit** — RL² and VariBAD essentially tied (ΔCI overlap entirely). Both ~8 returns above floor on the 6.5-Bayes-ceiling task. Both methods extract the per-episode arm prior cleanly.
+- **gridworld** — RL² dominates VariBAD (47 vs 17). VariBAD's 8-dim Bernoulli-decoded latent is a poor fit for spatial-goal inference (decoder reconstructs sparse 0/1 reward signals; the goal-cell information is in the *trajectory* of zero-rewards, not the rewards themselves). Both methods clear the floor of 4.5 by ~4× / ~10×, so the validation criterion is met, but VariBAD will need a Gaussian / state-decoded variant before it's competitive on harder spatial tasks. Logged as known characterization, not a blocker for M5.
+- **regime_bandit** — Both methods beat the agnostic floor. RL² mean is higher (65.8 vs 63.4) but with seed variance of [62.2, 72.7] (one outperforming seed at 72.7); VariBAD is much tighter at [63.2, 63.6]. Closest analogue to MM among the three envs — encouraging that *both* meta-RL methods reliably pick up the regime-switching signal at this budget.
+
+**Implementation provenance** (durable artifacts shipped in M4):
+- `envs/validation/bandit.py`, `envs/validation/gridworld.py`, `envs/validation/regime_bandit.py` (frozen-dataclass JAX-pure envs, full test coverage in `tests/test_*`)
+- `envs/wrappers/rl2_obs.py` — augmented-obs wrapper consumed by both RL² and VariBAD
+- `agents/rl2.py` — `RL2Agent` with `is_recurrent=True`, GRU+actor/critic, env-axis-only minibatch shuffling to preserve recurrence
+- `agents/varibad.py` — encoder/decoder/policy with joint optimizer, ELBO loss (BCE recon + KL), policy on `[obs, μ, σ]`. **Caveat for M5:** the reward decoder uses a Bernoulli head valid only for {0,1} rewards. Continuous-reward envs (MM) require swapping to a Gaussian head — flagged in `experiments/configs/base/base_varibad.yaml`.
+- `training/recurrent_rollout.py` — shared scan-based rollout that threads per-env GRU carry through the trajectory and resets carry on episode boundaries via `tree_map(jnp.where(done, init, carry))`
+- `training/train.py` — dispatches on `getattr(agent, "is_recurrent", False)` so MLP and recurrent paths share `_train_one_seed` without invasive refactor; `_maybe_wrap_env_for_agent` auto-wraps with `RL2ObsEnv` for rl2/varibad
+- 9 experiment configs at `experiments/configs/m4_{ppo,rl2,varibad}_{bandit,gridworld,regime_bandit}.yaml` + `base_rl2.yaml`, `base_varibad.yaml`
+
+**Orchestrator-bug audit trail** (does not affect results, only the in-process aggregation):
+- `scripts/m4_full_eval.py` originally read `summary["key_stats"]["per_seed_final_returns"]` (plural, wrong key); the actual write path in `training/train.py:350` is `metrics["per_seed_final_return"]` (singular). Fixed in-place; results were re-aggregated post-hoc by `scripts/m4_full_eval_aggregate.py`.
+- Same script also called `run.ok(extra_summary=...)` — `ScriptRun.ok` does not accept that kwarg. Fixed by folding `rows` into `key_stats`.
+- All 9 `train(cfg)` runs themselves completed cleanly and wrote valid metrics.json files; only the orchestrator's terminal table-build crashed.
+
+**Status.** M4 method-validation deliverable complete. RL² and VariBAD are now validated against the regime-agnostic PPO floor on three increasingly complex meta-RL envs. The same agents go forward into M5 (full ladder + 2×2 hypernet × exploration-bonus factorial on MM E_final) with the Gaussian-head decoder swap as the only known remaining VariBAD code change.
+

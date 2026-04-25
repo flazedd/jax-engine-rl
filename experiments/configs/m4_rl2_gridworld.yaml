@@ -1,0 +1,19 @@
+# M4 — RL² on the random-goal gridworld validation task.
+#
+# RL² consumes (normalized_xy, prev_action_one_hot, prev_reward, prev_done).
+# Within an episode (50 steps, single hidden goal), the GRU's hidden state
+# integrates the trace of (action, reward) into a latent goal estimate.
+# Hidden state resets at episode boundaries (each episode = fresh task).
+#
+# Predicted: well above the random-walk floor (~2/episode) toward the
+# explore-then-exploit ceiling (depends on grid + steps). M4 pass criterion:
+# `learns == true`, i.e. final return > 4/episode (clears floor by 2x).
+extends:
+  - base/base_rl2.yaml
+  - envs/gridworld.yaml
+experiment_name: m4_rl2_gridworld
+iterations: 200
+parallel_envs: 512
+rollout_length: 100     # 2 episodes per env per iteration
+num_seeds: 3
+seed_base: 0

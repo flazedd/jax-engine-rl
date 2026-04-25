@@ -1,0 +1,18 @@
+# Base RL² hyperparameters.
+# RL² uses an MLP encoder → GRU → policy/value heads on top of the augmented
+# observation `[obs, prev_action, prev_reward, prev_done]`. PPO inner loop
+# with no time-axis shuffling (env-axis only) so the GRU's recurrence is
+# preserved within each minibatch. Tuned once during M4 then frozen.
+agent:
+  name: rl2
+  params:
+    hidden_dim: 64
+    learning_rate: 3.0e-4
+    max_grad_norm: 0.5
+    clip_eps: 0.2
+    ent_coef: 0.01
+    vf_coef: 0.5
+    gamma: 0.99
+    lam: 0.95
+    epochs: 4
+    minibatch_envs: 32

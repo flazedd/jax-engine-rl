@@ -1,0 +1,25 @@
+# Base VariBAD hyperparameters.
+# Encoder (GRU) + reward decoder (MLP, Bernoulli head) + policy (MLP on
+# [obs, μ, σ]). PPO inner loop with no time-axis shuffling. Joint optimizer
+# on encoder + decoder + policy. Tuned once during M4 then frozen.
+#
+# Note: the reward decoder uses a Bernoulli head (sigmoid_binary_cross_entropy)
+# which is only valid for {0,1}-valued rewards (bandit, gridworld,
+# regime_bandit). For continuous-reward envs (MM) the decoder must be swapped
+# to a Gaussian head before use.
+agent:
+  name: varibad
+  params:
+    hidden_dim: 64
+    latent_dim: 8
+    learning_rate: 3.0e-4
+    max_grad_norm: 0.5
+    clip_eps: 0.2
+    ent_coef: 0.01
+    vf_coef: 0.5
+    vae_coef: 1.0
+    kl_coef: 0.1
+    gamma: 0.99
+    lam: 0.95
+    epochs: 4
+    minibatch_envs: 32

@@ -1,0 +1,20 @@
+# M4 — VariBAD on the Bernoulli bandit validation task.
+#
+# VariBAD's encoder (GRU) integrates (action, reward) traces into an explicit
+# variational posterior q(m | τ_{:t}) over the latent task; the policy
+# conditions on (obs, μ_t, σ_t). Hidden state and posterior reset between
+# episodes. The reward decoder reconstructs all rewards from a sample of
+# the final posterior — this trains the latent to be a sufficient statistic
+# for the per-episode arm probabilities.
+#
+# Predicted: like RL², well above the 5.0/episode floor toward the ~6.5
+# Bayes ceiling. M4 pass: `learns == true`, final return > 5.5/episode.
+extends:
+  - base/base_varibad.yaml
+  - envs/bandit.yaml
+experiment_name: m4_varibad_bandit
+iterations: 200
+parallel_envs: 512
+rollout_length: 80
+num_seeds: 3
+seed_base: 0

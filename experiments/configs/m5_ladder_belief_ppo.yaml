@@ -1,0 +1,14 @@
+# M5 ladder rung 5: Belief-PPO ceiling (analytical HMM posterior).
+extends:
+  - base/base_ppo.yaml
+  - envs/e_final.yaml
+experiment_name: m5_ladder_belief_ppo
+env:
+  name: mm_reduced_belief
+agent:
+  name: ppo_belief
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0

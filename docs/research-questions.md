@@ -26,7 +26,7 @@ Each RQ below specifies (a) the question, (b) the experimental protocol, (c) the
 - **Belief-PPO** (ceiling) — single network conditioned on analytical HMM posterior (computed via the forward algorithm). Upper bound under the shared-network constraint when regime must be inferred from history.
 - **Regime-agnostic PPO** (floor) — single network, no regime information. Compromise-policy baseline — the bottom of the gap.
 
-Each trained with matched compute (same iteration count, same parallel env count, same hyperparameter search). 5 seeds per method minimum.
+Each trained with matched compute (same iteration count, same parallel env count, same hyperparameter search). 8 seeds per method (M5/M6); 5 for M3 reference levels.
 
 **Decomposition (2-way):**
 - **Inference cost** = Oracle − Belief (how much imperfect inference costs relative to knowing the true regime)
@@ -250,6 +250,6 @@ M4 CPU compute budget is the binding constraint. Main-body experiments cover:
 - All 6 core ladder rungs (single configuration each: concat integration, no exploration bonus).
 - 2×2×2 factorial (RL², VariBAD × concat, hypernet × off, on) = 8 additional runs.
 
-That is 14 configurations total for the reference parameterization in M5, each with 5 seeds. If compute is tight, the exploration axis is the first to drop (run factorial at 2×2×1 = 4 cells, with exploration bonus as a supplementary single comparison).
+That is 14 configurations total for the reference parameterization in M5, each with 8 seeds. If compute is tight, the exploration axis is the first to drop (run factorial at 2×2×1 = 4 cells, with exploration bonus as a supplementary single comparison).
 - **Full LOB microstructure simulator**: destroys analytical posterior tractability, not the right abstraction for the object of study.
 

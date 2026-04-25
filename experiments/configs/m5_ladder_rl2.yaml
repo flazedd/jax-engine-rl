@@ -1,0 +1,10 @@
+# M5 ladder rung 3: RL² on MM E_final.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_ladder_rl2
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0

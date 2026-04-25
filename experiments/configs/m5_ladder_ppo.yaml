@@ -1,0 +1,10 @@
+# M5 ladder rung 1: regime-agnostic PPO floor.
+extends:
+  - base/base_ppo.yaml
+  - envs/e_final.yaml
+experiment_name: m5_ladder_ppo
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0

@@ -1,0 +1,14 @@
+# M5 ladder rung 6: Oracle-PPO ceiling (true regime one-hot).
+extends:
+  - base/base_ppo.yaml
+  - envs/e_final.yaml
+experiment_name: m5_ladder_oracle_ppo
+env:
+  name: mm_reduced_oracle
+agent:
+  name: ppo_oracle
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0

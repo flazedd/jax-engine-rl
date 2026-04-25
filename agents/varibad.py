@@ -8,20 +8,22 @@ Architecture:
 - **Policy** (MLP): conditions on `(obs_t, μ_t, σ_t)` to produce
   `(logits, value)`. Non-recurrent — the encoder carries all history.
 - **Reward decoder** (MLP): given a sampled `m` and `(obs_τ, action_τ)`,
-  predicts the Bernoulli reward logit. Used for the VAE reconstruction
-  loss; not used at inference.
+  predicts a scalar that the VAE reconstruction loss compares against
+  `r_τ`. Two heads are supported, controlled by `reward_decoder`:
+    - `"bernoulli"` (default): output is a logit; loss is sigmoid BCE
+      against `r_τ ∈ {0, 1}`. Use for bandit / gridworld / regime_bandit.
+    - `"gaussian"`: output is the predicted mean μ; loss is `0.5·(μ − r)²`
+      (fixed-σ Gaussian NLL up to a constant). Use for continuous-reward
+      envs (MM).
 
 Loss:
 - **PPO** on the policy (using online posterior).
 - **VAE / ELBO**: at trajectory end, sample `m ~ q(m | τ_{:T})`. Decode all
-  rewards `r_τ` for τ ∈ [0, T) from `(m, obs_τ, action_τ)` and compute
-  binary cross-entropy. KL-regularize the running posterior `q(m | τ_{:t})`
-  toward `N(0, I)`, averaged over t.
+  rewards `r_τ` for τ ∈ [0, T) from `(m, obs_τ, action_τ)` and compute the
+  recon loss for the configured head. KL-regularize the running posterior
+  `q(m | τ_{:t})` toward `N(0, I)`, averaged over t.
 
 Encoder hidden state resets on episode boundaries (each episode = one task).
-
-This implementation targets the M4 validation envs (Bernoulli rewards). For
-continuous-reward envs (MM) the decoder head should be swapped to Gaussian.
 """
 from __future__ import annotations
 
@@ -116,6 +118,7 @@ class VariBADAgent:
     lam: float = 0.95
     epochs: int = 4
     minibatch_envs: int = 32
+    reward_decoder: str = "bernoulli"  # {"bernoulli", "gaussian"}
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -309,9 +312,16 @@ class VariBADAgent:
             )  # [T, n_envs]
 
             r_target = batch["reward"]
-            recon_loss = optax.sigmoid_binary_cross_entropy(
-                r_logits, r_target
-            ).mean()
+            if self.reward_decoder == "bernoulli":
+                recon_loss = optax.sigmoid_binary_cross_entropy(
+                    r_logits, r_target
+                ).mean()
+            elif self.reward_decoder == "gaussian":
+                recon_loss = 0.5 * jnp.mean((r_logits - r_target) ** 2)
+            else:
+                raise ValueError(
+                    f"unknown reward_decoder: {self.reward_decoder!r}"
+                )
 
             # KL(q(m | τ_{:t}) || N(0, I)) averaged over (t, env). Standard
             # closed-form for diagonal Gaussian vs unit Gaussian.

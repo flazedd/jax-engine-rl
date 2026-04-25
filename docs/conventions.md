@@ -32,13 +32,13 @@ Training is structured as a small number of **iterations** (outer loop steps), e
 
 **JIT amortization.** The compiled rollout + update step is called exactly 100 times per seed. Keep function signatures shape-stable (fixed parallel_envs, fixed rollout_length, fixed batch shapes) so there's one compilation per seed, not recompilations mid-run.
 
-**Seeds.** 5 seeds per method per experiment minimum, run sequentially (parallelism is inside each seed via `vmap` over envs, not across seeds). Seed-level confidence intervals reported. Pre-registered in the config.
+**Seeds.** 8 seeds per method for primary experiments (M5/M6); 5 for M3 reference levels; 3 for validation/diagnostic milestones (M2/M4). Run sequentially (parallelism is inside each seed via `vmap` over envs, not across seeds). Seed-level confidence intervals reported. Pre-registered in the config. See `methodology.md` → "Seed protocol" for the n=8 derivation.
 
 ### Implications
 
 - JIT compilation overhead is one-time per seed — compile the full rollout + update step once, then run 100 iterations. Keep function signatures shape-stable.
 - Env throughput matters less than at long-horizon training; agent forward/backward pass dominates.
-- Ladder scope pre-commitment remains important. Even with short curves, 7 ladder methods + 6 additional factorial cells + mu-only ablation = 14 unique configurations × 5 seeds on MM is non-trivial wall-clock — plan for overnight runs in M5.
+- Ladder scope pre-commitment remains important. Even with short curves, 7 ladder methods + 6 additional factorial cells + mu-only ablation = 14 unique configurations × 8 seeds on MM is non-trivial wall-clock — plan for overnight runs in M5.
 
 ### JAX performance discipline
 
@@ -312,7 +312,7 @@ env:
 integration: concat
 exploration_bonus: off
 iterations: 100
-num_seeds: 5
+num_seeds: 8
 ```
 
 The base file `base/base_varibad.yaml` holds the tuned PPO core hyperparameters, the VariBAD-specific parameters (KL weight, latent dim), and defaults for everything else. The experiment file only specifies what's different.
@@ -332,7 +332,7 @@ env:
 integration: hypernet
 exploration_bonus: false
 iterations: 100
-num_seeds: 5
+num_seeds: 8
 ```
 
 Bases in the list are loaded and merged left-to-right; the experiment file's own fields override all bases. `load_config` handles both the string-form and list-form `extends`.

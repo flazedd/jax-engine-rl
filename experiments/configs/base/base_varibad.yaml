@@ -3,10 +3,11 @@
 # [obs, μ, σ]). PPO inner loop with no time-axis shuffling. Joint optimizer
 # on encoder + decoder + policy. Tuned once during M4 then frozen.
 #
-# Note: the reward decoder uses a Bernoulli head (sigmoid_binary_cross_entropy)
-# which is only valid for {0,1}-valued rewards (bandit, gridworld,
-# regime_bandit). For continuous-reward envs (MM) the decoder must be swapped
-# to a Gaussian head before use.
+# The reward decoder head is selected by `reward_decoder`:
+#   - "bernoulli" (default): sigmoid_binary_cross_entropy, valid for
+#     {0,1}-valued rewards (bandit, gridworld, regime_bandit).
+#   - "gaussian": 0.5·(μ − r)² (fixed-σ NLL), valid for continuous rewards
+#     (MM). Override in the experiment config.
 agent:
   name: varibad
   params:
@@ -23,3 +24,4 @@ agent:
     lam: 0.95
     epochs: 4
     minibatch_envs: 32
+    reward_decoder: bernoulli

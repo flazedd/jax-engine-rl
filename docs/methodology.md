@@ -16,15 +16,16 @@ Every numeric comparison in the thesis follows the rules in this section. These 
 
 ### Seed protocol
 
-- **Primary experiments (M3, M5, M6): 5 seeds per configuration.** Chosen as the minimum at which bootstrap CIs are informative at the effect sizes expected from the M2 ceiling gap. At smaller n the bootstrap degenerates; at larger n compute becomes infeasible on M4.
+- **Primary experiments (M5, M6): 8 seeds per configuration.** Required minimum for the formal hypothesis-testing framework: a paired one-sided exact Wilcoxon test at n has minimum-achievable p = 1/2^n. With Holm-Bonferroni across the 6 pre-registered primaries, the family must satisfy 6/2^n < 0.05 → n ≥ 8. n=8 gives min Holm-corrected p ≈ 0.023, comfortable headroom. (n=5 makes "supported" mathematically unreachable; n=7 just barely satisfies family of 4 but cuts the family-of-6 margin to 0.047.)
+- **Reference levels (M3): 5 seeds per configuration.** Used as point estimates for gap-closed fractions only — no paired test against M3 is performed (paired tests are within-M5 method-vs-method, all at n=8). M3 retained at n=5 because the milestone is already complete.
 - **Validation experiments (M4): 3 seeds per configuration.** Lower because M4 checks qualitative behavior, not quantitative claims.
 - **Env verification (M2): 3 seeds per locked run.** M2 uses short runs as diagnostics, not final numbers.
-- **Fixed seed values across experiments.** Seeds `{0, 1, 2, 3, 4}` are used consistently across methods. This means two methods' results are *paired* by seed (same env trajectories, same initialization randomness) — which enables paired statistical tests (lower variance, more power) and is what justifies using only 5 seeds.
+- **Fixed seed values across experiments.** Seeds `{0, 1, ..., n-1}` are used consistently across methods within the same milestone. This means two methods' results are *paired* by seed (same env trajectories, same initialization randomness) — which enables paired statistical tests (lower variance, more power) and is what justifies the modest seed counts.
 
 ### Confidence intervals
 
 - **95% bootstrap CI across seeds.** Computed via 10,000 bootstrap resamples of the per-seed final-return values.
-- **NOT parametric ±1.96·std/√n.** Parametric intervals assume normality which is unsafe at n=5 with possibly-non-Gaussian seed-level returns.
+- **NOT parametric ±1.96·std/√n.** Parametric intervals assume normality which is unsafe at small n with possibly-non-Gaussian seed-level returns.
 - **Applied to any reported scalar.** Return, gap-closed fractions, posterior error, etc. Every top-level numeric field in the JSON with a corresponding CI uses bootstrap.
 - **`CI` in figure labels and in this document's prose always means 95% bootstrap CI from seeds.** No other CI convention is used.
 
@@ -37,7 +38,7 @@ Every "method X vs method Y" comparison in the thesis follows this protocol:
 3. **Multiple-comparison correction** via Holm-Bonferroni across the pre-registered primary comparisons (see below). Exploratory comparisons are explicitly labeled as such in the thesis and not corrected.
 4. **Decision rule.** A comparison is "supported" if Holm-Bonferroni-corrected p < 0.05 AND the paired-difference CI excludes zero. Either condition alone is not sufficient.
 
-Why Wilcoxon signed-rank rather than paired t-test: non-parametric, makes no distributional assumption, more robust at n=5.
+Why Wilcoxon signed-rank rather than paired t-test: non-parametric, makes no distributional assumption, more robust at small n.
 
 ### Factorial analysis (M5 factorial)
 
@@ -151,7 +152,7 @@ Real gaps caught during spec review that now have committed solutions:
 3. **No multiple-comparison correction.** Now Holm-Bonferroni across 6 pre-registered primary hypotheses (4 ladder + 2 factorial main effects).
 4. **No pre-registration.** Primary hypotheses are now committed in writing before M5/M6 experiments run. Everything else is labeled exploratory in the thesis.
 5. **Informal decision rule.** Now: a comparison is "supported" iff Holm-corrected p < 0.05 AND the paired-difference CI excludes zero. Both conditions together.
-6. **Bootstrap vs parametric CIs unspecified.** Now committed to bootstrap (parametric CIs are unsafe at n=5 with possibly-non-Gaussian seed-level returns).
+6. **Bootstrap vs parametric CIs unspecified.** Now committed to bootstrap (parametric CIs are unsafe at small n with possibly-non-Gaussian seed-level returns).
 7. **Exploration-bonus novelty unspecified.** Now L2 distance from the rolling mean of the last K=16 belief-representation vectors, coefficient shared across methods for axis comparability.
 8. **Posterior-quality probe unspecified.** Now linear probe trained on 5000 held-out trajectories, frozen after M5. MLP probe reported as appendix robustness check.
 9. **Per-regime PPO training budget ambiguity.** Now explicit: matched in *compute terms* (same iterations per instance), not in aggregate trajectory count.
@@ -164,7 +165,7 @@ Real gaps caught during spec review that now have committed solutions:
 
 These are genuine limits of the project that cannot be eliminated within its scope. They are stated explicitly in the thesis and constrain the claims made.
 
-1. **Low seed count (n=5).** Defensible for feasibility on M4 CPU and for bootstrap viability, but underpowered for small effects — especially for interaction effects in the factorial (interactions have lower effective sample size than main effects). Mitigation: leave-one-out sensitivity on every primary finding; if removing any single seed flips the decision, the finding is not robust and reported as such.
+1. **Low seed count (n=8 for primary; 5 for M3 reference levels).** Defensible for feasibility on M4 CPU and for bootstrap viability, but underpowered for small effects — especially for interaction effects in the factorial (interactions have lower effective sample size than main effects). Mitigation: leave-one-out sensitivity on every primary finding; if removing any single seed flips the decision, the finding is not robust and reported as such.
 
 2. **Single machine, single researcher.** No independent replication of implementations. A subtle bug in VariBAD's ELBO, RL²'s recurrence, or the analytical HMM posterior computation could consistently bias results and go undetected. Mitigation: M4 validation against published qualitative behavior on standard tasks; test suite in `tests/test_beliefs.py` verifies the HMM posterior against brute-force marginalization on short sequences.
 

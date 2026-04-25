@@ -1,0 +1,17 @@
+# M5 ladder rung 2: stacked-obs PPO. Wraps mm_reduced with StackObsEnv(k=4)
+# so a memoryless MLP policy can see the last 4 inventory observations. The
+# stacked window crosses episode boundaries cleanly (StackObsEnv refills on
+# done).
+extends:
+  - base/base_ppo.yaml
+  - envs/e_final.yaml
+experiment_name: m5_ladder_stacked_ppo
+env:
+  name: mm_reduced_stacked
+  params:
+    stack_k: 4
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0

@@ -1,0 +1,19 @@
+# M4 → M5 bridge: RL² on MM E_final at mid budget.
+#
+# Sanity check that the M4-validated RL² implementation runs end-to-end
+# on the actual MM env (continuous PnL rewards, 11-d inv one-hot obs,
+# 3-regime sticky HMM) without obs-shape / reward-scale issues. Numerical
+# performance is informative but not the gate — full M5 budget will use
+# 200 iter × 512 envs × 5 seeds.
+#
+# Reference levels on this env (from M3, full budget): regime_agnostic=136.2,
+# belief=168.5, oracle=180.1.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m4_bridge_rl2_mm
+iterations: 100
+parallel_envs: 256
+rollout_length: 128
+num_seeds: 1
+seed_base: 0

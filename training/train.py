@@ -38,6 +38,7 @@ from envs.validation.regime_bandit import RegimeBanditEnv
 from envs.wrappers.belief_obs import BeliefObsEnv
 from envs.wrappers.oracle_obs import OracleObsEnv
 from envs.wrappers.rl2_obs import RL2ObsEnv
+from envs.wrappers.stack_obs import StackObsEnv
 from training.config import (
     CONFIG_ROOT,
     ExperimentConfig,
@@ -72,6 +73,10 @@ def _build_env(cfg: ExperimentConfig):
         return OracleObsEnv(inner=MMReducedEnv(**cfg.env.params))
     if cfg.env.name == "mm_reduced_belief":
         return BeliefObsEnv(inner=MMReducedEnv(**cfg.env.params))
+    if cfg.env.name == "mm_reduced_stacked":
+        params = dict(cfg.env.params)
+        k = int(params.pop("stack_k", 4))
+        return StackObsEnv(inner=MMReducedEnv(**params), k=k)
     if cfg.env.name == "mm_reduced_belief_constant":
         return BeliefObsEnv(
             inner=MMReducedEnv(**cfg.env.params), constant_belief=True

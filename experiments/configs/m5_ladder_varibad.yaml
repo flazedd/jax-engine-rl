@@ -1,0 +1,14 @@
+# M5 ladder rung 4: VariBAD on MM E_final. Continuous PnL rewards →
+# Gaussian decoder (fixed-σ NLL).
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_ladder_varibad
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian

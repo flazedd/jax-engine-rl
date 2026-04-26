@@ -109,8 +109,13 @@ def _probe_one_method(
         flush=True,
     )
 
+    # Read env name from the first checkpoint's config (consistent across
+    # seeds for a given experiment).
+    sample_bundle = load_experiment(exp_dir, seeds[0])
+    env_name = sample_bundle.config.get("env", {}).get("name", "?")
     return {
         "experiment_name": experiment_name,
+        "env_name": env_name,
         "n_seeds": len(seeds),
         "seeds": seeds,
         "method_test_acc_per_seed": method_test_accs,
@@ -176,10 +181,25 @@ def main() -> int:
         )
         return 1
 
+    # Probe currently assumes MM E_final (the only env with a `regime`
+    # field exposed via info dict). Map env class names to canonical
+    # project labels (CLAUDE.md → "E_final = e6e_symmetric_kappa05").
+    env_names = {by_method[k].get("env_name", "?") for k in by_method}
+    _DISPLAY = {
+        "mm_reduced": "MM E_final",
+        "mm_reduced_oracle": "MM E_final (oracle obs)",
+        "mm_reduced_belief": "MM E_final (analytical-belief obs)",
+        "mm_reduced_stacked": "MM E_final (stacked obs)",
+    }
+    env_label = (
+        _DISPLAY.get(next(iter(env_names)), next(iter(env_names)))
+        if len(env_names) == 1 else "MM E_final"
+    )
     stats = {
         "n_rollouts": args.n_rollouts,
         "rollout_length": args.rollout_length,
         "classifier": args.classifier,
+        "env_label": env_label,
         "methods": by_method,
     }
     with open(stats_path, "w") as f:

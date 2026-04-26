@@ -400,7 +400,8 @@ def plot_probe_per_t(out_path: Path) -> bool:
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
 
-    fig.suptitle("M5 Step-5 — posterior-quality probe", y=1.02)
+    env_label = stats.get("env_label", "MM E_final")
+    fig.suptitle(f"M5 Step-5 — posterior-quality probe on {env_label}", y=1.02)
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)

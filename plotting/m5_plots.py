@@ -1,8 +1,7 @@
 """M5 plot module — figures for every M5 stage that has data on disk.
 
 Produces:
-  - step2_sweep.png         — Step-2 hidden_dim/kl_coef sweep on MM E_final
-  - factorial_toys.png      — Step-3 24-config factorial across 3 toy envs
+  - factorial_toys.png      — Step-3 toy factorial across 3 toy envs
   - step3_mm_hypernet.png   — Step-3 MM hypernet probe (4 bars + reference lines)
   - probe_per_t.png         — Step-5 per-timestep regime classification accuracy
   - step4_ladder.png        — Step-4 4-cell ladder bar chart (when ready)
@@ -12,8 +11,8 @@ Each plot function loads a stats JSON, produces one PNG, and tolerates
 missing inputs (skips gracefully). The CLI entry generates everything it
 can find data for.
 
-Output directory: `figures/m5/`. Dpi=150, tight bounding box, applied via
-`plotting.style.apply_style()`.
+Output directory: `figures/milestones/M5/`. Dpi=150, tight bounding box,
+applied via `plotting.style.apply_style()`.
 """
 from __future__ import annotations
 
@@ -68,51 +67,7 @@ def _draw_reference_lines(ax, refs: dict[str, float], xmin=None, xmax=None) -> N
 
 
 # ---------------------------------------------------------------------------
-# Step-2 hyperparameter sweep on MM E_final
-# ---------------------------------------------------------------------------
-
-
-def plot_step2_sweep(out_path: Path) -> bool:
-    stats_path = RESULTS_ROOT / "milestones" / "M5" / "stats_M5_step2_sweep.json"
-    if not stats_path.exists():
-        print(f"[m5_plots] skip step2_sweep: missing {stats_path}")
-        return False
-    with open(stats_path) as f:
-        stats = json.load(f)
-    refs = _load_m3_refs()
-
-    apply_style()
-    fig, ax = plt.subplots(figsize=FIGSIZE_WIDE)
-
-    rows = stats["configs"]
-    labels = [r["label"] for r in rows]
-    means = [r["final_return_mean"] for r in rows]
-    cis = [r["final_return_ci95"] for r in rows]
-    families = [r["family"] for r in rows]
-    err = np.array([
-        [m - lo, hi - m] for m, (lo, hi) in zip(means, cis)
-    ]).T
-
-    bar_colors = [COLORS["rl2"] if fam == "rl2" else COLORS["varibad"] for fam in families]
-    x = np.arange(len(labels))
-    ax.bar(x, means, yerr=err, color=bar_colors, capsize=2,
-           edgecolor="black", linewidth=0.4)
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=7)
-    ax.set_ylabel("final return (mean across 3 seeds)")
-    ax.set_title("M5 Step-2 sweep on MM E_final (100 iter × n=3)")
-    _draw_reference_lines(ax, refs)
-    ax.legend(loc="lower right", fontsize=7)
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path)
-    plt.close(fig)
-    print(f"[m5_plots] wrote {out_path}")
-    return True
-
-
-# ---------------------------------------------------------------------------
-# Step-3 toy factorial — 24 configs × 3 envs
+# Step-3 toy factorial — RL²/VariBAD × concat/hypernet across 3 envs
 # ---------------------------------------------------------------------------
 
 
@@ -382,16 +337,22 @@ def plot_probe_per_t(out_path: Path) -> bool:
     )
     for bar, color in zip(bars, bar_colors):
         bar.set_facecolor(color)
-    for xi, mean in zip(x_bar, bar_means):
-        ax_bar.text(xi, mean + 0.02, f"{mean:.2f}", ha="center", fontsize=9)
+    # Position labels above the upper error-bar cap (mean + ci_hi),
+    # not above the mean — otherwise the cap overlaps the text.
+    for xi, mean, hi in zip(x_bar, bar_means, bar_hi):
+        ax_bar.text(xi, mean + hi + 0.025, f"{mean:.2f}",
+                    ha="center", fontsize=9)
     ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
-                   label=f"chance (1/{n_classes})")
+                   label=f"random guess ({100.0/n_classes:.1f}%)")
     ax_bar.set_xticks(x_bar)
     ax_bar.set_xticklabels(bar_labels, fontsize=8)
     ax_bar.set_ylim(0.0, 1.05)
     ax_bar.set_ylabel("regime classification accuracy (test set)")
     ax_bar.set_title("Headline test accuracy")
-    ax_bar.legend(loc="lower right", fontsize=8)
+    ax_bar.legend(
+        loc="lower right", fontsize=8,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
 
     # ----- Right panel: per-timestep curves (smoothed) ---------------------
     analytical_drawn = False
@@ -429,12 +390,15 @@ def plot_probe_per_t(out_path: Path) -> bool:
             analytical_drawn = True
 
     ax_curve.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
-                     label=f"chance (1/{n_classes})")
+                     label=f"random guess ({100.0/n_classes:.1f}%)")
     ax_curve.set_xlabel("timestep within episode")
     ax_curve.set_ylabel("regime classification accuracy")
     ax_curve.set_title(f"Per-timestep accuracy (rolling-mean window {smoothing_window})")
     ax_curve.set_ylim(0.0, 1.05)
-    ax_curve.legend(loc="lower right", fontsize=8)
+    ax_curve.legend(
+        loc="lower right", fontsize=8,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
 
     fig.suptitle("M5 Step-5 — posterior-quality probe", y=1.02)
     fig.tight_layout()
@@ -578,7 +542,6 @@ def main() -> int:
 
     written = 0
     for name, fn in [
-        ("step2_sweep.png", plot_step2_sweep),
         ("factorial_toys.png", plot_factorial_toys),
         ("step3_mm_hypernet.png", plot_step3_mm_hypernet),
         ("probe_per_t.png", plot_probe_per_t),

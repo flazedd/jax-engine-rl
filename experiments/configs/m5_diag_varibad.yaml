@@ -1,0 +1,16 @@
+# M5 Step-1 diagnostic: VariBAD on E_final at reduced budget.
+# Surfaces per-iteration loss components (PPO + VAE recon + KL) to test
+# whether the Gaussian recon NLL is dominating the policy gradient on
+# continuous PnL rewards. See results/milestones/M5/RECOVERY_PLAN.md.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_diag_varibad
+iterations: 50
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian

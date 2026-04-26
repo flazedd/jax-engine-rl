@@ -1,0 +1,13 @@
+# M5 Step-1 diagnostic: RL² on E_final at reduced budget.
+# Surfaces per-iteration loss components to compare scales vs M4
+# bandit/gridworld where RL² cleared the floor. See
+# results/milestones/M5/RECOVERY_PLAN.md.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_diag_rl2
+iterations: 50
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0

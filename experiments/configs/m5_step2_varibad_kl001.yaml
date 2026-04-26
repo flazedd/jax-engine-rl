@@ -1,0 +1,17 @@
+# M5 Step-2 sweep: VariBAD with kl_coef=0.001 (lighter posterior regularizer).
+# Diagnostic (DIAGNOSTIC_FINDINGS.md) flagged kl_coef=0.1 as posterior-collapse
+# culprit; this run tests whether weakening KL pressure 100× lets the encoder
+# hold non-trivial regime info on E_final.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step2_varibad_kl001
+iterations: 100
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    kl_coef: 0.001

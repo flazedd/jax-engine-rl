@@ -1,0 +1,16 @@
+# M5 Step-2 sweep: VariBAD with kl_coef=0.1 (M4-frozen baseline).
+# Included so all three KL settings are evaluated at the same half-budget /
+# n=3 setting for direct comparison.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step2_varibad_kl10
+iterations: 100
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    kl_coef: 0.1

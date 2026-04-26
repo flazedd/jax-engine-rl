@@ -258,6 +258,12 @@ class RL2Agent:
         mean_metrics = jax.tree_util.tree_map(lambda x: x.mean(), all_metrics)
         mean_metrics["ppo/advantage_mean"] = advantages.mean()
         mean_metrics["ppo/return_mean"] = returns.mean()
+        # Mean L2 norm of the GRU hidden state at end of rollout, averaged
+        # over envs. Diagnostic for whether the recurrence is learning a
+        # non-trivial representation (vs collapsing to zero).
+        mean_metrics["gru/final_carry_norm"] = jnp.linalg.norm(
+            final_carry, axis=-1
+        ).mean()
 
         new_state = {
             **state,

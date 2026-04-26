@@ -217,6 +217,10 @@ def _train_one_seed(cfg: ExperimentConfig, seed: int, seed_idx: int, num_seeds: 
     per_iter_times: list[float] = []
     mean_returns: list[float] = []
     var_returns: list[float] = []
+    # Capture every scalar metric returned by agent.update() per iteration.
+    # Used by the M5 diagnostic pass to compare loss-component scales between
+    # MM E_final and M4 bandit/gridworld where methods cleared the floor.
+    loss_components: dict[str, list[float]] = {}
 
     # Progress cadence: ~10 prints per seed, never silent >30s on slow hosts.
     log_every = max(1, cfg.iterations // 10)
@@ -231,6 +235,13 @@ def _train_one_seed(cfg: ExperimentConfig, seed: int, seed_idx: int, num_seeds: 
         per_iter_times.append(dt)
         mean_returns.append(float(metrics["mean_return"]))
         var_returns.append(float(metrics["var_return"]))
+        for k, v in metrics.items():
+            if k in ("mean_return", "var_return"):
+                continue
+            arr = np.asarray(v)
+            if arr.shape != ():
+                continue
+            loss_components.setdefault(k, []).append(float(arr))
 
         is_first = it == 0
         is_last = it == cfg.iterations - 1
@@ -256,6 +267,7 @@ def _train_one_seed(cfg: ExperimentConfig, seed: int, seed_idx: int, num_seeds: 
         "mean_return_per_iter": mean_returns,
         "var_return_per_iter": var_returns,
         "per_iter_times": per_iter_times,
+        "loss_components_per_iter": loss_components,
     }
     probs = _policy_action_probs(agent, agent_state)
     if probs is not None:
@@ -369,6 +381,29 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
     run.add_output(str(metrics_path))
+
+    # Per-iteration loss components (not in metrics.json to keep that file
+    # focused on what downstream stats consumers actually read).
+    loss_keys = sorted(per_seed[0].get("loss_components_per_iter", {}).keys())
+    if loss_keys:
+        loss_components_payload = {
+            "experiment_name": cfg.experiment_name,
+            "agent": cfg.agent.name,
+            "env": cfg.env.name,
+            "iterations": cfg.iterations,
+            "num_seeds": cfg.num_seeds,
+            "per_seed": [
+                {
+                    "seed": s["seed"],
+                    "components": s["loss_components_per_iter"],
+                }
+                for s in per_seed
+            ],
+        }
+        loss_components_path = exp_dir / "loss_components_per_iter.json"
+        with open(loss_components_path, "w") as f:
+            json.dump(loss_components_payload, f)
+        run.add_output(str(loss_components_path))
 
     eval_result = {
         "final_return_mean": metrics["final_return_mean"],

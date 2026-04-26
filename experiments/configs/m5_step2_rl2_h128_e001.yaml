@@ -1,0 +1,14 @@
+# M5 Step-2 sweep: RL² with hidden_dim=128, ent_coef=0.001.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step2_rl2_h128_e001
+iterations: 100
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    hidden_dim: 128
+    ent_coef: 0.001

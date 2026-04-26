@@ -188,17 +188,17 @@ def main() -> int:
     # with checkpoints saved before the env was renamed.
     env_names = {by_method[k].get("env_name", "?") for k in by_method}
     _DISPLAY = {
-        "market_making_v1":                  "MarketMakingV1 (E_final)",
-        "market_making_v1_oracle":           "MarketMakingV1 (E_final, oracle obs)",
-        "market_making_v1_belief":           "MarketMakingV1 (E_final, analytical-belief obs)",
-        "market_making_v1_belief_constant":  "MarketMakingV1 (E_final, constant-belief obs)",
-        "market_making_v1_stacked":          "MarketMakingV1 (E_final, stacked obs)",
+        "market_making_v1":                  "MarketMakingV1",
+        "market_making_v1_oracle":           "MarketMakingV1 (oracle obs)",
+        "market_making_v1_belief":           "MarketMakingV1 (analytical-belief obs)",
+        "market_making_v1_belief_constant":  "MarketMakingV1 (constant-belief obs)",
+        "market_making_v1_stacked":          "MarketMakingV1 (stacked obs)",
         # legacy names from pre-rename checkpoints
-        "mm_reduced":                  "MarketMakingV1 (E_final)",
-        "mm_reduced_oracle":           "MarketMakingV1 (E_final, oracle obs)",
-        "mm_reduced_belief":           "MarketMakingV1 (E_final, analytical-belief obs)",
-        "mm_reduced_belief_constant":  "MarketMakingV1 (E_final, constant-belief obs)",
-        "mm_reduced_stacked":          "MarketMakingV1 (E_final, stacked obs)",
+        "mm_reduced":                  "MarketMakingV1",
+        "mm_reduced_oracle":           "MarketMakingV1 (oracle obs)",
+        "mm_reduced_belief":           "MarketMakingV1 (analytical-belief obs)",
+        "mm_reduced_belief_constant":  "MarketMakingV1 (constant-belief obs)",
+        "mm_reduced_stacked":          "MarketMakingV1 (stacked obs)",
     }
     env_label = (
         _DISPLAY.get(next(iter(env_names)), next(iter(env_names)))

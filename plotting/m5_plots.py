@@ -31,6 +31,36 @@ RESULTS_ROOT = REPO_ROOT / "results"
 FIGURES_ROOT = REPO_ROOT / "figures" / "milestones" / "M5"
 
 
+def _budget_annotation(
+    fig,
+    iterations: int | None = None,
+    parallel_envs: int | None = None,
+    rollout_length: int | None = None,
+    num_seeds: int | None = None,
+    extra: str = "",
+    y: float = 0.005,
+) -> None:
+    """Add a small caption at the bottom of the figure documenting compute
+    budget. Reader can immediately tell whether a chart is from a smoke
+    run or a full-budget experiment.
+    """
+    parts = []
+    if iterations is not None:
+        parts.append(f"{iterations} iter")
+    if parallel_envs is not None:
+        parts.append(f"{parallel_envs} envs")
+    if rollout_length is not None:
+        parts.append(f"rollout {rollout_length}")
+    if num_seeds is not None:
+        parts.append(f"n={num_seeds} seeds")
+    if extra:
+        parts.append(extra)
+    if not parts:
+        return
+    text = "Compute: " + " × ".join(parts)
+    fig.text(0.5, y, text, ha="center", fontsize=7, style="italic", color="#555555")
+
+
 # ---------------------------------------------------------------------------
 # References (M3 floor / belief / oracle)
 # ---------------------------------------------------------------------------
@@ -57,13 +87,13 @@ def _draw_reference_lines(ax, refs: dict[str, float], xmin=None, xmax=None) -> N
     style = {"linestyle": "--", "linewidth": 1.0, "alpha": 0.6}
     if not np.isnan(refs.get("agnostic", float("nan"))):
         ax.axhline(refs["agnostic"], color=COLORS["ppo"], **style,
-                   label=f"floor (agnostic-PPO M3) = {refs['agnostic']:.1f}")
+                   label=f"Regime-agnostic PPO floor = {refs['agnostic']:.1f}")
     if not np.isnan(refs.get("belief", float("nan"))):
         ax.axhline(refs["belief"], color=COLORS["belief_ppo"], **style,
-                   label=f"belief-PPO M3 = {refs['belief']:.1f}")
+                   label=f"Belief-PPO ceiling = {refs['belief']:.1f}")
     if not np.isnan(refs.get("oracle", float("nan"))):
         ax.axhline(refs["oracle"], color=COLORS["oracle_ppo"], **style,
-                   label=f"oracle-PPO M3 = {refs['oracle']:.1f}")
+                   label=f"Oracle-PPO ceiling = {refs['oracle']:.1f}")
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +109,8 @@ _TOY_ENV_LABELS = {
 }
 _VARIANT_ORDER = ("concat_nobonus", "hypernet_nobonus")
 _VARIANT_LABELS = {
-    "concat_nobonus": "concat",
-    "hypernet_nobonus": "hypernet",
+    "concat_nobonus": "Concat",
+    "hypernet_nobonus": "Hypernetwork",
 }
 
 
@@ -144,19 +174,36 @@ def plot_factorial_toys(out_path: Path) -> bool:
                 ax.axhline(
                     mv, color=COLORS[m], linestyle="--", linewidth=0.8,
                     alpha=0.5,
+                    label=f"{method_labels[m]} prior-baseline = {mv:.1f}",
                 )
 
         ax.set_xticks(np.arange(n_v))
         ax.set_xticklabels([_VARIANT_LABELS[v] for v in _VARIANT_ORDER], fontsize=8)
         ax.set_title(_TOY_ENV_LABELS[env])
-        ax.set_ylabel("final return (mean across 3 seeds)")
-        ax.legend(loc="best", fontsize=8)
+        ax.set_ylabel("Final return (mean across 3 seeds)")
+        # Per-panel legend below the panel — keeps the bar/baseline labels
+        # tied to the env they describe (M4 baselines differ per env).
+        ax.legend(
+            loc="upper center", bbox_to_anchor=(0.5, -0.10),
+            fontsize=7, ncol=2,
+            frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+        )
 
     fig.suptitle(
-        "M5 Step-3 factorial on toy envs — RL²/VariBAD × concat/hypernet",
+        "Toy environments — RL²/VariBAD × Concat/Hypernetwork",
         y=1.02,
     )
+    # Compute budget — read from one config row (all rows in this sweep
+    # use the same M4 budget per the orchestrator).
+    sample_cfg = stats["configs"][0] if stats["configs"] else {}
+    _budget_annotation(
+        fig,
+        iterations=sample_cfg.get("iterations"),
+        num_seeds=sample_cfg.get("num_seeds"),
+        extra="across 12 method×env×integration cells",
+    )
     fig.tight_layout()
+    fig.subplots_adjust(bottom=0.32)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -180,17 +227,19 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
       - varibad_hypernet: m5_step3_varibad_hypernet (n=3, 100 iter, hypernet)
     """
     cells = [
-        ("RL²\nconcat", "m5_step2_rl2_h64_e01", COLORS["rl2"], 0.6),
-        ("RL²\nhypernet", "m5_step3_rl2_hypernet", COLORS["rl2"], 1.0),
-        ("VariBAD\nconcat", "m5_step2_varibad_kl10", COLORS["varibad"], 0.6),
-        ("VariBAD\nhypernet", "m5_step3_varibad_hypernet", COLORS["varibad"], 1.0),
+        # (xtick_label, legend_label, experiment_name, color, alpha)
+        ("RL²\nConcat",          "RL² Concat",          "m5_step2_rl2_h64_e01",        COLORS["rl2"],     0.6),
+        ("RL²\nHyper-\nnetwork", "RL² Hypernetwork",    "m5_step3_rl2_hypernet",       COLORS["rl2"],     1.0),
+        ("VariBAD\nConcat",      "VariBAD Concat",      "m5_step2_varibad_kl10",       COLORS["varibad"], 0.6),
+        ("VariBAD\nHyper-\nnetwork", "VariBAD Hypernetwork", "m5_step3_varibad_hypernet", COLORS["varibad"], 1.0),
     ]
     means: list[float] = []
     cis: list[tuple[float, float]] = []
-    labels: list[str] = []
+    xtick_labels: list[str] = []
+    legend_labels: list[str] = []
     colors: list[Any] = []
     alphas: list[float] = []
-    for label, exp_name, color, alpha in cells:
+    for xtick_label, legend_label, exp_name, color, alpha in cells:
         m_path = RESULTS_ROOT / exp_name / "metrics.json"
         if not m_path.exists():
             print(f"[m5_plots] skip step3_mm_hypernet: missing {m_path}")
@@ -199,14 +248,15 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
             m = json.load(f)
         means.append(float(m["final_return_mean"]))
         cis.append(tuple(m["final_return_ci95"]))
-        labels.append(label)
+        xtick_labels.append(xtick_label)
+        legend_labels.append(legend_label)
         colors.append(color)
         alphas.append(alpha)
 
     refs = _load_m3_refs()
     apply_style()
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
-    x = np.arange(len(labels))
+    x = np.arange(len(xtick_labels))
     err = np.array([[m - lo, hi - m] for m, (lo, hi) in zip(means, cis)]).T
     bars = ax.bar(
         x, means, yerr=err, capsize=3, edgecolor="black", linewidth=0.4,
@@ -214,17 +264,44 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
     for bar, color, alpha in zip(bars, colors, alphas):
         bar.set_facecolor(color)
         bar.set_alpha(alpha)
-    for xi, mean in zip(x, means):
-        ax.text(xi, mean + 1.5, f"{mean:.1f}", ha="center", fontsize=9)
+    # Position the value label above the upper error-bar cap (mean + ci_hi)
+    # so it never overlaps the cap.
+    for xi, mean, (lo, hi) in zip(x, means, cis):
+        ax.text(xi, hi + 1.0, f"{mean:.1f}", ha="center", fontsize=9)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.set_ylabel("final return (mean across 3 seeds, 100 iter)")
-    ax.set_title("M5 Step-3 MM E_final — concat vs hypernet (half-budget probe)")
+    ax.set_xticklabels(xtick_labels)
+    ax.set_ylabel("Final return (mean across 3 seeds, 100 iter)")
+    ax.set_title("MarketMakingV1 — Concat vs. Hypernetwork (half-budget probe)")
     _draw_reference_lines(ax, refs)
-    ax.legend(loc="lower right", fontsize=8)
+    # Per the repo legend convention, list every chart element. Add proxy
+    # patches for the bars (one per cell) and combine with the reference-
+    # line handles already on the axes.
+    from matplotlib.patches import Patch
+    bar_handles = [
+        Patch(facecolor=color, alpha=alpha, edgecolor="black",
+              linewidth=0.4, label=legend_label)
+        for legend_label, color, alpha in zip(legend_labels, colors, alphas)
+    ]
+    ref_handles, ref_labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles=bar_handles + ref_handles,
+        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
     ax.set_ylim(80, max(refs.get("oracle", 200), max(means) + 10))
+    # Read budget from the first cell's metrics (all 4 cells share budget
+    # in this comparison: 100 iter × 3 seeds × 512 envs).
+    first_meta = json.load(open(RESULTS_ROOT / cells[0][2] / "metrics.json"))
+    _budget_annotation(
+        fig,
+        iterations=int(first_meta["iterations"]),
+        parallel_envs=int(first_meta["parallel_envs"]),
+        rollout_length=int(first_meta["rollout_length"]),
+        num_seeds=int(first_meta["num_seeds"]),
+    )
     fig.tight_layout()
+    fig.subplots_adjust(right=0.62, bottom=0.20)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -239,18 +316,17 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
 
 def _method_label_and_color(exp_name: str) -> tuple[str, str]:
     """Map experiment_name to (display label, color)."""
-    palette = {"rl2": COLORS["rl2"], "varibad": COLORS["varibad"]}
-    for prefix, color in palette.items():
+    palette = {"rl2": "RL²", "varibad": "VariBAD"}
+    color_palette = {"rl2": COLORS["rl2"], "varibad": COLORS["varibad"]}
+    for prefix, pretty in palette.items():
         if prefix in exp_name:
-            label = (
-                exp_name
-                .replace("m5_step5_smoke_", "")
-                .replace("m5_step4_", "")
-                .replace("m5_step3_", "")
-                .replace("_hypernet", " hypernet")
-                .replace("_concat", " concat")
+            integ = (
+                "Hypernetwork" if "hypernet" in exp_name
+                else "Concat" if "concat" in exp_name
+                else ""
             )
-            return label, color
+            label = f"{pretty} {integ}".strip()
+            return label, color_palette[prefix]
     return exp_name, "#666666"
 
 
@@ -304,7 +380,10 @@ def plot_probe_per_t(out_path: Path) -> bool:
     bar_colors: list[str] = []
     for exp_name, m in method_items:
         label, color = _method_label_and_color(exp_name)
-        bar_labels.append(label)
+        # Render method/integration on separate lines so the bar tick
+        # labels don't run into one another when the integration name
+        # is long ("Hypernetwork").
+        bar_labels.append(label.replace(" ", "\n", 1))
         bar_means.append(m["method_test_acc_mean"])
         lo, hi = m["method_test_acc_ci95"]
         bar_lo.append(m["method_test_acc_mean"] - lo)
@@ -323,7 +402,7 @@ def plot_probe_per_t(out_path: Path) -> bool:
     boot = rng.integers(0, ana_per_seed.size, size=(10_000, ana_per_seed.size))
     ana_lo = float(np.percentile(ana_per_seed[boot].mean(axis=1), 2.5))
     ana_hi = float(np.percentile(ana_per_seed[boot].mean(axis=1), 97.5))
-    bar_labels.append("analytical\nposterior")
+    bar_labels.append("Analytical\nposterior")
     bar_means.append(ana_mean)
     bar_lo.append(ana_mean - ana_lo)
     bar_hi.append(ana_hi - ana_mean)
@@ -343,14 +422,14 @@ def plot_probe_per_t(out_path: Path) -> bool:
         ax_bar.text(xi, mean + hi + 0.025, f"{mean:.2f}",
                     ha="center", fontsize=9)
     ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
-                   label=f"random guess ({100.0/n_classes:.1f}%)")
+                   label=f"Random guess ({100.0/n_classes:.1f}%)")
     ax_bar.set_xticks(x_bar)
     ax_bar.set_xticklabels(bar_labels, fontsize=8)
     ax_bar.set_ylim(0.0, 1.05)
-    ax_bar.set_ylabel("regime classification accuracy (test set)")
+    ax_bar.set_ylabel("Regime classification accuracy (test set)")
     ax_bar.set_title("Headline test accuracy")
     ax_bar.legend(
-        loc="lower right", fontsize=8,
+        loc="upper center", bbox_to_anchor=(0.5, -0.30), fontsize=7,
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
 
@@ -386,23 +465,31 @@ def plot_probe_per_t(out_path: Path) -> bool:
             ana = np.array(m["analytical_per_t_test_acc_mean"])
             ax_curve.plot(ts, _smooth_curve(ana, smoothing_window),
                           color="#222222", linestyle="--", linewidth=1.2,
-                          label="analytical posterior (reference)")
+                          label="Analytical posterior (reference)")
             analytical_drawn = True
 
     ax_curve.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
-                     label=f"random guess ({100.0/n_classes:.1f}%)")
-    ax_curve.set_xlabel("timestep within episode")
-    ax_curve.set_ylabel("regime classification accuracy")
+                     label=f"Random guess ({100.0/n_classes:.1f}%)")
+    ax_curve.set_xlabel("Timestep within episode")
+    ax_curve.set_ylabel("Regime classification accuracy")
     ax_curve.set_title(f"Per-timestep accuracy (rolling-mean window {smoothing_window})")
     ax_curve.set_ylim(0.0, 1.05)
     ax_curve.legend(
-        loc="lower right", fontsize=8,
+        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
 
-    env_label = stats.get("env_label", "MM E_final")
-    fig.suptitle(f"M5 Step-5 — posterior-quality probe on {env_label}", y=1.02)
+    env_label = stats.get("env_label", "MarketMakingV1")
+    fig.suptitle(f"Posterior-quality probe on {env_label}", y=1.02)
+    n_seeds = max(m["n_seeds"] for _, m in method_items)
+    _budget_annotation(
+        fig,
+        rollout_length=int(stats.get("rollout_length", 0)) or None,
+        num_seeds=n_seeds,
+        extra=f"{stats.get('n_rollouts')} rollouts/seed, classifier={stats.get('classifier')}",
+    )
     fig.tight_layout()
+    fig.subplots_adjust(right=0.82, bottom=0.30)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -431,6 +518,7 @@ def plot_step4_ladder(out_path: Path) -> bool:
     bar_w = 0.38
 
     cells = stats.get("cells", {})
+    method_labels_full = {"rl2": "RL²", "varibad": "VariBAD"}
     for i_int, integ in enumerate(integrations):
         means = []
         errs = []
@@ -450,19 +538,60 @@ def plot_step4_ladder(out_path: Path) -> bool:
         alpha = 0.6 if integ == "concat" else 1.0
         bars = ax.bar(
             x, means, bar_w, yerr=yerr, capsize=3, edgecolor="black",
-            linewidth=0.4, label=integ,
+            linewidth=0.4,
         )
         for bar, m in zip(bars, methods):
             bar.set_facecolor(COLORS[m])
             bar.set_alpha(alpha)
+    # Build legend manually with proxy artists so every coloured bar
+    # combination is documented (method × integration), not just one axis.
+    from matplotlib.patches import Patch
+    legend_handles = []
+    integ_pretty = {"concat": "Concat", "hypernet": "Hypernetwork"}
+    for method in methods:
+        for integ in integrations:
+            alpha = 0.6 if integ == "concat" else 1.0
+            legend_handles.append(Patch(
+                facecolor=COLORS[method], alpha=alpha, edgecolor="black",
+                linewidth=0.4,
+                label=f"{method_labels_full[method]} {integ_pretty[integ]}",
+            ))
 
     ax.set_xticks(np.arange(len(methods)))
     ax.set_xticklabels(["RL²", "VariBAD"])
-    ax.set_ylabel("final return (mean across n=8 seeds, 200 iter)")
-    ax.set_title("M5 Step-4 ladder — 4-cell factorial on MM E_final")
+    ax.set_ylabel("Final return (mean across n=8 seeds, 200 iter)")
+    ax.set_title("MarketMakingV1 — RL²/VariBAD × Concat/Hypernetwork")
     _draw_reference_lines(ax, refs)
-    ax.legend(loc="lower right", fontsize=8)
+    # User convention: y-axis starts at floor − 5 so all bars are
+    # comparable to (and visibly above/below) the floor reference.
+    floor = refs.get("agnostic", float("nan"))
+    if not np.isnan(floor):
+        finite_means = [m for m in [c["final_return"]["mean"] for c in cells.values()] if not np.isnan(m)]
+        ymax = max([refs.get("oracle", 200), *finite_means, floor]) + 5
+        ax.set_ylim(floor - 5, ymax)
+    # Combine method×integration proxy patches with reference-line handles.
+    ref_handles, ref_labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles=legend_handles + ref_handles,
+        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
+    # Compute budget — read iterations / num_seeds / parallel_envs from
+    # the first cell's saved metrics.json (all cells share budget here).
+    first_cell = next(iter(cells.values()), None)
+    if first_cell is not None:
+        first_meta_path = RESULTS_ROOT / first_cell["experiment_name"] / "metrics.json"
+        if first_meta_path.exists():
+            mm = json.load(open(first_meta_path))
+            _budget_annotation(
+                fig,
+                iterations=int(mm["iterations"]),
+                parallel_envs=int(mm["parallel_envs"]),
+                rollout_length=int(mm["rollout_length"]),
+                num_seeds=int(mm["num_seeds"]),
+            )
     fig.tight_layout()
+    fig.subplots_adjust(right=0.65, bottom=0.10)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -483,12 +612,15 @@ def plot_step4_learning_curves(out_path: Path) -> bool:
     fig, ax = plt.subplots(figsize=FIGSIZE_WIDE)
 
     cells = stats.get("cells", {})
+    method_pretty = {"rl2": "RL²", "varibad": "VariBAD"}
+    integ_pretty = {"concat": "Concat", "hypernet": "Hypernetwork"}
     for cell_key, c in cells.items():
         # cell_key e.g. "rl2_hypernet"
         method = cell_key.split("_")[0]
         integ = "_".join(cell_key.split("_")[1:])
         color = COLORS.get(method, "#666666")
         linestyle = "--" if integ == "concat" else "-"
+        cell_label = f"{method_pretty.get(method, method)} {integ_pretty.get(integ, integ)}"
         exp_name = c["experiment_name"]
         m_path = RESULTS_ROOT / exp_name / "metrics.json"
         if not m_path.exists():
@@ -510,15 +642,32 @@ def plot_step4_learning_curves(out_path: Path) -> bool:
         else:
             lo, hi = mean.copy(), mean.copy()
         iters = np.arange(len(mean))
-        ax.plot(iters, mean, color=color, linestyle=linestyle, label=cell_key)
+        ax.plot(iters, mean, color=color, linestyle=linestyle, label=cell_label)
         ax.fill_between(iters, lo, hi, color=color, alpha=0.15)
 
     _draw_reference_lines(ax, refs)
-    ax.set_xlabel("iteration")
-    ax.set_ylabel("mean return (across seeds, shaded = 95% CI)")
-    ax.set_title("M5 Step-4 learning curves — concat vs hypernet × method")
-    ax.legend(loc="lower right", fontsize=8)
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Mean return (across seeds, shaded = 95% CI)")
+    ax.set_title("MarketMakingV1 — learning curves by method × integration")
+    ax.legend(
+        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
+    # Compute budget from the first cell's metrics.
+    first_cell = next(iter(cells.values()), None)
+    if first_cell is not None:
+        first_meta_path = RESULTS_ROOT / first_cell["experiment_name"] / "metrics.json"
+        if first_meta_path.exists():
+            mm = json.load(open(first_meta_path))
+            _budget_annotation(
+                fig,
+                iterations=int(mm["iterations"]),
+                parallel_envs=int(mm["parallel_envs"]),
+                rollout_length=int(mm["rollout_length"]),
+                num_seeds=int(mm["num_seeds"]),
+            )
     fig.tight_layout()
+    fig.subplots_adjust(right=0.78, bottom=0.18)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

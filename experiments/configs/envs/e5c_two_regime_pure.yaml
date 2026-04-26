@@ -29,7 +29,7 @@
 #   oracle_VI=106.1  belief_QMDP=94.4  compromise_VI=64.3
 #   inference_cost=11.7  compromise_cost=30.1  ratio=2.57
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

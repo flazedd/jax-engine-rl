@@ -6,7 +6,7 @@
 # actually achieve inv=0 in directional regimes is the question; if not,
 # the per-regime returns simply collapse and the gap may not widen.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

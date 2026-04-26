@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from oracles.value_iteration import (
     compromise_policy_expected_returns,
     policy_disagreement,
@@ -62,8 +62,8 @@ _BASE = dict(
 )
 
 
-def _env_from(params: dict) -> MMReducedEnv:
-    return MMReducedEnv(**{**_BASE, **params})
+def _env_from(params: dict) -> MarketMakingV1:
+    return MarketMakingV1(**{**_BASE, **params})
 
 
 CANDIDATES: list[tuple[str, str, dict]] = [

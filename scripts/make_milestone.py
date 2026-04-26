@@ -19,7 +19,7 @@ from pathlib import Path
 import jax
 import numpy as np
 
-from envs.mm_reduced import ACTION_FAVOR_ASK, ACTION_FAVOR_BID, MMReducedEnv
+from envs.market_making_v1 import ACTION_FAVOR_ASK, ACTION_FAVOR_BID, MarketMakingV1
 from oracles.analytical_as import solve_analytical_as
 from plotting.regenerate_figures import _HANDLERS as FIGURE_HANDLERS
 from training.config import apply_run_mode, load_config
@@ -160,7 +160,7 @@ def make_m1() -> dict:
         schema_ok_all &= schema_ok
 
     cfg_for_env = load_config(config)
-    env = MMReducedEnv(**cfg_for_env.env.params)
+    env = MarketMakingV1(**cfg_for_env.env.params)
     sol = solve_analytical_as(env)
     as_return = float(sol.expected_episode_return)
 

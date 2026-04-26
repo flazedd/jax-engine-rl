@@ -31,7 +31,7 @@
 # essentially no regime info → agnostic PPO cannot route around the
 # compromise via inv-conditioning.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

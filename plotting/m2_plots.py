@@ -17,11 +17,11 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import numpy as np
 
-from envs.mm_reduced import (
+from envs.market_making_v1 import (
     ACTION_FAVOR_ASK,
     ACTION_FAVOR_BID,
     ACTION_SYM,
-    MMReducedEnv,
+    MarketMakingV1,
 )
 from oracles.value_iteration import VIResult
 from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
@@ -38,7 +38,7 @@ def _regime_label(r: int) -> str:
     return f"regime_{r}"
 
 
-def plot_policy_heatmap(vi: VIResult, env: MMReducedEnv, output_path: Path) -> None:
+def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) -> None:
     """Heatmap of VI-optimal action per (regime, inventory) state."""
     apply_style()
     policy = vi.policy  # [n_inv, n_reg]

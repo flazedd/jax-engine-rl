@@ -1,4 +1,4 @@
-"""BeliefObsEnv — wraps an MMReducedEnv, appends the analytical HMM posterior
+"""BeliefObsEnv — wraps an MarketMakingV1, appends the analytical HMM posterior
 to the observation.
 
 The posterior is tracked in env_state and updated at every step using
@@ -18,12 +18,12 @@ import jax
 import jax.numpy as jnp
 
 from beliefs.hmm_posterior import full_update, initial_belief
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 
 
 @dataclass(frozen=True)
 class BeliefObsEnv:
-    inner: MMReducedEnv
+    inner: MarketMakingV1
     # D2 ablation: if True, agent sees `initial_distribution` at every step.
     # Internal belief tracking still runs so logging is unaffected.
     constant_belief: bool = False

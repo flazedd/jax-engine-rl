@@ -181,15 +181,24 @@ def main() -> int:
         )
         return 1
 
-    # Probe currently assumes MM E_final (the only env with a `regime`
+    # Probe currently assumes MarketMakingV1 (the only env with a `regime`
     # field exposed via info dict). Map env class names to canonical
     # project labels (CLAUDE.md → "E_final = e6e_symmetric_kappa05").
+    # The legacy `mm_reduced*` keys are kept for backward compatibility
+    # with checkpoints saved before the env was renamed.
     env_names = {by_method[k].get("env_name", "?") for k in by_method}
     _DISPLAY = {
-        "mm_reduced": "MM E_final",
-        "mm_reduced_oracle": "MM E_final (oracle obs)",
-        "mm_reduced_belief": "MM E_final (analytical-belief obs)",
-        "mm_reduced_stacked": "MM E_final (stacked obs)",
+        "market_making_v1":                  "MarketMakingV1 (E_final)",
+        "market_making_v1_oracle":           "MarketMakingV1 (E_final, oracle obs)",
+        "market_making_v1_belief":           "MarketMakingV1 (E_final, analytical-belief obs)",
+        "market_making_v1_belief_constant":  "MarketMakingV1 (E_final, constant-belief obs)",
+        "market_making_v1_stacked":          "MarketMakingV1 (E_final, stacked obs)",
+        # legacy names from pre-rename checkpoints
+        "mm_reduced":                  "MarketMakingV1 (E_final)",
+        "mm_reduced_oracle":           "MarketMakingV1 (E_final, oracle obs)",
+        "mm_reduced_belief":           "MarketMakingV1 (E_final, analytical-belief obs)",
+        "mm_reduced_belief_constant":  "MarketMakingV1 (E_final, constant-belief obs)",
+        "mm_reduced_stacked":          "MarketMakingV1 (E_final, stacked obs)",
     }
     env_label = (
         _DISPLAY.get(next(iter(env_names)), next(iter(env_names)))

@@ -19,11 +19,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from envs.mm_reduced import (
+from envs.market_making_v1 import (
     ACTION_FAVOR_ASK,
     ACTION_FAVOR_BID,
     ACTION_SYM,
-    MMReducedEnv,
+    MarketMakingV1,
     N_ACTIONS,
 )
 
@@ -52,7 +52,7 @@ class VIResult:
     mixed_expected_episode_return: float
 
 
-def _fill_probs_np(env: MMReducedEnv, action: int, regime: int) -> tuple[float, float]:
+def _fill_probs_np(env: MarketMakingV1, action: int, regime: int) -> tuple[float, float]:
     bid_tight = action in (ACTION_SYM, ACTION_FAVOR_BID)
     ask_tight = action in (ACTION_SYM, ACTION_FAVOR_ASK)
     if env.n_regimes == 1:
@@ -79,7 +79,7 @@ def _bid_ask_spreads(action: int) -> tuple[float, float]:
 
 
 def _transition_tables(
-    env: MMReducedEnv,
+    env: MarketMakingV1,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build (P, R) for the full-info MDP.
 
@@ -239,7 +239,7 @@ def _expected_episode_return_under_policy(
         return total
 
 
-def solve_value_iteration(env: MMReducedEnv) -> VIResult:
+def solve_value_iteration(env: MarketMakingV1) -> VIResult:
     """Run VI on the full-info (inv, regime) MDP for the given env config."""
     P, R = _transition_tables(env)
     V, Q = _bellman_iterate(P, R, env.gamma)
@@ -281,7 +281,7 @@ def solve_value_iteration(env: MMReducedEnv) -> VIResult:
 
 
 def compromise_policy_expected_returns(
-    env: MMReducedEnv, vi: VIResult | None = None
+    env: MarketMakingV1, vi: VIResult | None = None
 ) -> tuple[np.ndarray, float, np.ndarray]:
     """Compute the expected return of the best *regime-agnostic* policy.
 
@@ -335,7 +335,7 @@ def compromise_policy_expected_returns(
 
 
 def belief_qmdp_expected_return(
-    env: MMReducedEnv,
+    env: MarketMakingV1,
     Q: np.ndarray,
     n_trajectories: int = 2000,
     seed: int = 0,
@@ -480,7 +480,7 @@ def _policy_values_on_locked_regime(
 
 
 def wrong_regime_value_loss(
-    env: MMReducedEnv, vi: VIResult
+    env: MarketMakingV1, vi: VIResult
 ) -> tuple[float, float, np.ndarray]:
     """R1 metric: value loss from COMMITTING to the wrong regime's policy.
 

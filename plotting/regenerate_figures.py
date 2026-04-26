@@ -12,7 +12,7 @@ import json
 
 import numpy as np
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from oracles.value_iteration import (
     compromise_policy_expected_returns,
     policy_disagreement,
@@ -71,7 +71,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
         stats = json.load(f)
 
     env_version = stats["env_version"]
-    env = MMReducedEnv(**stats["parameters"])
+    env = MarketMakingV1(**stats["parameters"])
     vi = solve_value_iteration(env)
 
     fig_dir = FIGURES_ROOT / "milestones" / "M2"

@@ -19,7 +19,7 @@
 # vs E3 reference: comp=16.4, ratio=3.6 → +30% compromise_cost on a clean
 # all-regimes-profitable env.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

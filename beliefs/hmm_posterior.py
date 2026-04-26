@@ -28,27 +28,27 @@ from __future__ import annotations
 import chex
 import jax.numpy as jnp
 
-from envs.mm_reduced import (
+from envs.market_making_v1 import (
     _ASK_SPREADS,
     _BID_SPREADS,
     _TIGHT_MASK_ASK,
     _TIGHT_MASK_BID,
-    MMReducedEnv,
+    MarketMakingV1,
 )
 
 
-def initial_belief(env: MMReducedEnv) -> chex.Array:
+def initial_belief(env: MarketMakingV1) -> chex.Array:
     return jnp.asarray(env.initial_distribution, dtype=jnp.float32)
 
 
-def transition_matrix(env: MMReducedEnv) -> chex.Array:
+def transition_matrix(env: MarketMakingV1) -> chex.Array:
     return jnp.asarray(env.transition_matrix, dtype=jnp.float32).reshape(
         env.n_regimes, env.n_regimes
     )
 
 
 def per_regime_fill_probs(
-    env: MMReducedEnv, action: chex.Array
+    env: MarketMakingV1, action: chex.Array
 ) -> tuple[chex.Array, chex.Array]:
     """Return (p_bid, p_ask), each shape [n_regimes], for the given action.
 
@@ -66,7 +66,7 @@ def per_regime_fill_probs(
 
 
 def likelihood(
-    env: MMReducedEnv,
+    env: MarketMakingV1,
     action: chex.Array,
     bid_fill: chex.Array,
     ask_fill: chex.Array,
@@ -96,7 +96,7 @@ def likelihood(
 
 def filter_step(
     belief: chex.Array,
-    env: MMReducedEnv,
+    env: MarketMakingV1,
     action: chex.Array,
     bid_fill: chex.Array,
     ask_fill: chex.Array,
@@ -112,7 +112,7 @@ def filter_step(
     return post
 
 
-def predict_step(belief: chex.Array, env: MMReducedEnv) -> chex.Array:
+def predict_step(belief: chex.Array, env: MarketMakingV1) -> chex.Array:
     """Predict forward: b_{t+1}(r') = sum_r T(r → r') b_filtered(r)."""
     T = transition_matrix(env)
     return belief @ T
@@ -120,7 +120,7 @@ def predict_step(belief: chex.Array, env: MMReducedEnv) -> chex.Array:
 
 def full_update(
     belief: chex.Array,
-    env: MMReducedEnv,
+    env: MarketMakingV1,
     action: chex.Array,
     bid_fill: chex.Array,
     ask_fill: chex.Array,

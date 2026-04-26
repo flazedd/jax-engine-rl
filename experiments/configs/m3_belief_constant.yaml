@@ -3,7 +3,7 @@ extends:
   - envs/e_final.yaml
 experiment_name: m3_belief_constant
 env:
-  name: mm_reduced_belief_constant
+  name: market_making_v1_belief_constant
 agent:
   name: ppo_belief
 iterations: 200

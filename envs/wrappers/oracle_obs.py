@@ -1,4 +1,4 @@
-"""OracleObsEnv — wraps an MMReducedEnv, appends the true regime one-hot
+"""OracleObsEnv — wraps an MarketMakingV1, appends the true regime one-hot
 to the observation.
 
 Used only by Oracle-PPO. Imported via `beliefs/oracle.py` indirection in
@@ -13,12 +13,12 @@ import chex
 import jax
 import jax.numpy as jnp
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 
 
 @dataclass(frozen=True)
 class OracleObsEnv:
-    inner: MMReducedEnv
+    inner: MarketMakingV1
 
     @property
     def n_inventory_states(self) -> int:

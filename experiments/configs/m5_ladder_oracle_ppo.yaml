@@ -4,7 +4,7 @@ extends:
   - envs/e_final.yaml
 experiment_name: m5_ladder_oracle_ppo
 env:
-  name: mm_reduced_oracle
+  name: market_making_v1_oracle
 agent:
   name: ppo_oracle
 iterations: 200

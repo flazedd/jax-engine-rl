@@ -13,7 +13,7 @@
 # avg sym=0.97, favor_X=1.40 → compromise picks favor_X, losing 0.9/step
 # in R1 (a third of the episode). Belief switches action class.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

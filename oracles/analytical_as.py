@@ -23,11 +23,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from envs.mm_reduced import (
+from envs.market_making_v1 import (
     ACTION_FAVOR_ASK,
     ACTION_FAVOR_BID,
     ACTION_SYM,
-    MMReducedEnv,
+    MarketMakingV1,
     N_ACTIONS,
 )
 
@@ -42,7 +42,7 @@ class AnalyticalAS:
     q_margin: np.ndarray  # Q*(s, a*) − Q*(s, 2nd-best), per state. Zero ≡ tied optimum.
 
 
-def _fill_probs_np(env: MMReducedEnv, action: int) -> tuple[float, float]:
+def _fill_probs_np(env: MarketMakingV1, action: int) -> tuple[float, float]:
     # (bid_tight, ask_tight) for each action id
     bid_tight = action in (ACTION_SYM, ACTION_FAVOR_BID)
     ask_tight = action in (ACTION_SYM, ACTION_FAVOR_ASK)
@@ -52,7 +52,7 @@ def _fill_probs_np(env: MMReducedEnv, action: int) -> tuple[float, float]:
 
 
 def _bid_ask_spreads(action: int) -> tuple[float, float]:
-    # Must stay in sync with envs/mm_reduced.py._BID_SPREADS / _ASK_SPREADS.
+    # Must stay in sync with envs/market_making_v1.py._BID_SPREADS / _ASK_SPREADS.
     if action == ACTION_SYM:
         return 1.0, 1.0
     if action == ACTION_FAVOR_ASK:
@@ -62,7 +62,7 @@ def _bid_ask_spreads(action: int) -> tuple[float, float]:
     raise ValueError(action)
 
 
-def _build_transition_tables(env: MMReducedEnv) -> tuple[np.ndarray, np.ndarray]:
+def _build_transition_tables(env: MarketMakingV1) -> tuple[np.ndarray, np.ndarray]:
     """Return (P, R) with shape [n_states, n_actions, n_states] and [n_states, n_actions].
 
     P[s, a, s'] = transition probability from inventory s under action a.
@@ -133,7 +133,7 @@ def _expected_undiscounted_return_per_step(P: np.ndarray, R: np.ndarray, policy:
     return float(np.dot(pi_d, r_pi))
 
 
-def solve_analytical_as(env: MMReducedEnv) -> AnalyticalAS:
+def solve_analytical_as(env: MarketMakingV1) -> AnalyticalAS:
     P, R = _build_transition_tables(env)
     V = _bellman_iterate(P, R, env.gamma)
     Q = R + env.gamma * np.einsum("sat,t->sa", P, V)

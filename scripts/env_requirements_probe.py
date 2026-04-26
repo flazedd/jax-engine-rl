@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from oracles.value_iteration import (
     compromise_policy_expected_returns,
     policy_disagreement,
@@ -41,7 +41,7 @@ R4_DECAY_MIN = 0.30
 
 def probe(env_config_path: Path) -> int:
     env_cfg = _load_yaml_with_extends(env_config_path)["env"]
-    env = MMReducedEnv(**env_cfg["params"])
+    env = MarketMakingV1(**env_cfg["params"])
     print(f"[probe] env={env_config_path.stem}  n_regimes={env.n_regimes}  T={env.episode_length}")
 
     # --- R1 -----------------------------------------------------------------

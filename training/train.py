@@ -31,7 +31,7 @@ from agents.ppo_oracle import PPOOracleAgent
 from agents.ppo_per_regime import PPOPerRegimeAgent
 from agents.rl2 import RL2Agent
 from agents.varibad import VariBADAgent
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from envs.validation.bandit import BanditEnv
 from envs.validation.dummy import DummyEnv
 from envs.validation.gridworld import GridworldEnv
@@ -68,19 +68,19 @@ def _build_env(cfg: ExperimentConfig):
         return GridworldEnv(**cfg.env.params)
     if cfg.env.name == "regime_bandit":
         return RegimeBanditEnv(**cfg.env.params)
-    if cfg.env.name == "mm_reduced":
-        return MMReducedEnv(**cfg.env.params)
-    if cfg.env.name == "mm_reduced_oracle":
-        return OracleObsEnv(inner=MMReducedEnv(**cfg.env.params))
-    if cfg.env.name == "mm_reduced_belief":
-        return BeliefObsEnv(inner=MMReducedEnv(**cfg.env.params))
-    if cfg.env.name == "mm_reduced_stacked":
+    if cfg.env.name == "market_making_v1":
+        return MarketMakingV1(**cfg.env.params)
+    if cfg.env.name == "market_making_v1_oracle":
+        return OracleObsEnv(inner=MarketMakingV1(**cfg.env.params))
+    if cfg.env.name == "market_making_v1_belief":
+        return BeliefObsEnv(inner=MarketMakingV1(**cfg.env.params))
+    if cfg.env.name == "market_making_v1_stacked":
         params = dict(cfg.env.params)
         k = int(params.pop("stack_k", 4))
-        return StackObsEnv(inner=MMReducedEnv(**params), k=k)
-    if cfg.env.name == "mm_reduced_belief_constant":
+        return StackObsEnv(inner=MarketMakingV1(**params), k=k)
+    if cfg.env.name == "market_making_v1_belief_constant":
         return BeliefObsEnv(
-            inner=MMReducedEnv(**cfg.env.params), constant_belief=True
+            inner=MarketMakingV1(**cfg.env.params), constant_belief=True
         )
     raise ValueError(f"unknown env: {cfg.env.name!r}")
 
@@ -483,7 +483,7 @@ def train_per_regime_sweep(cfg: ExperimentConfig) -> dict[str, Any]:
     for r in range(n_regimes):
         sub_cfg = copy.deepcopy(cfg)
         sub_cfg.experiment_name = f"{cfg.experiment_name}_r{r}"
-        sub_cfg.env.name = "mm_reduced"  # locked env, not a wrapper
+        sub_cfg.env.name = "market_making_v1"  # locked env, not a wrapper
         sub_cfg.env.params = {**base_env_params, "lock_regime": r}
         # Underlying trainer accepts only vanilla ppo agent — the _PerRegime_
         # label is our convention, not a loss change. Dispatch as plain PPO.

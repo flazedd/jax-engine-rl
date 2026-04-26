@@ -7,20 +7,20 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from envs.mm_reduced import (
+from envs.market_making_v1 import (
     ACTION_FAVOR_ASK,
     ACTION_FAVOR_BID,
     ACTION_SYM,
-    MMReducedEnv,
+    MarketMakingV1,
 )
 from oracles.analytical_as import solve_analytical_as
 from plotting.load_results import load_config, load_metrics
 from plotting.style import COLORS, FIGSIZE_STANDARD, apply_style
 
 
-def _env_from_config(cfg: dict) -> MMReducedEnv:
+def _env_from_config(cfg: dict) -> MarketMakingV1:
     env_params = cfg["env"]["params"]
-    return MMReducedEnv(**env_params)
+    return MarketMakingV1(**env_params)
 
 
 def plot_learning_curve_with_ceiling(experiment_dir: Path, output_path: Path) -> dict:

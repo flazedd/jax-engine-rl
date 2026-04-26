@@ -8,7 +8,7 @@ timestep accuracy curves.
 
 Spec lives at `results/milestones/M5/STEP5_PROBE_DESIGN.md`.
 
-Currently MM-specific: assumes the env is `MMReducedEnv` (possibly
+Currently MM-specific: assumes the env is `MarketMakingV1` (possibly
 wrapped) and that `info` from each step contains `regime`, `bid_fill`,
 `ask_fill`. Generalisation to non-MM envs is left as a follow-on if
 needed.
@@ -50,21 +50,21 @@ def _suppress_blas_matmul_warnings():
         yield
 
 from beliefs.hmm_posterior import full_update, initial_belief
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 
 
 # ---------------------------------------------------------------------------
-# Inner-env extraction (walk through wrappers to find MMReducedEnv)
+# Inner-env extraction (walk through wrappers to find MarketMakingV1)
 # ---------------------------------------------------------------------------
 
 
-def get_inner_mm(env: Any) -> MMReducedEnv:
-    """Walk down wrapper chain until we find the MMReducedEnv."""
+def get_inner_mm(env: Any) -> MarketMakingV1:
+    """Walk down wrapper chain until we find the MarketMakingV1."""
     cur = env
-    while not isinstance(cur, MMReducedEnv):
+    while not isinstance(cur, MarketMakingV1):
         if not hasattr(cur, "inner"):
             raise TypeError(
-                f"could not find MMReducedEnv inside {type(cur).__name__} "
+                f"could not find MarketMakingV1 inside {type(cur).__name__} "
                 "(no `inner` attribute)"
             )
         cur = cur.inner

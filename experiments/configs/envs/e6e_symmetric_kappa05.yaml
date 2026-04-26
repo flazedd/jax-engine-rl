@@ -12,7 +12,7 @@
 #   - agnostic PPO is forced to one action class for most inv, bleeds in
 #     R1 (sym best) when committed to favor_X.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

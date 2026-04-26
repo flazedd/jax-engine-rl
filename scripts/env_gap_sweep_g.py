@@ -31,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from oracles.value_iteration import (
     belief_qmdp_expected_return,
     compromise_policy_expected_returns,
@@ -88,11 +88,11 @@ _PERSISTENCE_AWAY_NOISE = [
 ]
 
 
-def _env_from(params: dict, base_override: dict | None = None) -> MMReducedEnv:
+def _env_from(params: dict, base_override: dict | None = None) -> MarketMakingV1:
     base = dict(_BASE)
     if base_override:
         base.update(base_override)
-    return MMReducedEnv(**{**base, **params})
+    return MarketMakingV1(**{**base, **params})
 
 
 CANDIDATES: list[tuple[str, str, dict, dict | None]] = [

@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from training.config import _load_yaml_with_extends
 from utils.script_output import ScriptRun
 
@@ -28,7 +28,7 @@ def _env_params() -> dict:
     return _load_yaml_with_extends(E_FINAL)["env"]["params"]
 
 
-def _simulate(env: MMReducedEnv, n_steps: int, seed: int = 0):
+def _simulate(env: MarketMakingV1, n_steps: int, seed: int = 0):
     """Random-policy rollout collecting (q, regime) per step. Shape [T]."""
 
     def body(carry, _):
@@ -57,7 +57,7 @@ def _test_lock_regime_holds() -> int:
     params = _env_params()
     ok = True
     for r in range(params["n_regimes"]):
-        locked = MMReducedEnv(**{**params, "lock_regime": r})
+        locked = MarketMakingV1(**{**params, "lock_regime": r})
         # Need a long-enough episode, but env.episode_length caps scan len above —
         # use env's episode_length.
         _, regimes = _simulate(locked, locked.episode_length, seed=r)
@@ -72,7 +72,7 @@ def _test_lock_regime_holds() -> int:
 
 def _test_stationary_distribution_matches() -> int:
     params = _env_params()
-    env = MMReducedEnv(**params)
+    env = MarketMakingV1(**params)
     n = env.n_regimes
     T = np.asarray(params["transition_matrix"], dtype=np.float64).reshape(n, n)
     stationary = _stationary_distribution(T)
@@ -93,7 +93,7 @@ def _test_stationary_distribution_matches() -> int:
 
 def _test_inventory_bounds() -> int:
     params = _env_params()
-    env = MMReducedEnv(**params)
+    env = MarketMakingV1(**params)
     qs, _ = _simulate(env, 20 * env.episode_length, seed=7)
     if qs.min() < -env.inventory_max or qs.max() > env.inventory_max:
         print(

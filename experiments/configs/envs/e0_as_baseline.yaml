@@ -1,7 +1,7 @@
 # E0 — Vanilla Avellaneda-Stoikov (single regime). No HMM.
 # Purpose: M1 PPO sanity check against the analytical optimum.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

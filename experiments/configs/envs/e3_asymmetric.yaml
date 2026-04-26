@@ -17,7 +17,7 @@
 # regimes with a single inventory-only action — regime information becomes
 # strictly necessary to hit the per-regime optimum.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

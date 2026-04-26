@@ -39,7 +39,7 @@ thesis/
 ├── envs/
 │   ├── __init__.py
 │   ├── base.py                      # abstract Env class, JAX-compatible interface
-│   ├── mm_reduced.py                # main env: reduced-form MM. Accepts a regime_config.
+│   ├── market_making_v1.py          # main env: MarketMakingV1 (reduced-form MM). Accepts a regime_config.
 │   │                                #   Supports E0 (no regimes), E1+ (regime-switching),
 │   │                                #   and lock_regime: int | None for per-regime PPO.
 │   ├── regime_bandit.py             # Markov-switching bandit (M4 validation + shared toy)

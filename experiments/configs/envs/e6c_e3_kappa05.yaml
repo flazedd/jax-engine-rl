@@ -10,7 +10,7 @@
 # inv saturates but doesn't necessarily prevent saturation. This tests
 # whether punishment alone breaks the coupling.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

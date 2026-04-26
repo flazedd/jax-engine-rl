@@ -32,7 +32,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from beliefs.hmm_posterior import entropy as belief_entropy
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from envs.wrappers.belief_obs import BeliefObsEnv
 from training.config import _load_yaml_with_extends
 
@@ -44,7 +44,7 @@ OUT_PATH = REPO_ROOT / "results" / "milestones" / "M3" / "belief_diagnostics.jso
 def _build_env() -> BeliefObsEnv:
     raw = _load_yaml_with_extends(ENV_CFG)
     params = raw["env"]["params"]
-    inner = MMReducedEnv(**params)
+    inner = MarketMakingV1(**params)
     return BeliefObsEnv(inner=inner)
 
 

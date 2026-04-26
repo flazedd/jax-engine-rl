@@ -1,12 +1,12 @@
 """Regime-information-leak test.
 
-Ensures that regime-agnostic observations (plain MMReducedEnv and BeliefObsEnv
+Ensures that regime-agnostic observations (plain MarketMakingV1 and BeliefObsEnv
 at initial-belief time) do NOT contain the true regime. Belief obs is allowed
 to *correlate* with regime, but at reset time the belief is the HMM prior and
 cannot depend on the sampled regime.
 
 Concretely:
-  - Plain MMReducedEnv: reset obs must be identical across regimes (it's a
+  - Plain MarketMakingV1: reset obs must be identical across regimes (it's a
     one-hot over inventory only).
   - BeliefObsEnv: reset obs depends only on initial inventory and the fixed
     `initial_distribution`; again identical across regimes at t=0.
@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from envs.wrappers.belief_obs import BeliefObsEnv
 from envs.wrappers.oracle_obs import OracleObsEnv
 from training.config import _load_yaml_with_extends
@@ -44,7 +44,7 @@ def _reset_obs(env, lock_regime: int) -> np.ndarray:
     else:
         inner = env
     # Build a locked env, pass through wrapper if needed.
-    locked_inner = MMReducedEnv(**{**_env_params(), "lock_regime": lock_regime})
+    locked_inner = MarketMakingV1(**{**_env_params(), "lock_regime": lock_regime})
     if isinstance(env, OracleObsEnv):
         locked = OracleObsEnv(inner=locked_inner)
     elif isinstance(env, BeliefObsEnv):
@@ -57,7 +57,7 @@ def _reset_obs(env, lock_regime: int) -> np.ndarray:
 
 def _test_plain_env_no_leak() -> int:
     """Reset obs of plain env is regime-invariant."""
-    env = MMReducedEnv(**_env_params())
+    env = MarketMakingV1(**_env_params())
     obs_by_r = [_reset_obs(env, r) for r in range(env.n_regimes)]
     ref = obs_by_r[0]
     ok = all(np.allclose(o, ref) for o in obs_by_r)
@@ -66,7 +66,7 @@ def _test_plain_env_no_leak() -> int:
 
 def _test_belief_env_no_leak_at_t0() -> int:
     """Reset obs of belief env is regime-invariant (belief = prior)."""
-    env = BeliefObsEnv(inner=MMReducedEnv(**_env_params()))
+    env = BeliefObsEnv(inner=MarketMakingV1(**_env_params()))
     obs_by_r = [_reset_obs(env, r) for r in range(env.inner.n_regimes)]
     ref = obs_by_r[0]
     ok = all(np.allclose(o, ref) for o in obs_by_r)
@@ -75,7 +75,7 @@ def _test_belief_env_no_leak_at_t0() -> int:
 
 def _test_oracle_env_leaks_by_design() -> int:
     """Positive control: OracleObsEnv obs DOES change with regime."""
-    env = OracleObsEnv(inner=MMReducedEnv(**_env_params()))
+    env = OracleObsEnv(inner=MarketMakingV1(**_env_params()))
     n = env.inner.n_regimes
     obs_by_r = [_reset_obs(env, r) for r in range(n)]
     # All pairwise obs must differ in the regime tail.

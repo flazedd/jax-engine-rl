@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 
 from beliefs.hmm_posterior import entropy as belief_entropy
-from envs.mm_reduced import MMReducedEnv
+from envs.market_making_v1 import MarketMakingV1
 from envs.wrappers.belief_obs import BeliefObsEnv
 from oracles.value_iteration import (
     compromise_policy_expected_returns,
@@ -107,7 +107,7 @@ def _run_short_ppo(
 
 
 def _simulate_belief_trajectories(
-    env: MMReducedEnv,
+    env: MarketMakingV1,
     n_envs: int = 256,
     seed: int = 0,
 ) -> np.ndarray:
@@ -172,7 +172,7 @@ def _ci(values: list[float], n_boot: int = 10_000) -> tuple[float, float]:
 def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     env_cfg = _load_yaml_with_extends(env_config_path)["env"]
     env_params = env_cfg["params"]
-    env = MMReducedEnv(**env_params)
+    env = MarketMakingV1(**env_params)
 
     env_version = env_config_path.stem
     n_ppo_runs = env.n_regimes + 3  # per-regime × n_regimes + agnostic + oracle + belief
@@ -215,7 +215,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
         params = {**env_params, "lock_regime": r}
         m = _run_short_ppo(
             experiment_name=f"m2_verify_{env_version}_per_regime_{r}",
-            env_name="mm_reduced",
+            env_name="market_making_v1",
             env_params=params,
             agent_name="ppo_per_regime",
             run_mode=run_mode,
@@ -241,7 +241,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     t0 = time.perf_counter()
     m_agn = _run_short_ppo(
         experiment_name=f"m2_verify_{env_version}_regime_agnostic",
-        env_name="mm_reduced",
+        env_name="market_making_v1",
         env_params=env_params,
         agent_name="ppo",
         run_mode=run_mode,
@@ -260,7 +260,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     t0 = time.perf_counter()
     m_oracle = _run_short_ppo(
         experiment_name=f"m2_verify_{env_version}_oracle",
-        env_name="mm_reduced_oracle",
+        env_name="market_making_v1_oracle",
         env_params=env_params,
         agent_name="ppo_oracle",
         run_mode=run_mode,
@@ -314,7 +314,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     t0 = time.perf_counter()
     m_belief = _run_short_ppo(
         experiment_name=f"m2_verify_{env_version}_belief",
-        env_name="mm_reduced_belief",
+        env_name="market_making_v1_belief",
         env_params=env_params,
         agent_name="ppo_belief",
         run_mode=run_mode,

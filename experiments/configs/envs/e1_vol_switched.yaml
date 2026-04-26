@@ -6,7 +6,7 @@
 # probabilities uniformly shifts the value but not the argmax. Documented as
 # the first env iteration; typically R1 fails here and we move to E2.
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

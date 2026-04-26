@@ -22,7 +22,7 @@ from beliefs.hmm_posterior import (
     predict_step,
     transition_matrix,
 )
-from envs.mm_reduced import ACTION_FAVOR_ASK, ACTION_FAVOR_BID, ACTION_SYM, MMReducedEnv
+from envs.market_making_v1 import ACTION_FAVOR_ASK, ACTION_FAVOR_BID, ACTION_SYM, MarketMakingV1
 from training.config import _load_yaml_with_extends
 from utils.script_output import ScriptRun
 
@@ -30,12 +30,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 E_FINAL = REPO_ROOT / "experiments" / "configs" / "envs" / "e_final.yaml"
 
 
-def _load_env() -> MMReducedEnv:
+def _load_env() -> MarketMakingV1:
     cfg = _load_yaml_with_extends(E_FINAL)["env"]
-    return MMReducedEnv(**cfg["params"])
+    return MarketMakingV1(**cfg["params"])
 
 
-def _brute_filter(env: MMReducedEnv, b, action, bid_fill, ask_fill, q) -> np.ndarray:
+def _brute_filter(env: MarketMakingV1, b, action, bid_fill, ask_fill, q) -> np.ndarray:
     n = env.n_regimes
     post = np.zeros(n, dtype=np.float64)
     bid_ok = q < env.inventory_max
@@ -61,7 +61,7 @@ def _brute_filter(env: MMReducedEnv, b, action, bid_fill, ask_fill, q) -> np.nda
     return post / total
 
 
-def _test_filter_matches_brute(env: MMReducedEnv) -> int:
+def _test_filter_matches_brute(env: MarketMakingV1) -> int:
     """Iterate random (belief, action, fills, q) and check against brute force."""
     rng = np.random.default_rng(0)
     n_fail = 0
@@ -96,7 +96,7 @@ def _test_filter_matches_brute(env: MMReducedEnv) -> int:
     return 0 if n_fail == 0 else 1
 
 
-def _test_predict_on_stationary(env: MMReducedEnv) -> int:
+def _test_predict_on_stationary(env: MarketMakingV1) -> int:
     """Stationary regime distribution is a fixed point of predict_step."""
     T = np.asarray(transition_matrix(env))
     # Power-iterate to get stationary left-eigenvector.
@@ -109,7 +109,7 @@ def _test_predict_on_stationary(env: MMReducedEnv) -> int:
     return 1
 
 
-def _test_initial_belief_matches_config(env: MMReducedEnv) -> int:
+def _test_initial_belief_matches_config(env: MarketMakingV1) -> int:
     ref = np.asarray(env.initial_distribution, dtype=np.float64)
     out = np.asarray(initial_belief(env))
     if np.allclose(out, ref, atol=1e-6):

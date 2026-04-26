@@ -19,7 +19,7 @@
 # locked-regime stories) virtually unchanged vs E3. The widening comes
 # entirely from structural levers (persistence, init, wide-side fills).
 env:
-  name: mm_reduced
+  name: market_making_v1
   params:
     inventory_max: 5
     episode_length: 128

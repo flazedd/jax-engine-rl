@@ -43,7 +43,7 @@ _TIGHT_MASK_ASK = jnp.asarray([True, True, False], dtype=jnp.bool_)
 
 
 @dataclass(frozen=True)
-class MMReducedEnv:
+class MarketMakingV1:
     """Reduced-form MM MDP with JAX-pure reset/step.
 
     Single-regime (E0) mode: leave all regime fields at defaults and rely on

@@ -1,0 +1,17 @@
+# M5 Step-3 — RL² with hypernet on MM E_final, half-budget probe.
+# Tests whether the toy-validated hypernet gain (+12-13 on gridworld and
+# regime_bandit) transfers to MM. Compared against the concat-baseline
+# m5_step2_rl2_h64_e01 (mean=108.40, same hidden_dim, same budget, same
+# seeds) — the only fair comparison.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step3_rl2_hypernet
+iterations: 100
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    integration: hypernet

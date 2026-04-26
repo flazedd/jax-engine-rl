@@ -1,0 +1,17 @@
+# M5 Step-3 — VariBAD with hypernet on MM E_final, half-budget probe.
+# Tests the toy-validated +15-28 gain transfers to MM. Compared against
+# m5_step2_varibad_kl10 (mean=100.55, same budget) — the same default
+# kl_coef=0.1 and reward_decoder=gaussian, only `integration` differs.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step3_varibad_hypernet
+iterations: 100
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    integration: hypernet

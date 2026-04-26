@@ -282,7 +282,9 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
         loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    ax.set_ylim(80, max(refs.get("oracle", 200), max(means) + 10))
+    # Cap at oracle + 5 so the Oracle-PPO ceiling line is clearly visible
+    # above the bars rather than pinned to the chart's top edge.
+    ax.set_ylim(80, max(refs.get("oracle", 200) + 5, max(means) + 10))
     # Read budget from the first cell's metrics (all 4 cells share budget
     # in this comparison: 100 iter × 3 seeds × 512 envs).
     first_meta = json.load(open(RESULTS_ROOT / cells[0][2] / "metrics.json"))

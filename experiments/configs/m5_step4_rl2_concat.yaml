@@ -1,0 +1,15 @@
+# M5 Step-4 — RL² with concat integration on MM E_final at full budget.
+# This is the M4-frozen RL² baseline reproduced at n=8 × 200 iter for the
+# clean 4-cell paired comparison against the hypernet variant.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step4_rl2_concat
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    integration: concat

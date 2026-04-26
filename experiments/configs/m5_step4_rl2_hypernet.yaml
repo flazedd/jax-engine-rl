@@ -1,0 +1,15 @@
+# M5 Step-4 — RL² with hypernet integration on MM E_final at full budget.
+# Step-3 half-budget probe (n=3, 100 iter) gave 163.24, near belief-PPO.
+# Confirmation at n=8 × 200 iter for the headline thesis number.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step4_rl2_hypernet
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    integration: hypernet

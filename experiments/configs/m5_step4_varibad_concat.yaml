@@ -1,0 +1,16 @@
+# M5 Step-4 — VariBAD with concat integration on MM E_final at full budget.
+# M4-frozen VariBAD baseline (kl=0.1, gaussian decoder for continuous PnL),
+# reproduced at n=8 × 200 iter for the clean 4-cell comparison.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step4_varibad_concat
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    integration: concat

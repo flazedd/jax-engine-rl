@@ -1,0 +1,16 @@
+# M5 Step-4 — VariBAD with hypernet integration on MM E_final at full budget.
+# Step-3 half-budget probe (n=3, 100 iter) gave 163.13, essentially tied
+# with RL² hypernet. Confirmation at n=8 × 200 iter.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step4_varibad_hypernet
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    integration: hypernet

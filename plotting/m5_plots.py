@@ -282,7 +282,47 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _method_label_and_color(exp_name: str) -> tuple[str, str]:
+    """Map experiment_name to (display label, color)."""
+    palette = {"rl2": COLORS["rl2"], "varibad": COLORS["varibad"]}
+    for prefix, color in palette.items():
+        if prefix in exp_name:
+            label = (
+                exp_name
+                .replace("m5_step5_smoke_", "")
+                .replace("m5_step4_", "")
+                .replace("m5_step3_", "")
+                .replace("_hypernet", " hypernet")
+                .replace("_concat", " concat")
+            )
+            return label, color
+    return exp_name, "#666666"
+
+
+def _smooth_curve(y: np.ndarray, window: int) -> np.ndarray:
+    """Centered rolling mean (window must be odd or +1 of even). Edges
+    use the available samples (no padding artifacts)."""
+    if window <= 1:
+        return y.copy()
+    half = window // 2
+    out = np.zeros_like(y)
+    for i in range(y.size):
+        lo = max(0, i - half)
+        hi = min(y.size, i + half + 1)
+        out[i] = y[lo:hi].mean()
+    return out
+
+
 def plot_probe_per_t(out_path: Path) -> bool:
+    """Two-panel probe figure.
+
+    Left:  headline bar chart of mean test accuracy (across seeds, with
+           bootstrap 95% CI) for each method + analytical-posterior
+           reference. Chance line marked.
+    Right: per-timestep accuracy curves with shaded CI bands and a 9-step
+           rolling-mean smoother to suppress high-frequency sampling
+           noise. Same color palette as left panel.
+    """
     stats_path = RESULTS_ROOT / "milestones" / "M5" / "stats_M5_posterior_probe.json"
     if not stats_path.exists():
         print(f"[m5_plots] skip probe_per_t: missing {stats_path}")
@@ -291,61 +331,112 @@ def plot_probe_per_t(out_path: Path) -> bool:
         stats = json.load(f)
 
     apply_style()
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
-    method_palette = {
-        "rl2": COLORS["rl2"],
-        "varibad": COLORS["varibad"],
-    }
+    fig, (ax_bar, ax_curve) = plt.subplots(
+        1, 2, figsize=(11.0, 4.0),
+        gridspec_kw={"width_ratios": [1.0, 1.7]},
+    )
 
+    method_items = list(stats["methods"].items())
+    n_classes = method_items[0][1].get("n_classes_observed", 3)
+    chance = 1.0 / n_classes
+    smoothing_window = 9
+
+    # ----- Left panel: headline bar chart -----------------------------------
+    bar_labels: list[str] = []
+    bar_means: list[float] = []
+    bar_lo: list[float] = []
+    bar_hi: list[float] = []
+    bar_colors: list[str] = []
+    for exp_name, m in method_items:
+        label, color = _method_label_and_color(exp_name)
+        bar_labels.append(label)
+        bar_means.append(m["method_test_acc_mean"])
+        lo, hi = m["method_test_acc_ci95"]
+        bar_lo.append(m["method_test_acc_mean"] - lo)
+        bar_hi.append(hi - m["method_test_acc_mean"])
+        bar_colors.append(color)
+
+    # Add analytical posterior as the rightmost reference bar (mean across
+    # methods — they all see the same analytical posterior up to seed
+    # variation, so averaging is reasonable).
+    ana_means = [m["analytical_test_acc_mean"] for _, m in method_items]
+    ana_mean = float(np.mean(ana_means))
+    ana_per_seed = np.concatenate([
+        np.asarray(m["analytical_test_acc_per_seed"]) for _, m in method_items
+    ])
+    rng = np.random.default_rng(0)
+    boot = rng.integers(0, ana_per_seed.size, size=(10_000, ana_per_seed.size))
+    ana_lo = float(np.percentile(ana_per_seed[boot].mean(axis=1), 2.5))
+    ana_hi = float(np.percentile(ana_per_seed[boot].mean(axis=1), 97.5))
+    bar_labels.append("analytical\nposterior")
+    bar_means.append(ana_mean)
+    bar_lo.append(ana_mean - ana_lo)
+    bar_hi.append(ana_hi - ana_mean)
+    bar_colors.append("#222222")
+
+    x_bar = np.arange(len(bar_labels))
+    yerr = np.array([bar_lo, bar_hi])
+    bars = ax_bar.bar(
+        x_bar, bar_means, yerr=yerr, capsize=3, edgecolor="black",
+        linewidth=0.4,
+    )
+    for bar, color in zip(bars, bar_colors):
+        bar.set_facecolor(color)
+    for xi, mean in zip(x_bar, bar_means):
+        ax_bar.text(xi, mean + 0.02, f"{mean:.2f}", ha="center", fontsize=9)
+    ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
+                   label=f"chance (1/{n_classes})")
+    ax_bar.set_xticks(x_bar)
+    ax_bar.set_xticklabels(bar_labels, fontsize=8)
+    ax_bar.set_ylim(0.0, 1.05)
+    ax_bar.set_ylabel("regime classification accuracy (test set)")
+    ax_bar.set_title("Headline test accuracy")
+    ax_bar.legend(loc="lower right", fontsize=8)
+
+    # ----- Right panel: per-timestep curves (smoothed) ---------------------
     analytical_drawn = False
-    for exp_name, m in stats["methods"].items():
-        # Map exp_name to a method color.
-        method_label = exp_name
-        color = "#666666"
-        for prefix, c in method_palette.items():
-            if prefix in exp_name:
-                color = c
-                method_label = exp_name.replace("m5_step5_smoke_", "").replace(
-                    "m5_step4_", ""
-                ).replace("_hypernet", " hypernet").replace("_concat", " concat")
-                break
-
+    for exp_name, m in method_items:
+        label, color = _method_label_and_color(exp_name)
         per_t = np.array(m["method_per_t_test_acc_mean"])
         per_t_per_seed = np.array(m["method_per_t_test_acc_per_seed"])
         n_seeds = per_t_per_seed.shape[0]
-        # Bootstrap CI per timestep across seeds.
-        rng = np.random.default_rng(0)
         T = per_t.shape[0]
-        n_boot = 1000
-        boot_lo = np.zeros(T)
-        boot_hi = np.zeros(T)
+
+        # Bootstrap 95% CI per t across seeds, then smooth the band.
         if n_seeds > 1:
-            idx = rng.integers(0, n_seeds, size=(n_boot, n_seeds))
+            rng = np.random.default_rng(0)
+            idx = rng.integers(0, n_seeds, size=(1000, n_seeds))
+            lo_band = np.zeros(T); hi_band = np.zeros(T)
             for t in range(T):
                 vals = per_t_per_seed[idx, t].mean(axis=1)
-                boot_lo[t] = np.percentile(vals, 2.5)
-                boot_hi[t] = np.percentile(vals, 97.5)
+                lo_band[t] = np.percentile(vals, 2.5)
+                hi_band[t] = np.percentile(vals, 97.5)
         else:
-            boot_lo, boot_hi = per_t.copy(), per_t.copy()
+            lo_band, hi_band = per_t.copy(), per_t.copy()
 
+        per_t_s = _smooth_curve(per_t, smoothing_window)
+        lo_s = _smooth_curve(lo_band, smoothing_window)
+        hi_s = _smooth_curve(hi_band, smoothing_window)
         ts = np.arange(T)
-        ax.plot(ts, per_t, color=color, label=f"{method_label} (n={n_seeds})")
-        ax.fill_between(ts, boot_lo, boot_hi, color=color, alpha=0.2)
+        ax_curve.plot(ts, per_t_s, color=color, label=f"{label} (n={n_seeds})")
+        ax_curve.fill_between(ts, lo_s, hi_s, color=color, alpha=0.2)
 
         if not analytical_drawn:
             ana = np.array(m["analytical_per_t_test_acc_mean"])
-            ax.plot(ts, ana, color="#222222", linestyle="--", linewidth=1.2,
-                    label=f"analytical posterior (reference)")
+            ax_curve.plot(ts, _smooth_curve(ana, smoothing_window),
+                          color="#222222", linestyle="--", linewidth=1.2,
+                          label="analytical posterior (reference)")
             analytical_drawn = True
 
-    n_classes = next(iter(stats["methods"].values())).get("n_classes_observed", 3)
-    ax.axhline(1.0 / n_classes, color="#999999", linestyle=":", linewidth=1.0,
-               label=f"chance (1/{n_classes})")
-    ax.set_xlabel("timestep within episode")
-    ax.set_ylabel("regime classification accuracy (test rollouts)")
-    ax.set_title("M5 Step-5 — posterior-quality probe (per-t accuracy)")
-    ax.set_ylim(0.0, 1.05)
-    ax.legend(loc="lower right", fontsize=8)
+    ax_curve.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
+                     label=f"chance (1/{n_classes})")
+    ax_curve.set_xlabel("timestep within episode")
+    ax_curve.set_ylabel("regime classification accuracy")
+    ax_curve.set_title(f"Per-timestep accuracy (rolling-mean window {smoothing_window})")
+    ax_curve.set_ylim(0.0, 1.05)
+    ax_curve.legend(loc="lower right", fontsize=8)
+
+    fig.suptitle("M5 Step-5 — posterior-quality probe", y=1.02)
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)

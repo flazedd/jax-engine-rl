@@ -164,19 +164,9 @@ def plot_factorial_toys(out_path: Path) -> bool:
                 edgecolor="black", linewidth=0.4, capsize=2,
                 label=method_labels[method],
             )
-        # M4 baseline reference line per env (concat_nobonus = M4 default).
-        m4_baselines = [
-            by_key.get((m, env, "concat_nobonus"), {}).get("m4_baseline_mean")
-            for m in methods
-        ]
-        for m, mv in zip(methods, m4_baselines):
-            if mv is not None:
-                ax.axhline(
-                    mv, color=COLORS[m], linestyle="--", linewidth=0.8,
-                    alpha=0.5,
-                    label=f"{method_labels[m]} prior-baseline = {mv:.1f}",
-                )
-
+        # No dashed reference lines: the M4 baseline equals the
+        # `concat` bar in this 2-variant view (same config, same
+        # hyperparameters), so the line would just duplicate the bar.
         ax.set_xticks(np.arange(n_v))
         ax.set_xticklabels([_VARIANT_LABELS[v] for v in _VARIANT_ORDER], fontsize=8)
         ax.set_title(_TOY_ENV_LABELS[env])
@@ -264,10 +254,13 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
     for bar, color, alpha in zip(bars, colors, alphas):
         bar.set_facecolor(color)
         bar.set_alpha(alpha)
-    # Position the value label above the upper error-bar cap (mean + ci_hi)
-    # so it never overlaps the cap.
+    # Place value labels inside the bar, just below the lower CI cap, so
+    # they sit clearly below the vertical CI line (offset in points keeps
+    # the gap consistent regardless of data scale).
     for xi, mean, (lo, hi) in zip(x, means, cis):
-        ax.text(xi, hi + 1.0, f"{mean:.1f}", ha="center", fontsize=9)
+        ax.annotate(f"{mean:.1f}", xy=(xi, lo),
+                    xytext=(0, -3), textcoords="offset points",
+                    ha="center", va="top", fontsize=9, color="black")
 
     ax.set_xticks(x)
     ax.set_xticklabels(xtick_labels)
@@ -416,11 +409,13 @@ def plot_probe_per_t(out_path: Path) -> bool:
     )
     for bar, color in zip(bars, bar_colors):
         bar.set_facecolor(color)
-    # Position labels above the upper error-bar cap (mean + ci_hi),
-    # not above the mean — otherwise the cap overlaps the text.
-    for xi, mean, hi in zip(x_bar, bar_means, bar_hi):
-        ax_bar.text(xi, mean + hi + 0.025, f"{mean:.2f}",
-                    ha="center", fontsize=9)
+    # Place value labels inside the bar, just below the lower CI cap, so
+    # they sit clearly below the vertical CI line (offset in points keeps
+    # the gap consistent regardless of data scale).
+    for xi, mean, lo_err in zip(x_bar, bar_means, bar_lo):
+        ax_bar.annotate(f"{mean:.2f}", xy=(xi, mean - lo_err),
+                        xytext=(0, -3), textcoords="offset points",
+                        ha="center", va="top", fontsize=9, color="black")
     ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
                    label=f"Random guess ({100.0/n_classes:.1f}%)")
     ax_bar.set_xticks(x_bar)
@@ -562,13 +557,17 @@ def plot_step4_ladder(out_path: Path) -> bool:
     ax.set_ylabel("Final return (mean across n=8 seeds, 200 iter)")
     ax.set_title("MarketMakingV1 — RL²/VariBAD × Concat/Hypernetwork")
     _draw_reference_lines(ax, refs)
-    # User convention: y-axis starts at floor − 5 so all bars are
-    # comparable to (and visibly above/below) the floor reference.
+    # Y-axis convention: start at floor − 5 so bars are comparable to the
+    # floor reference (full-budget run). For smoke runs whose means sit
+    # below the floor, extend the bottom so the bars (and their lower CI
+    # caps) are still visible.
     floor = refs.get("agnostic", float("nan"))
     if not np.isnan(floor):
-        finite_means = [m for m in [c["final_return"]["mean"] for c in cells.values()] if not np.isnan(m)]
+        finite_means = [c["final_return"]["mean"] for c in cells.values() if not np.isnan(c["final_return"]["mean"])]
+        ci_los = [c["final_return"]["ci"][0] for c in cells.values() if not np.isnan(c["final_return"]["mean"])]
+        ymin = min([floor, *ci_los]) - 5
         ymax = max([refs.get("oracle", 200), *finite_means, floor]) + 5
-        ax.set_ylim(floor - 5, ymax)
+        ax.set_ylim(ymin, ymax)
     # Combine method×integration proxy patches with reference-line handles.
     ref_handles, ref_labels = ax.get_legend_handles_labels()
     ax.legend(

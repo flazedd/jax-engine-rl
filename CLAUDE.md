@@ -21,6 +21,7 @@ This file is the navigation hub. Full specifications live in `docs/`. **Load onl
 | Environment design (R1–R4), env-iteration process, action space justification | `docs/environment.md` |
 | Writing agent code, implementing hypernet / exploration bonus, JSON result schemas, plotting modules, known pitfalls | `docs/implementation.md` |
 | Setting up uv, YAML configs with `extends:`, git workflow, tests, run modes, JAX performance rules, script output format, hyperparameter discipline | `docs/conventions.md` |
+| Writing or editing any milestone figure — naming, legends, y-axis, bar labels, compute-budget footer, reference lines | `docs/plotting.md` |
 
 Never read more than 2–3 docs in a single session unless the task genuinely spans all of them.
 

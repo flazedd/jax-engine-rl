@@ -16,26 +16,38 @@ from typing import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 
-from envs.market_making_v1 import (
-    ACTION_FAVOR_ASK,
-    ACTION_FAVOR_BID,
-    ACTION_SYM,
-    MarketMakingV1,
-)
+from envs.market_making_v1 import MarketMakingV1
 from oracles.value_iteration import VIResult
-from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
+from plotting.style import (
+    COLORS,
+    FIGSIZE_STANDARD,
+    FIGSIZE_WIDE,
+    LEGEND_OUTSIDE_RIGHT,
+    apply_style,
+    budget_annotation,
+)
 
 
 _REGIME_NAMES = ("noise", "bull", "bear")
 _ACTION_NAMES = ("sym", "favor_ask", "favor_bid")
-_ACTION_COLORS = ("#cccccc", "#d62728", "#2ca02c")
+_ACTION_LABELS = ("Symmetric", "Favor ask", "Favor bid")
 
 
 def _regime_label(r: int) -> str:
     if r < len(_REGIME_NAMES):
         return _REGIME_NAMES[r]
     return f"regime_{r}"
+
+
+def _budget_from_metrics(metrics: dict) -> dict:
+    return {
+        "iterations": int(metrics.get("iterations", 0)) or None,
+        "parallel_envs": int(metrics.get("parallel_envs", 0)) or None,
+        "rollout_length": int(metrics.get("rollout_length", 0)) or None,
+        "num_seeds": int(metrics.get("num_seeds", 0)) or None,
+    }
 
 
 def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) -> None:
@@ -46,20 +58,28 @@ def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) ->
     inv_levels = np.arange(-env.inventory_max, env.inventory_max + 1)
 
     fig, ax = plt.subplots(figsize=FIGSIZE_WIDE)
-    # policy is [n_inv, n_reg] → heatmap rows = regimes, cols = inventory.
-    grid = policy.T
+    grid = policy.T  # rows = regimes, cols = inventory.
     cmap = plt.get_cmap("Set1", 3)
-    im = ax.imshow(grid, aspect="auto", cmap=cmap, vmin=0, vmax=2)
+    ax.imshow(grid, aspect="auto", cmap=cmap, vmin=0, vmax=2)
     ax.set_yticks(range(n_reg))
     ax.set_yticklabels([_regime_label(r) for r in range(n_reg)])
     ax.set_xticks(range(n_inv))
     ax.set_xticklabels(inv_levels)
-    ax.set_xlabel("inventory q")
-    ax.set_ylabel("regime")
-    cbar = plt.colorbar(im, ax=ax, ticks=[0, 1, 2])
-    cbar.ax.set_yticklabels(list(_ACTION_NAMES))
-    ax.set_title("M2 R1 — VI-optimal action per (regime, inventory)")
-
+    ax.set_xlabel("Inventory q")
+    ax.set_ylabel("Regime")
+    ax.set_title(
+        "MarketMakingV1 — analytical (VI) optimal action per (regime, inventory)"
+    )
+    # Replace the colorbar with a proper legend so the chart self-documents
+    # the action encoding (per the every-element-in-legend convention).
+    legend_handles = [
+        Patch(facecolor=cmap(i), edgecolor="black", linewidth=0.4,
+              label=_ACTION_LABELS[i])
+        for i in range(3)
+    ]
+    ax.legend(handles=legend_handles, **LEGEND_OUTSIDE_RIGHT)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.78)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
@@ -89,6 +109,7 @@ def plot_value_loss_distribution(
         weights=weights,
         color=COLORS.get("ppo", "#1f77b4"),
         edgecolor="black",
+        label="(r_true, r_other, q) buckets",
     )
     mean = float(data.mean()) if data.size else 0.0
     ax.axvline(
@@ -96,12 +117,14 @@ def plot_value_loss_distribution(
         color="black",
         linestyle="--",
         linewidth=1.0,
-        label=f"mean = {mean:.3f}",
+        label=f"Mean = {mean:.3f}",
     )
-    ax.set_xlabel("relative value loss (V^π_true − V^π_other) / V^π_true")
+    ax.set_xlabel("Relative value loss (V^π_true − V^π_other) / V^π_true")
     ax.set_ylabel("% of (r_true, r_other, inventory) buckets")
-    ax.set_title("M2 R1 — policy-commitment loss distribution")
-    ax.legend()
+    ax.set_title("MarketMakingV1 — wrong-regime policy-commitment loss distribution")
+    ax.legend(**LEGEND_OUTSIDE_RIGHT)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.65, bottom=0.15)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
@@ -116,7 +139,7 @@ def plot_per_regime_ppo(
     apply_style()
     metrics = list(per_regime_metrics)
     n_reg = len(metrics)
-    fig, axes = plt.subplots(1, n_reg, figsize=(4.5 * n_reg, 3.2), sharey=True)
+    fig, axes = plt.subplots(1, n_reg, figsize=(4.5 * n_reg, 3.4), sharey=True)
     if n_reg == 1:
         axes = [axes]
     for r, (ax, m) in enumerate(zip(axes, metrics)):
@@ -124,25 +147,38 @@ def plot_per_regime_ppo(
         per_seed = np.asarray(m["per_seed_mean_return_per_iter"])  # [seeds, T]
         iters = np.arange(curve.size)
         color = COLORS.get("per_regime_ppo", "#17becf")
-        ax.plot(iters, curve, color=color, label="PPO mean")
+        ax.plot(iters, curve, color=color, label="PPO (mean over seeds)")
         if per_seed.shape[0] > 1:
             lo = np.percentile(per_seed, 2.5, axis=0)
             hi = np.percentile(per_seed, 97.5, axis=0)
-            ax.fill_between(iters, lo, hi, color=color, alpha=0.2)
+            ax.fill_between(iters, lo, hi, color=color, alpha=0.2,
+                            label="PPO seed 95% range")
         ax.axhline(
             vi_per_regime_returns[r],
             color="black",
             linestyle="--",
             linewidth=1.0,
-            label=f"VI = {vi_per_regime_returns[r]:.1f}",
+            label=f"VI optimum = {vi_per_regime_returns[r]:.1f}",
         )
-        ax.set_title(f"regime {r} ({_regime_label(r)})")
-        ax.set_xlabel("iteration")
+        ax.set_title(f"Regime {r} ({_regime_label(r)})")
+        ax.set_xlabel("Iteration")
         if r == 0:
-            ax.set_ylabel("episode return")
-        ax.legend(loc="lower right", fontsize=8)
-    fig.suptitle("M2 R2 — per-regime PPO vs VI-optimal")
+            ax.set_ylabel("Episode return")
+        # Per-panel legend below the panel — keeps each panel's VI line
+        # value tied to its own regime. Push it well below the xlabel.
+        ax.legend(
+            loc="upper center", bbox_to_anchor=(0.5, -0.30), fontsize=7,
+            ncol=1,
+            frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+        )
+    fig.suptitle(
+        "MarketMakingV1 — per-regime PPO learning curves vs VI optimum"
+    )
+    # Pull budget from the first regime's metrics (all share the same).
+    if metrics:
+        budget_annotation(fig, **_budget_from_metrics(metrics[0]))
     fig.tight_layout()
+    fig.subplots_adjust(bottom=0.42)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
@@ -157,7 +193,8 @@ def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
     # by construction — a recording artifact, not a real re-entropification.
     curve = ent_curve[:-1] if ent_curve.size > 1 else ent_curve
     t = np.arange(curve.size)
-    ax.plot(t, curve, color=COLORS.get("belief_ppo", "#9467bd"))
+    ax.plot(t, curve, color=COLORS.get("belief_ppo", "#9467bd"),
+            label="Mean posterior entropy")
     ax.axhline(
         np.log(3),
         color="gray",
@@ -165,17 +202,24 @@ def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
         linewidth=1.0,
         label="log(3) = 1.099 (flat prior)",
     )
-    ax.set_xlabel("timestep within episode")
-    ax.set_ylabel("mean posterior entropy (nats)")
-    ax.set_title("M2 R4 — posterior entropy over time (random-policy rollouts)")
-    ax.legend()
+    ax.set_xlabel("Timestep within episode")
+    ax.set_ylabel("Mean posterior entropy (nats)")
+    ax.set_title(
+        "MarketMakingV1 — analytical posterior entropy over time "
+        "(random-policy rollouts)"
+    )
+    ax.legend(**LEGEND_OUTSIDE_RIGHT)
+    budget_annotation(fig, extra="random-policy rollouts (analytical posterior)")
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.65, bottom=0.18)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
 
 
 def plot_belief_ppo_gap(
-    bars: dict[str, tuple[float, list[float]]], output_path: Path
+    bars: dict[str, tuple[float, list[float]]], output_path: Path,
+    budget: dict | None = None,
 ) -> None:
     """Bar chart: regime-agnostic, Belief-PPO, Oracle-PPO, with CIs."""
     apply_style()
@@ -198,11 +242,30 @@ def plot_belief_ppo_gap(
     display_labels = [label_map.get(n, n) for n in names]
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
     xs = np.arange(len(names))
-    ax.bar(xs, means, yerr=[errs_lo, errs_hi], capsize=5, color=colors, edgecolor="black")
+    ax.bar(
+        xs, means, yerr=[errs_lo, errs_hi], capsize=5,
+        color=colors, edgecolor="black",
+    )
+    # Value labels below the lower CI cap (inside the bar, never overlap).
+    for x, mean, ci in zip(xs, means, cis):
+        ax.annotate(f"{mean:.1f}", xy=(x, ci[0]),
+                    xytext=(0, -3), textcoords="offset points",
+                    ha="center", va="top", fontsize=9, color="black")
     ax.set_xticks(xs)
-    ax.set_xticklabels(display_labels, rotation=0)
-    ax.set_ylabel("episode return")
-    ax.set_title("M2 R4 — Regime-agnostic PPO vs Belief-PPO vs Oracle-PPO")
+    ax.set_xticklabels(display_labels, rotation=15, ha="right")
+    ax.set_ylabel("Episode return")
+    ax.set_title(
+        "MarketMakingV1 — Regime-agnostic PPO vs Belief-PPO vs Oracle-PPO"
+    )
+    legend_handles = [
+        Patch(facecolor=c, edgecolor="black", linewidth=0.4, label=lbl)
+        for c, lbl in zip(colors, display_labels)
+    ]
+    ax.legend(handles=legend_handles, **LEGEND_OUTSIDE_RIGHT)
+    if budget:
+        budget_annotation(fig, **budget)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.65, bottom=0.18)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)

@@ -103,7 +103,20 @@ def main() -> int:
         table.append(envrow)
 
     fig_path = FIGURES_ROOT / "milestones" / "M4" / "m4_method_ranking.png"
-    plot_m4_method_ranking(table, fig_path)
+    # Read the compute budget from one of the underlying training runs so
+    # the chart footer matches reality (all M4 cells share the same budget).
+    sample_meta_path = RESULTS_ROOT / CONFIGS[0][2] / "metrics.json"
+    bar_budget: dict[str, Any] | None = None
+    if sample_meta_path.exists():
+        with open(sample_meta_path) as f:
+            mm = json.load(f)
+        bar_budget = {
+            "iterations": int(mm.get("iterations", 0)) or None,
+            "parallel_envs": int(mm.get("parallel_envs", 0)) or None,
+            "rollout_length": int(mm.get("rollout_length", 0)) or None,
+            "num_seeds": int(mm.get("num_seeds", 0)) or None,
+        }
+    plot_m4_method_ranking(table, fig_path, budget=bar_budget)
 
     run.ok(
         key_stats={

@@ -118,6 +118,15 @@ def regenerate_m2(run: ScriptRun) -> dict:
     run.add_output(str(p_ent))
 
     p_belief = fig_dir / "fig_M2_R4_belief_ppo_gap.png"
+    # Pull compute budget from one of the underlying training runs so the
+    # bar-chart footer matches reality (all three methods share budget here).
+    sample_metrics = per_regime_metrics[0] if per_regime_metrics else {}
+    bar_budget = {
+        "iterations": int(sample_metrics.get("iterations", 0)) or None,
+        "parallel_envs": int(sample_metrics.get("parallel_envs", 0)) or None,
+        "rollout_length": int(sample_metrics.get("rollout_length", 0)) or None,
+        "num_seeds": int(sample_metrics.get("num_seeds", 0)) or None,
+    }
     plot_belief_ppo_gap(
         {
             "regime_agnostic": (
@@ -128,6 +137,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
             "oracle": (r3["oracle_ppo_return_mean"], r3["oracle_ppo_return_ci"]),
         },
         p_belief,
+        budget=bar_budget,
     )
     run.add_output(str(p_belief))
 
@@ -161,7 +171,15 @@ def regenerate_m3(run: ScriptRun) -> dict:
             per_method_curves[method] = json.load(f)
 
     p_ceilings = fig_dir / "fig_rq1_ceilings_bar.png"
-    plot_rq1_ceilings_bar(reference_levels, gap_components, p_ceilings)
+    sample_metrics = next(iter(per_method_curves.values())) if per_method_curves else {}
+    bar_budget = {
+        "iterations": int(sample_metrics.get("iterations", 0)) or None,
+        "parallel_envs": int(sample_metrics.get("parallel_envs", 0)) or None,
+        "rollout_length": int(sample_metrics.get("rollout_length", 0)) or None,
+        "num_seeds": int(sample_metrics.get("num_seeds", 0)) or None,
+    }
+    plot_rq1_ceilings_bar(reference_levels, gap_components, p_ceilings,
+                          budget=bar_budget)
     run.add_output(str(p_ceilings))
 
     p_curves = fig_dir / "fig_rq1_learning_curves.png"

@@ -85,7 +85,7 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 - [x] M2 — regime-switching env, R1–R4 verified on E6e_symmetric_kappa05 (current E_final; E2/E3 also passed)
 - [x] M3 — reference levels on E6e (agnostic=136.2, belief=168.5, oracle=180.1; gap=43.9, compromise=32.3 / inference=11.6)
 - [x] M4 — implementation validation (RL² & VariBAD clear PPO floor on bandit/gridworld/regime_bandit at full budget; see `results/milestones/M4/method_ranking.json`)
-- [ ] M5 — ladder + factorial on MM (answers RQ2). Stage A failed initial pass (2026-04-25); see `results/milestones/M5/RECOVERY_PLAN.md`. Step 1 diagnostic + Step 2 sweep done (2026-04-26). RL² recovered (h256, full-budget pending); VariBAD needs Step 2b (deeper intervention; see `STEP2_FINDINGS.md`).
+- [ ] M5 — ladder + factorial on MM (answers RQ2). Stage A failed initial pass (2026-04-25); see `results/milestones/M5/RECOVERY_PLAN.md`. Step 1 diagnostic + Step 2 sweep done. Step 3 (hypernet + exploration_bonus modules built; 24-config factorial validated on M4 toys, 2026-04-26): hypernet gives RL² +12-13 and VariBAD +15-28 on structured toys; bonus@coef=0.1 hurts RL² and is inert on VariBAD (needs coef tuning). VariBAD no longer "broken" (the (μ,σ) → policy bottleneck was the issue, not the encoder). Next: run hypernet variant on MM E_final ladder. See `STEP3_FACTORIAL_TOYS_FINDINGS.md`.
 - [ ] M6 — difficulty sweep + decoupling (answers RQ3)
 - [ ] M7 — supplementary ablations (optional)
 

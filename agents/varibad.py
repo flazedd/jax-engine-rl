@@ -35,6 +35,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from agents.modules.hypernet import Hypernet
 from training.ppo_update import compute_gae
 
 
@@ -83,8 +84,22 @@ class VariBADRewardDecoder(nn.Module):
 
 
 class VariBADPolicy(nn.Module):
+    """VariBAD policy + value head.
+
+    Two integration paths, selected by `integration`:
+    - "concat" (default): policy is MLP on [obs, μ, σ].
+    - "hypernet": belief = [μ, σ] generates the weights of a small target
+      MLP via Hypernet; target operates on raw obs to produce logits.
+      Value head stays MLP on [obs, μ, σ] regardless.
+    """
+
     n_actions: int
+    obs_size: int
+    latent_dim: int
     hidden_dim: int = 64
+    integration: str = "concat"
+    hypernet_target_hidden: int = 16
+    hypernet_hidden: int = 64
 
     @nn.compact
     def __call__(
@@ -96,7 +111,22 @@ class VariBADPolicy(nn.Module):
         x = nn.tanh(x)
         x = nn.Dense(self.hidden_dim, kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)))(x)
         x = nn.tanh(x)
-        logits = nn.Dense(self.n_actions, kernel_init=nn.initializers.orthogonal(0.01))(x)
+
+        if self.integration == "concat":
+            logits = nn.Dense(self.n_actions, kernel_init=nn.initializers.orthogonal(0.01))(x)
+        elif self.integration == "hypernet":
+            belief = jnp.concatenate([mu, sigma], axis=-1)
+            hn = Hypernet(
+                target_obs_dim=self.obs_size,
+                target_hidden=self.hypernet_target_hidden,
+                target_output_dim=self.n_actions,
+                hypernet_hidden=self.hypernet_hidden,
+            )
+            flat_weights = hn(belief)
+            logits = hn.apply_target(flat_weights, obs)
+        else:
+            raise ValueError(f"unknown integration: {self.integration!r}")
+
         value = nn.Dense(1, kernel_init=nn.initializers.orthogonal(1.0))(x).squeeze(-1)
         return logits, value
 
@@ -119,11 +149,22 @@ class VariBADAgent:
     epochs: int = 4
     minibatch_envs: int = 32
     reward_decoder: str = "bernoulli"  # {"bernoulli", "gaussian"}
+    # Ablation axis 1: integration mechanism. "concat" = MLP([obs,μ,σ])→logits;
+    # "hypernet" = belief=[μ,σ] generates target-MLP weights, target maps obs→logits.
+    integration: str = "concat"
+    hypernet_target_hidden: int = 16
+    hypernet_hidden: int = 64
+    # Ablation axis 2: exploration bonus. Bonus is L2 novelty on posterior μ.
+    exploration_bonus: bool = False
+    exploration_bonus_coef: float = 0.1
+    exploration_bonus_window: int = 16
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
     is_recurrent: bool = True
     produces_belief_for_eval: bool = False
+    # Trajectory key carrying this method's belief vector (for exploration bonus).
+    belief_key: str = "mu"
 
     # ---- factories ------------------------------------------------------
 
@@ -134,7 +175,15 @@ class VariBADAgent:
         return VariBADRewardDecoder(hidden_dim=self.hidden_dim, n_actions=self.n_actions)
 
     def _policy(self) -> VariBADPolicy:
-        return VariBADPolicy(n_actions=self.n_actions, hidden_dim=self.hidden_dim)
+        return VariBADPolicy(
+            n_actions=self.n_actions,
+            obs_size=self.obs_size,
+            latent_dim=self.latent_dim,
+            hidden_dim=self.hidden_dim,
+            integration=self.integration,
+            hypernet_target_hidden=self.hypernet_target_hidden,
+            hypernet_hidden=self.hypernet_hidden,
+        )
 
     def _optimizer(self) -> optax.GradientTransformation:
         return optax.chain(

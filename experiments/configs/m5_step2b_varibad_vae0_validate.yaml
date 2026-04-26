@@ -1,0 +1,21 @@
+# M5 Step-2b VAE-interference test: VariBAD with vae_coef=0 at n=3 × 100 iter.
+# Decides between two hypotheses:
+#  - VAE auxiliary actively interferes with policy learning (slope ≥0.2 at
+#    iter 75-100 → drop or tune vae_coef)
+#  - VAE is inert; encoder cannot extract regime regardless (slope ~0.07 →
+#    capacity sweep or accept as a limitation finding)
+# Compared head-to-head with vae_coef=1.0 baseline at iter 75-100 (slope
+# from m5_step2_varibad_kl10 ≈ +0.06).
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step2b_varibad_vae0_validate
+iterations: 100
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 3
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    vae_coef: 0.0

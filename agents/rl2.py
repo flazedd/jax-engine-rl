@@ -19,12 +19,27 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from agents.modules.hypernet import Hypernet
 from training.ppo_update import compute_gae
 
 
 class GRUActorCritic(nn.Module):
+    """RL² actor-critic: GRU encoder + policy and value heads.
+
+    Two integration paths for the policy head, selected by `integration`:
+    - "concat" (default): policy is Dense(hidden) → action_logits, operating
+      on the GRU hidden state directly.
+    - "hypernet": GRU hidden generates the weights of a small target MLP
+      via Hypernet; target operates on the (augmented) obs to produce
+      logits. Value head stays Dense(hidden) regardless.
+    """
+
     n_actions: int
+    obs_size: int
     hidden_dim: int = 64
+    integration: str = "concat"
+    hypernet_target_hidden: int = 16
+    hypernet_hidden: int = 64
 
     @nn.compact
     def __call__(
@@ -36,10 +51,24 @@ class GRUActorCritic(nn.Module):
         )(obs)
         x = nn.tanh(x)
         new_carry, _ = nn.GRUCell(features=self.hidden_dim)(carry, x)
-        logits = nn.Dense(
-            self.n_actions,
-            kernel_init=nn.initializers.orthogonal(0.01),
-        )(new_carry)
+
+        if self.integration == "concat":
+            logits = nn.Dense(
+                self.n_actions,
+                kernel_init=nn.initializers.orthogonal(0.01),
+            )(new_carry)
+        elif self.integration == "hypernet":
+            hn = Hypernet(
+                target_obs_dim=self.obs_size,
+                target_hidden=self.hypernet_target_hidden,
+                target_output_dim=self.n_actions,
+                hypernet_hidden=self.hypernet_hidden,
+            )
+            flat_weights = hn(new_carry)
+            logits = hn.apply_target(flat_weights, obs)
+        else:
+            raise ValueError(f"unknown integration: {self.integration!r}")
+
         value = nn.Dense(
             1, kernel_init=nn.initializers.orthogonal(1.0)
         )(new_carry).squeeze(-1)
@@ -60,16 +89,34 @@ class RL2Agent:
     lam: float = 0.95
     epochs: int = 4
     minibatch_envs: int = 32
+    # Ablation axis 1: integration mechanism. "concat" = Dense(hidden)→logits;
+    # "hypernet" = GRU hidden generates target-MLP weights, target maps obs→logits.
+    integration: str = "concat"
+    hypernet_target_hidden: int = 16
+    hypernet_hidden: int = 64
+    # Ablation axis 2: exploration bonus. Bonus is L2 novelty on GRU hidden.
+    exploration_bonus: bool = False
+    exploration_bonus_coef: float = 0.1
+    exploration_bonus_window: int = 16
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
     is_recurrent: bool = True
     produces_belief_for_eval: bool = False
+    # Trajectory key carrying this method's belief vector (for exploration bonus).
+    belief_key: str = "carry_in"
 
     # ---- model factory --------------------------------------------------
 
     def _model(self) -> GRUActorCritic:
-        return GRUActorCritic(n_actions=self.n_actions, hidden_dim=self.hidden_dim)
+        return GRUActorCritic(
+            n_actions=self.n_actions,
+            obs_size=self.obs_size,
+            hidden_dim=self.hidden_dim,
+            integration=self.integration,
+            hypernet_target_hidden=self.hypernet_target_hidden,
+            hypernet_hidden=self.hypernet_hidden,
+        )
 
     def _optimizer(self) -> optax.GradientTransformation:
         return optax.chain(

@@ -1,0 +1,17 @@
+# M5 Step-2b confirmation: RL² h256 e0.01 at full budget × 1 seed.
+# Single-seed full-budget probe to verify the slope-based extrapolation
+# (which predicts floor crossing at iter ~115) before committing to the
+# full n=8 ladder rerun (~10 hours).
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step2b_rl2_h256_full_n1
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    hidden_dim: 256
+    ent_coef: 0.01

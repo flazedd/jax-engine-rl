@@ -1,0 +1,18 @@
+# Smoke-test: VariBAD with hypernet + exploration bonus combined.
+extends:
+  - base/base_varibad.yaml
+experiment_name: m5_factorial_smoke_varibad_both
+env:
+  name: bandit
+  params:
+    n_arms: 5
+    episode_length: 30
+iterations: 5
+parallel_envs: 16
+rollout_length: 30
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    integration: hypernet
+    exploration_bonus: true

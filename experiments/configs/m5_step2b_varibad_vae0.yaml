@@ -1,0 +1,17 @@
+# M5 Step-2b ablation: VariBAD with vae_coef=0 — no VAE auxiliary at all.
+# Tests whether the encoder learns regime via policy gradient alone (RL²-like
+# behavior) or whether even without VAE interference the encoder cannot
+# extract regime from MM E_final's noisy continuous rewards.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step2b_varibad_vae0
+iterations: 50
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    vae_coef: 0.0

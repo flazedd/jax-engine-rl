@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import pickle
 import subprocess
 import time
 from pathlib import Path
@@ -288,6 +289,7 @@ def _train_one_seed(cfg: ExperimentConfig, seed: int, seed_idx: int, num_seeds: 
         "var_return_per_iter": var_returns,
         "per_iter_times": per_iter_times,
         "loss_components_per_iter": loss_components,
+        "agent_state": agent_state,
     }
     probs = _policy_action_probs(agent, agent_state)
     if probs is not None:
@@ -329,7 +331,16 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
     for s in range(cfg.num_seeds):
         seed = cfg.seed_base + s
         t_seed = time.perf_counter()
-        per_seed.append(_train_one_seed(cfg, seed, s, cfg.num_seeds))
+        seed_out = _train_one_seed(cfg, seed, s, cfg.num_seeds)
+        # Save trained agent_state to disk before discarding it from the
+        # per-seed dict (the rest of train() doesn't need the params, only
+        # learning curves; carrying the state forward bloats memory).
+        agent_state = seed_out.pop("agent_state")
+        ckpt_path = exp_dir / f"checkpoint_seed_{seed}.pkl"
+        with open(ckpt_path, "wb") as f:
+            pickle.dump(agent_state, f)
+        del agent_state  # free memory before next seed
+        per_seed.append(seed_out)
         seed_time = time.perf_counter() - t_seed
         done = s + 1
         total_so_far = time.perf_counter() - t_start_all

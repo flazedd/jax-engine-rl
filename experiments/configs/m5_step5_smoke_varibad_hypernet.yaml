@@ -1,0 +1,14 @@
+# Step-5 smoke-test: tiny VariBAD hypernet on E_final to produce 2 checkpoints.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5_step5_smoke_varibad_hypernet
+iterations: 5
+parallel_envs: 32
+rollout_length: 128
+num_seeds: 2
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    integration: hypernet

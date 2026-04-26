@@ -89,21 +89,19 @@ class RL2Agent:
     lam: float = 0.95
     epochs: int = 4
     minibatch_envs: int = 32
-    # Ablation axis 1: integration mechanism. "concat" = Dense(hidden)→logits;
+    # Integration mechanism: "concat" = Dense(hidden)→logits;
     # "hypernet" = GRU hidden generates target-MLP weights, target maps obs→logits.
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
-    # Ablation axis 2: exploration bonus. Bonus is L2 novelty on GRU hidden.
-    exploration_bonus: bool = False
-    exploration_bonus_coef: float = 0.1
-    exploration_bonus_window: int = 16
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
     is_recurrent: bool = True
     produces_belief_for_eval: bool = False
-    # Trajectory key carrying this method's belief vector (for exploration bonus).
+    # Trajectory key carrying this method's belief vector. Used by the
+    # posterior-quality probe (evaluation/posterior_probe.py) to identify
+    # the agent's internal belief representation.
     belief_key: str = "carry_in"
 
     # ---- model factory --------------------------------------------------

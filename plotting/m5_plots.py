@@ -122,12 +122,10 @@ _TOY_ENV_LABELS = {
     "gridworld": "Gridworld (random goal)",
     "regime_bandit": "Regime-switching bandit",
 }
-_VARIANT_ORDER = ("concat_nobonus", "concat_bonus", "hypernet_nobonus", "hypernet_bonus")
+_VARIANT_ORDER = ("concat_nobonus", "hypernet_nobonus")
 _VARIANT_LABELS = {
-    "concat_nobonus": "concat\n(no bonus)",
-    "concat_bonus": "concat\n+bonus",
-    "hypernet_nobonus": "hypernet\n(no bonus)",
-    "hypernet_bonus": "hypernet\n+bonus",
+    "concat_nobonus": "concat",
+    "hypernet_nobonus": "hypernet",
 }
 
 
@@ -139,10 +137,13 @@ def plot_factorial_toys(out_path: Path) -> bool:
     with open(stats_path) as f:
         stats = json.load(f)
 
-    # Re-index configs by (method, env, variant_label).
+    # Re-index configs by (method, env, variant_label). Tolerate older
+    # JSONs that carry an `exploration_bonus` field; bonus configs are
+    # ignored by the plot regardless (only `*_nobonus` variants are read).
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     for r in stats["configs"]:
-        variant = f"{r['integration']}_{'bonus' if r['exploration_bonus'] else 'nobonus'}"
+        bonus = r.get("exploration_bonus", False)
+        variant = f"{r['integration']}_{'bonus' if bonus else 'nobonus'}"
         by_key[(r["method"], r["env"], variant)] = r
 
     apply_style()
@@ -197,7 +198,7 @@ def plot_factorial_toys(out_path: Path) -> bool:
         ax.legend(loc="best", fontsize=8)
 
     fig.suptitle(
-        "M5 Step-3 factorial on toy envs — RL²/VariBAD × concat/hypernet × no-bonus/bonus",
+        "M5 Step-3 factorial on toy envs — RL²/VariBAD × concat/hypernet",
         y=1.02,
     )
     fig.tight_layout()

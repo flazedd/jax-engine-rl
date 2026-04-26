@@ -25,7 +25,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from agents.dummy import DummyAgent
-from agents.modules.exploration_bonus import compute_exploration_bonus_batch
 from agents.ppo import PPOAgent
 from agents.ppo_belief import PPOBeliefAgent
 from agents.ppo_oracle import PPOOracleAgent
@@ -151,16 +150,6 @@ def _make_iter_step(env, agent, parallel_envs: int, rollout_length: int) -> Call
     boundaries; their `update` consumes `init_carry` / `final_carry` for BPTT.
     """
     if getattr(agent, "is_recurrent", False):
-        # Exploration bonus is a static (compile-time) toggle: when enabled,
-        # the agent exposes belief_key / coef / window. The bonus is added
-        # to the rollout's task reward before update (and before GAE in
-        # update). `mean_return` is reported on the *task* reward only, so
-        # the bonus doesn't inflate the headline learning curve.
-        has_bonus = getattr(agent, "exploration_bonus", False)
-        bonus_key = getattr(agent, "belief_key", None)
-        bonus_coef = float(getattr(agent, "exploration_bonus_coef", 0.0))
-        bonus_window = int(getattr(agent, "exploration_bonus_window", 0))
-
         @jax.jit
         def step(agent_state, key):
             rollout_key, key = jax.random.split(key)
@@ -169,24 +158,15 @@ def _make_iter_step(env, agent, parallel_envs: int, rollout_length: int) -> Call
                 env, agent, agent_state, initial_carry, rollout_key,
                 parallel_envs=parallel_envs, rollout_length=rollout_length,
             )
-            task_reward = traj["reward"]
-            if has_bonus:
-                belief_traj = traj[bonus_key]  # [T, N, D]
-                bonus = compute_exploration_bonus_batch(
-                    belief_traj, coef=bonus_coef, window_K=bonus_window,
-                )  # [T, N]
-                traj = {**traj, "reward": task_reward + bonus}
             new_state, update_metrics = agent.update(
                 agent_state, traj, final_obs, init_carry, final_carry
             )
-            per_env_return = task_reward.sum(axis=0)
+            per_env_return = traj["reward"].sum(axis=0)
             metrics = {
                 **update_metrics,
                 "mean_return": per_env_return.mean(),
                 "var_return": per_env_return.var(),
             }
-            if has_bonus:
-                metrics["exploration_bonus/mean_bonus"] = bonus.mean()
             return new_state, key, metrics
         return step
 

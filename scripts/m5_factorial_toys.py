@@ -1,14 +1,14 @@
-"""M5 factorial toys: 8 variants × 3 toy envs = 24 runs.
+"""M5 factorial toys: 4 variants × 3 toy envs = 12 runs.
 
-Tests the full 2×2×2 ablation factorial — (rl2, varibad) × (concat, hypernet)
-× (no_bonus, bonus) — on the M4 toy environments (bandit, gridworld,
-regime_bandit). Templates from `experiments/configs/m4_<method>_<env>.yaml`
-provide budgets and env settings; orchestrator applies the variant overrides
-to `agent.params` and renames `experiment_name`.
+Tests the integration ablation — (rl2, varibad) × (concat, hypernet) — on
+the M4 toy environments (bandit, gridworld, regime_bandit). Templates from
+`experiments/configs/m4_<method>_<env>.yaml` provide budgets and env
+settings; orchestrator applies the integration override to `agent.params`
+and renames `experiment_name`.
 
 Pass criterion: variants should perform at parity-or-better with the M4
-baseline (concat, no_bonus). A regression vs M4 baseline indicates a wiring
-bug; gains indicate the addon is genuinely helpful on toys.
+baseline (concat). A regression indicates a wiring bug; gains indicate
+the integration addon is genuinely helpful on toys.
 
 Usage:
   uv run python -m scripts.m5_factorial_toys
@@ -35,11 +35,9 @@ CONFIG_ROOT = REPO_ROOT / "experiments" / "configs"
 METHODS = ["rl2", "varibad"]
 ENVS = ["bandit", "gridworld", "regime_bandit"]
 VARIANTS = [
-    # (integration, exploration_bonus, label)
-    ("concat",   False, "concat_nobonus"),
-    ("concat",   True,  "concat_bonus"),
-    ("hypernet", False, "hypernet_nobonus"),
-    ("hypernet", True,  "hypernet_bonus"),
+    # (integration, label)
+    ("concat",   "concat_nobonus"),
+    ("hypernet", "hypernet_nobonus"),
 ]
 
 
@@ -53,16 +51,14 @@ def _bootstrap_ci(values: list[float], n_boot: int = 10_000) -> tuple[float, flo
     return float(np.percentile(boot_means, 2.5)), float(np.percentile(boot_means, 97.5))
 
 
-def _build_factorial_config(method: str, env: str, integration: str, bonus: bool):
-    """Load m4_<method>_<env>.yaml as template, override variant fields."""
+def _build_factorial_config(method: str, env: str, integration: str):
+    """Load m4_<method>_<env>.yaml as template, override integration."""
     template_path = CONFIG_ROOT / f"m4_{method}_{env}.yaml"
     cfg = load_config(template_path)
     apply_run_mode(cfg, "full")
-    label = f"{integration}_{'bonus' if bonus else 'nobonus'}"
-    cfg.experiment_name = f"m5_factorial_{method}_{env}_{label}"
+    cfg.experiment_name = f"m5_factorial_{method}_{env}_{integration}_nobonus"
     cfg.agent.params = copy.deepcopy(cfg.agent.params)
     cfg.agent.params["integration"] = integration
-    cfg.agent.params["exploration_bonus"] = bonus
     return cfg
 
 
@@ -87,11 +83,11 @@ def main() -> int:
     stats_path = out_dir / "stats_M5_factorial_toys.json"
     summary_path = out_dir / "stats_M5_factorial_toys_run.json"
 
-    runs: list[tuple[str, str, str, bool, str]] = [
-        (method, env, integ, bonus, f"m5_factorial_{method}_{env}_{integ}_{'bonus' if bonus else 'nobonus'}")
+    runs: list[tuple[str, str, str, str]] = [
+        (method, env, integ, f"m5_factorial_{method}_{env}_{integ}_nobonus")
         for method in METHODS
         for env in ENVS
-        for integ, bonus, _ in VARIANTS
+        for integ, _ in VARIANTS
     ]
     n = len(runs)
     print(f"[m5_factorial_toys] start: {n} runs at full M4 budget", flush=True)
@@ -100,14 +96,13 @@ def main() -> int:
     config_results: list[dict[str, Any]] = []
     failed: list[str] = []
 
-    for i, (method, env, integration, bonus, label) in enumerate(runs, start=1):
+    for i, (method, env, integration, label) in enumerate(runs, start=1):
         print(
-            f"[m5_factorial_toys] ({i}/{n}) {method} on {env}: integration={integration} "
-            f"exploration_bonus={bonus}",
+            f"[m5_factorial_toys] ({i}/{n}) {method} on {env}: integration={integration}",
             flush=True,
         )
         try:
-            cfg = _build_factorial_config(method, env, integration, bonus)
+            cfg = _build_factorial_config(method, env, integration)
         except Exception as e:
             print(f"[m5_factorial_toys] ({i}/{n}) {label} CONFIG FAILED: {e}", flush=True)
             failed.append(label)
@@ -134,7 +129,6 @@ def main() -> int:
             "method": method,
             "env": env,
             "integration": integration,
-            "exploration_bonus": bonus,
             "experiment_name": cfg.experiment_name,
             "final_return_mean": mean,
             "final_return_ci95": [ci_lo, ci_hi],
@@ -188,8 +182,8 @@ def main() -> int:
         "methods": METHODS,
         "envs": ENVS,
         "variants": [
-            {"integration": iv, "exploration_bonus": bv, "label": lv}
-            for iv, bv, lv in VARIANTS
+            {"integration": iv, "label": lv}
+            for iv, lv in VARIANTS
         ],
         "configs": config_results,
         "summary_per_method_env": summary_blocks,

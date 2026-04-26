@@ -1,0 +1,27 @@
+# M6 — distinguishability sweep, hard level.
+#
+# Same transition matrix as E_final (diag 0.98). Regime-conditional fill
+# probabilities are compressed so regimes look similar from observation:
+# any single fill carries weak information about the current regime.
+# Action-class invariant preserved: R0 still favors wide, R1/R2 still
+# favor tight (sym).
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.40, 0.65, 0.50]
+    regime_p_wide_bid:  [0.50, 0.10, 0.05]
+    regime_p_tight_ask: [0.40, 0.65, 0.50]
+    regime_p_wide_ask:  [0.50, 0.10, 0.05]
+    initial_distribution: [0.333, 0.333, 0.334]

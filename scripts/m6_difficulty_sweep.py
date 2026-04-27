@@ -1,8 +1,10 @@
 """M6 — difficulty sweep orchestrator (skeleton).
 
-Sequentially trains the reduced 5-method ladder at each (axis, level) cell
-on MarketMakingV1, where axis ∈ {persistence, distinguishability} and
-level ∈ {easy, medium, hard}. Reuses M5 Step-4 / M3 reference results when
+Sequentially trains the 7-method ladder at each (axis, level) cell on
+MarketMakingV1, where axis ∈ {persistence, distinguishability} and
+level ∈ {easy, medium, hard}. Methods: 3 references (regime-agnostic,
+belief, oracle PPO) + 4 meta-RL cells (RL² and VariBAD, each at concat
+and hypernet integration). Reuses M5 Step-4 / M3 reference results when
 the env config matches (medium-medium = E_final).
 
 For each (axis, level, method) cell, writes a per-experiment metrics.json
@@ -45,12 +47,19 @@ CONFIG_ROOT = REPO_ROOT / "experiments" / "configs"
 
 # (method_label, base_yaml_filename). Base YAMLs already exist from M3 / M5
 # Step-4 — we mutate the env.params in-place per difficulty level.
+#
+# Both integration variants (concat and hypernet) are swept so RQ3 can
+# test whether the M5 decoupling finding (concat decodes the regime
+# equally well but performs ~45 points worse) holds across difficulty.
+# This is 7 cells × 6 (axis-level) = 42 cells total at full budget.
 METHODS: list[tuple[str, str]] = [
     ("regime_agnostic_ppo", "m3_regime_agnostic.yaml"),
     ("belief_ppo",          "m3_belief.yaml"),
     ("oracle_ppo",          "m3_oracle.yaml"),
     ("rl2_concat",          "m5_step4_rl2_concat.yaml"),
+    ("rl2_hypernet",        "m5_step4_rl2_hypernet.yaml"),
     ("varibad_concat",      "m5_step4_varibad_concat.yaml"),
+    ("varibad_hypernet",    "m5_step4_varibad_hypernet.yaml"),
 ]
 
 LEVELS = ("easy", "medium", "hard")

@@ -540,6 +540,15 @@ def plot_step4_ladder(out_path: Path) -> bool:
         for bar, m in zip(bars, methods):
             bar.set_facecolor(COLORS[m])
             bar.set_alpha(alpha)
+        # Value labels inside each bar, just below the lower CI cap so they
+        # don't overlap the vertical CI line. Skip NaN bars.
+        for xi, mean, e in zip(x, means, errs):
+            if np.isnan(mean):
+                continue
+            lo_abs = mean - e[0]
+            ax.annotate(f"{mean:.1f}", xy=(xi, lo_abs),
+                        xytext=(0, -3), textcoords="offset points",
+                        ha="center", va="top", fontsize=8, color="black")
     # Build legend manually with proxy artists so every coloured bar
     # combination is documented (method × integration), not just one axis.
     from matplotlib.patches import Patch

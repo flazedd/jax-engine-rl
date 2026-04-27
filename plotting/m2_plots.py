@@ -66,9 +66,9 @@ def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) ->
     ax.set_xticks(range(n_inv))
     ax.set_xticklabels(inv_levels)
     ax.set_xlabel("Inventory q")
-    ax.set_ylabel("Regime")
     ax.set_title(
-        "MarketMakingV1 — analytical (VI) optimal action per (regime, inventory)"
+        "MarketMakingV1 — analytical (VI) optimal action per (regime, inventory)\n"
+        "Rows = regime"
     )
     # Replace the colorbar with a proper legend so the chart self-documents
     # the action encoding (per the every-element-in-legend convention).
@@ -120,8 +120,10 @@ def plot_value_loss_distribution(
         label=f"Mean = {mean:.3f}",
     )
     ax.set_xlabel("Relative value loss (V^π_true − V^π_other) / V^π_true")
-    ax.set_ylabel("% of (r_true, r_other, inventory) buckets")
-    ax.set_title("MarketMakingV1 — wrong-regime policy-commitment loss distribution")
+    ax.set_title(
+        "MarketMakingV1 — wrong-regime policy-commitment loss distribution\n"
+        "% of (r_true, r_other, inventory) buckets"
+    )
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
     fig.tight_layout()
     fig.subplots_adjust(right=0.65, bottom=0.15)
@@ -162,8 +164,6 @@ def plot_per_regime_ppo(
         )
         ax.set_title(f"Regime {r} ({_regime_label(r)})")
         ax.set_xlabel("Iteration")
-        if r == 0:
-            ax.set_ylabel("Episode return")
         # Per-panel legend below the panel — keeps each panel's VI line
         # value tied to its own regime. Push it well below the xlabel.
         ax.legend(
@@ -172,7 +172,8 @@ def plot_per_regime_ppo(
             frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
         )
     fig.suptitle(
-        "MarketMakingV1 — per-regime PPO learning curves vs VI optimum"
+        "MarketMakingV1 — per-regime PPO learning curves vs VI optimum\n"
+        "Episode return"
     )
     # Pull budget from the first regime's metrics (all share the same).
     if metrics:
@@ -203,10 +204,9 @@ def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
         label="log(3) = 1.099 (flat prior)",
     )
     ax.set_xlabel("Timestep within episode")
-    ax.set_ylabel("Mean posterior entropy (nats)")
     ax.set_title(
         "MarketMakingV1 — analytical posterior entropy over time "
-        "(random-policy rollouts)"
+        "(random-policy rollouts)\nMean posterior entropy (nats)"
     )
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
     budget_annotation(fig, extra="random-policy rollouts (analytical posterior)")
@@ -253,9 +253,9 @@ def plot_belief_ppo_gap(
                     ha="center", va="top", fontsize=9, color="black")
     ax.set_xticks(xs)
     ax.set_xticklabels(display_labels, rotation=15, ha="right")
-    ax.set_ylabel("Episode return")
     ax.set_title(
-        "MarketMakingV1 — Regime-agnostic PPO vs Belief-PPO vs Oracle-PPO"
+        "MarketMakingV1 — Regime-agnostic PPO vs Belief-PPO vs Oracle-PPO\n"
+        "Episode return"
     )
     legend_handles = [
         Patch(facecolor=c, edgecolor="black", linewidth=0.4, label=lbl)

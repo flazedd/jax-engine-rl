@@ -66,8 +66,10 @@ def plot_learning_curve_with_ceiling(experiment_dir: Path, output_path: Path) ->
         label=f"AS analytical ceiling = {ceiling:.1f}",
     )
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Episode return")
-    ax.set_title("Avellaneda–Stoikov baseline — PPO vs analytical ceiling")
+    ax.set_title(
+        "Avellaneda–Stoikov baseline — PPO vs analytical ceiling\n"
+        "Episode return"
+    )
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
 
     budget_annotation(fig, **_budget_from_metrics(metrics))
@@ -102,8 +104,10 @@ def plot_policy_vs_as(experiment_dir: Path, output_path: Path) -> dict:
             label="PPO skew (mean over seeds)")
     ax.axhline(0.0, color="gray", linewidth=0.5, label="Zero-skew reference")
     ax.set_xlabel("Inventory q")
-    ax.set_ylabel("P(favor_ask) − P(favor_bid)")
-    ax.set_title("Avellaneda–Stoikov baseline — PPO policy vs analytical optimum")
+    ax.set_title(
+        "Avellaneda–Stoikov baseline — PPO policy vs analytical optimum\n"
+        "P(favor_ask) − P(favor_bid)"
+    )
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
 
     budget_annotation(fig, **_budget_from_metrics(metrics))

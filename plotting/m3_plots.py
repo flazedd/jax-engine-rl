@@ -95,9 +95,9 @@ def plot_rq1_ceilings_bar(
                     ha="center", va="top", fontsize=9, color="black")
     ax.set_xticks(xs)
     ax.set_xticklabels(display_labels)
-    ax.set_ylabel("Episode return (mean over seeds)")
     ax.set_title(
-        "MarketMakingV1 — reference levels and gap decomposition"
+        "MarketMakingV1 — reference levels and gap decomposition\n"
+        "Episode return (mean over seeds)"
     )
 
     # Brackets labeling the two gap components between consecutive bars.
@@ -175,8 +175,10 @@ def plot_rq1_learning_curves(
             hi = np.percentile(per_seed, 97.5, axis=0)
             ax.fill_between(iters, lo, hi, color=color, alpha=0.15)
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Episode return (mean over seeds, shaded = 95% CI)")
-    ax.set_title("MarketMakingV1 — reference-level learning curves")
+    ax.set_title(
+        "MarketMakingV1 — reference-level learning curves\n"
+        "Episode return (mean over seeds, shaded = 95% CI)"
+    )
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
     if sample_metrics is not None:
         budget_annotation(fig, **_budget_from_metrics(sample_metrics))
@@ -214,8 +216,10 @@ def plot_rq1_gap_fractions(
         bottom += frac
     ax.set_xlim(-0.6, 0.6)
     ax.set_xticks([])
-    ax.set_ylabel("Fraction of total optimality gap")
-    ax.set_title("MarketMakingV1 — gap-component fractions")
+    ax.set_title(
+        "MarketMakingV1 — gap-component fractions\n"
+        "Fraction of total optimality gap"
+    )
     ax.legend(handles=legend_handles, **LEGEND_OUTSIDE_RIGHT)
     fig.tight_layout()
     fig.subplots_adjust(right=0.55)

@@ -25,9 +25,24 @@ The **canonical implementation** lives in `plotting/style.py` (helpers) and
   source unambiguous, e.g. `MarketMakingV1 — reference levels and gap
   decomposition`, `Toy environments — meta-RL methods clear the PPO
   floor`.
-- **Axis labels are capitalized full words**: `Iteration`,
-  `Episode return`, `Final return`, `Inventory q`, `Timestep within
-  episode`, `Regime classification accuracy`. Not lowercase, not
+- **No rotated y-axis labels.** Don't set `ax.set_ylabel(...)` — the
+  90°-rotated text running up the side reads like vertical Compute and
+  hurts at-a-glance comprehension. Put the y-axis description as a
+  **second line in the title** instead:
+
+  ```python
+  ax.set_title(
+      "MarketMakingV1 — RL²/VariBAD × Concat/Hypernetwork\n"
+      "Final return (mean across n=8 seeds, 200 iter)"
+  )
+  ```
+
+  Multi-panel figures: use a 2-line `fig.suptitle(...)` and drop
+  per-panel ylabels. The x-axis label still uses `ax.set_xlabel(...)`
+  (it sits horizontally below the axis, so it does not have the
+  rotated-text problem).
+- **X-axis labels are capitalized full words**: `Iteration`,
+  `Inventory q`, `Timestep within episode`. Not lowercase, not
   abbreviated.
 
 ## Legend
@@ -134,7 +149,9 @@ Style: `linestyle="--", linewidth=1.0, alpha=0.6`, colours from the
 - [ ] Title has no `M{n}`, `Step`, `RQ`, or env-version suffix
 - [ ] Environment name is `MarketMakingV1` (or `Avellaneda–Stoikov
       baseline` for M1)
-- [ ] Axis labels are capitalized full words
+- [ ] **No `ax.set_ylabel(...)`** — y-axis description is on a second
+      line of the title
+- [ ] X-axis label is capitalized full words
 - [ ] Legend sits outside the plot area, opaque white, lists every
       element
 - [ ] Bars have value labels below the lower CI cap

@@ -41,8 +41,8 @@ def plot_learning_curve(experiment_dir: Path, output_path: Path, *, title: str |
         )
 
     ax.set_xlabel("iteration")
-    ax.set_ylabel("return")
-    ax.set_title(title or metrics["experiment_name"])
+    base_title = title or metrics["experiment_name"]
+    ax.set_title(f"{base_title}\nReturn")
     ax.legend()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -15,12 +15,10 @@ from typing import Any
 
 import numpy as np
 
-from plotting.m4_plots import plot_m4_method_ranking
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
-FIGURES_ROOT = REPO_ROOT / "figures"
 
 CONFIGS: list[tuple[str, str, str]] = [
     ("ppo",     "bandit",        "m4_ppo_bandit"),
@@ -102,28 +100,16 @@ def main() -> int:
                 envrow["varibad_clears_floor"] = vb["final_return_mean"] > ppo["final_return_mean"]
         table.append(envrow)
 
-    fig_path = FIGURES_ROOT / "milestones" / "M4" / "m4_method_ranking.png"
-    # Read the compute budget from one of the underlying training runs so
-    # the chart footer matches reality (all M4 cells share the same budget).
-    sample_meta_path = RESULTS_ROOT / CONFIGS[0][2] / "metrics.json"
-    bar_budget: dict[str, Any] | None = None
-    if sample_meta_path.exists():
-        with open(sample_meta_path) as f:
-            mm = json.load(f)
-        bar_budget = {
-            "iterations": int(mm.get("iterations", 0)) or None,
-            "parallel_envs": int(mm.get("parallel_envs", 0)) or None,
-            "rollout_length": int(mm.get("rollout_length", 0)) or None,
-            "num_seeds": int(mm.get("num_seeds", 0)) or None,
-        }
-    plot_m4_method_ranking(table, fig_path, budget=bar_budget)
-
+    # The standalone M4 method-ranking chart was retired: every number it
+    # showed is now in `figures/milestones/M5/factorial_toys.png`, which
+    # adds the integration ablation and overlays the same per-env PPO floor
+    # as a reference line. This script keeps the JSON (canonical pass-
+    # criterion file) but no longer writes a chart.
     run.ok(
         key_stats={
             "n_runs": len(rows),
             "table": table,
             "rows": rows,
-            "figure_path": str(fig_path.relative_to(REPO_ROOT)),
         },
         summary_path=summary_path,
     )

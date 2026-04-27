@@ -19,6 +19,15 @@ COLORS: dict[str, str] = {
     "varibad": "#d62728",
     "belief_ppo": "#9467bd",
     "oracle_ppo": "#8c564b",
+    # Per-cell colours for the M5 4-cell factorial. Each cell gets a
+    # distinct hue so the four series are independently distinguishable
+    # in every chart that includes them. The analytical posterior
+    # reference line uses a fifth distinct hue (red).
+    "rl2_concat":        "#1f77b4",  # blue
+    "rl2_hypernet":      "#ff7f0e",  # orange
+    "varibad_concat":    "#9467bd",  # purple
+    "varibad_hypernet":  "#2ca02c",  # green
+    "analytical":        "#d62728",  # red — for the analytical-posterior reference
 }
 
 

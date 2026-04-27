@@ -1,11 +1,15 @@
 """M5 plot module — figures for every M5 stage that has data on disk.
 
 Produces:
-  - factorial_toys.png      — Step-3 toy factorial across 3 toy envs
   - step3_mm_hypernet.png   — Step-3 MM hypernet probe (4 bars + reference lines)
   - probe_per_t.png         — Step-5 per-timestep regime classification accuracy
   - step4_ladder.png        — Step-4 4-cell ladder bar chart (when ready)
   - step4_learning_curves.png — Step-4 per-iter learning curves with seed CIs
+
+The Step-3 toy factorial chart was retitled and moved under M4 (its
+content is implementation validation on toy envs). It now lives in
+`plotting.m4_plots.plot_factorial_toys` and writes to
+`figures/milestones/M4/factorial_toys.png`.
 
 Each plot function loads a stats JSON, produces one PNG, and tolerates
 missing inputs (skips gracefully). The CLI entry generates everything it
@@ -97,111 +101,6 @@ def _draw_reference_lines(ax, refs: dict[str, float], xmin=None, xmax=None) -> N
 
 
 # ---------------------------------------------------------------------------
-# Step-3 toy factorial — RL²/VariBAD × concat/hypernet across 3 envs
-# ---------------------------------------------------------------------------
-
-
-_TOY_ENVS = ["bandit", "gridworld", "regime_bandit"]
-_TOY_ENV_LABELS = {
-    "bandit": "Bandit (5-arm Bernoulli)",
-    "gridworld": "Gridworld (random goal)",
-    "regime_bandit": "Regime-switching bandit",
-}
-_VARIANT_ORDER = ("concat_nobonus", "hypernet_nobonus")
-_VARIANT_LABELS = {
-    "concat_nobonus": "Concat",
-    "hypernet_nobonus": "Hypernetwork",
-}
-
-
-def plot_factorial_toys(out_path: Path) -> bool:
-    stats_path = RESULTS_ROOT / "milestones" / "M5" / "stats_M5_factorial_toys.json"
-    if not stats_path.exists():
-        print(f"[m5_plots] skip factorial_toys: missing {stats_path}")
-        return False
-    with open(stats_path) as f:
-        stats = json.load(f)
-
-    # Re-index configs by (method, env, variant_label). Tolerate older
-    # JSONs that carry an `exploration_bonus` field; bonus configs are
-    # ignored by the plot regardless (only `*_nobonus` variants are read).
-    by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for r in stats["configs"]:
-        bonus = r.get("exploration_bonus", False)
-        variant = f"{r['integration']}_{'bonus' if bonus else 'nobonus'}"
-        by_key[(r["method"], r["env"], variant)] = r
-
-    apply_style()
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), sharey=False)
-
-    methods = ["rl2", "varibad"]
-    method_labels = {"rl2": "RL²", "varibad": "VariBAD"}
-    n_v = len(_VARIANT_ORDER)
-    bar_w = 0.38
-
-    for ax, env in zip(axes, _TOY_ENVS):
-        for i_method, method in enumerate(methods):
-            means = []
-            errs_lo = []
-            errs_hi = []
-            for v in _VARIANT_ORDER:
-                key = (method, env, v)
-                if key in by_key:
-                    r = by_key[key]
-                    means.append(r["final_return_mean"])
-                    lo, hi = r["final_return_ci95"]
-                    errs_lo.append(r["final_return_mean"] - lo)
-                    errs_hi.append(hi - r["final_return_mean"])
-                else:
-                    means.append(np.nan)
-                    errs_lo.append(0.0)
-                    errs_hi.append(0.0)
-            offset = (i_method - 0.5) * bar_w
-            x = np.arange(n_v) + offset
-            yerr = np.array([errs_lo, errs_hi])
-            ax.bar(
-                x, means, bar_w, yerr=yerr, color=COLORS[method],
-                edgecolor="black", linewidth=0.4, capsize=2,
-                label=method_labels[method],
-            )
-        # No dashed reference lines: the M4 baseline equals the
-        # `concat` bar in this 2-variant view (same config, same
-        # hyperparameters), so the line would just duplicate the bar.
-        ax.set_xticks(np.arange(n_v))
-        ax.set_xticklabels([_VARIANT_LABELS[v] for v in _VARIANT_ORDER], fontsize=8)
-        ax.set_title(_TOY_ENV_LABELS[env])
-        ax.set_ylabel("Final return (mean across 3 seeds)")
-        # Per-panel legend below the panel — keeps the bar/baseline labels
-        # tied to the env they describe (M4 baselines differ per env).
-        ax.legend(
-            loc="upper center", bbox_to_anchor=(0.5, -0.10),
-            fontsize=7, ncol=2,
-            frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-        )
-
-    fig.suptitle(
-        "Toy environments — RL²/VariBAD × Concat/Hypernetwork",
-        y=1.02,
-    )
-    # Compute budget — read from one config row (all rows in this sweep
-    # use the same M4 budget per the orchestrator).
-    sample_cfg = stats["configs"][0] if stats["configs"] else {}
-    _budget_annotation(
-        fig,
-        iterations=sample_cfg.get("iterations"),
-        num_seeds=sample_cfg.get("num_seeds"),
-        extra="across 12 method×env×integration cells",
-    )
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=0.32)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path)
-    plt.close(fig)
-    print(f"[m5_plots] wrote {out_path}")
-    return True
-
-
-# ---------------------------------------------------------------------------
 # Step-3 MM hypernet — 4 bars from existing concat (Step 2) + hypernet (Step 3) data
 # ---------------------------------------------------------------------------
 
@@ -264,8 +163,10 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
 
     ax.set_xticks(x)
     ax.set_xticklabels(xtick_labels)
-    ax.set_ylabel("Final return (mean across 3 seeds, 100 iter)")
-    ax.set_title("MarketMakingV1 — Concat vs. Hypernetwork (half-budget probe)")
+    ax.set_title(
+        "MarketMakingV1 — Concat vs. Hypernetwork (half-budget probe)\n"
+        "Final return (mean across 3 seeds, 100 iter)"
+    )
     _draw_reference_lines(ax, refs)
     # Per the repo legend convention, list every chart element. Add proxy
     # patches for the bars (one per cell) and combine with the reference-
@@ -310,19 +211,21 @@ def plot_step3_mm_hypernet(out_path: Path) -> bool:
 
 
 def _method_label_and_color(exp_name: str) -> tuple[str, str]:
-    """Map experiment_name to (display label, color)."""
-    palette = {"rl2": "RL²", "varibad": "VariBAD"}
-    color_palette = {"rl2": COLORS["rl2"], "varibad": COLORS["varibad"]}
-    for prefix, pretty in palette.items():
-        if prefix in exp_name:
-            integ = (
-                "Hypernetwork" if "hypernet" in exp_name
-                else "Concat" if "concat" in exp_name
-                else ""
-            )
-            label = f"{pretty} {integ}".strip()
-            return label, color_palette[prefix]
-    return exp_name, "#666666"
+    """Map experiment_name to (display label, color).
+
+    Uses the per-cell COLORS keys (`rl2_concat`, `rl2_hypernet`,
+    `varibad_concat`, `varibad_hypernet`) so the four cells are visually
+    distinct in every chart that includes them.
+    """
+    family = "rl2" if "rl2" in exp_name else "varibad" if "varibad" in exp_name else None
+    if family is None:
+        return exp_name, "#666666"
+    pretty = "RL²" if family == "rl2" else "VariBAD"
+    if "hypernet" in exp_name:
+        return f"{pretty} Hypernetwork", COLORS[f"{family}_hypernet"]
+    if "concat" in exp_name:
+        return f"{pretty} Concat", COLORS[f"{family}_concat"]
+    return pretty, COLORS[family]
 
 
 def _smooth_curve(y: np.ndarray, window: int) -> np.ndarray:
@@ -375,10 +278,9 @@ def plot_probe_per_t(out_path: Path) -> bool:
     bar_colors: list[str] = []
     for exp_name, m in method_items:
         label, color = _method_label_and_color(exp_name)
-        # Render method/integration on separate lines so the bar tick
-        # labels don't run into one another when the integration name
-        # is long ("Hypernetwork").
-        bar_labels.append(label.replace(" ", "\n", 1))
+        # Single-line label; rotation below prevents adjacent-bar overlap
+        # without splitting onto two lines (which crowded the panel).
+        bar_labels.append(label)
         bar_means.append(m["method_test_acc_mean"])
         lo, hi = m["method_test_acc_ci95"]
         bar_lo.append(m["method_test_acc_mean"] - lo)
@@ -397,11 +299,11 @@ def plot_probe_per_t(out_path: Path) -> bool:
     boot = rng.integers(0, ana_per_seed.size, size=(10_000, ana_per_seed.size))
     ana_lo = float(np.percentile(ana_per_seed[boot].mean(axis=1), 2.5))
     ana_hi = float(np.percentile(ana_per_seed[boot].mean(axis=1), 97.5))
-    bar_labels.append("Analytical\nposterior")
+    bar_labels.append("Analytical posterior")
     bar_means.append(ana_mean)
     bar_lo.append(ana_mean - ana_lo)
     bar_hi.append(ana_hi - ana_mean)
-    bar_colors.append("#222222")
+    bar_colors.append(COLORS["analytical"])
 
     x_bar = np.arange(len(bar_labels))
     yerr = np.array([bar_lo, bar_hi])
@@ -418,17 +320,16 @@ def plot_probe_per_t(out_path: Path) -> bool:
         ax_bar.annotate(f"{mean:.2f}", xy=(xi, mean - lo_err),
                         xytext=(0, -3), textcoords="offset points",
                         ha="center", va="top", fontsize=9, color="black")
-    ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
-                   label=f"Random guess ({100.0/n_classes:.1f}%)")
+    # Random-guess line — drawn but not legended on this panel. The right
+    # panel's outside legend already documents the same dotted line, so
+    # adding a second legend here would overlap the vertical bar labels.
+    ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0)
     ax_bar.set_xticks(x_bar)
-    ax_bar.set_xticklabels(bar_labels, fontsize=8)
-    ax_bar.set_ylim(0.0, 1.05)
-    ax_bar.set_ylabel("Regime classification accuracy (test set)")
-    ax_bar.set_title("Headline test accuracy")
-    ax_bar.legend(
-        loc="upper center", bbox_to_anchor=(0.5, -0.30), fontsize=7,
-        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-    )
+    # Vertical labels avoid the adjacent-bar overlap that rotation=25-35
+    # still leaves on this narrow panel; reads cleanly with `ha="center"`.
+    ax_bar.set_xticklabels(bar_labels, fontsize=8, rotation=90, ha="center")
+    ax_bar.set_ylim(max(0.0, chance - 0.05), 1.05)
+    ax_bar.set_title("Headline test accuracy\n(regime classification, test set)")
 
     # ----- Right panel: per-timestep curves (smoothed) ---------------------
     analytical_drawn = False
@@ -461,16 +362,19 @@ def plot_probe_per_t(out_path: Path) -> bool:
         if not analytical_drawn:
             ana = np.array(m["analytical_per_t_test_acc_mean"])
             ax_curve.plot(ts, _smooth_curve(ana, smoothing_window),
-                          color="#222222", linestyle="--", linewidth=1.2,
+                          color=COLORS["analytical"], linestyle="--",
+                          linewidth=1.2,
                           label="Analytical posterior (reference)")
             analytical_drawn = True
 
     ax_curve.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
                      label=f"Random guess ({100.0/n_classes:.1f}%)")
     ax_curve.set_xlabel("Timestep within episode")
-    ax_curve.set_ylabel("Regime classification accuracy")
-    ax_curve.set_title(f"Per-timestep accuracy (rolling-mean window {smoothing_window})")
-    ax_curve.set_ylim(0.0, 1.05)
+    ax_curve.set_title(
+        f"Per-timestep accuracy (rolling-mean window {smoothing_window})\n"
+        "Regime classification, test set"
+    )
+    ax_curve.set_ylim(max(0.0, chance - 0.05), 1.05)
     ax_curve.legend(
         loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
@@ -486,7 +390,9 @@ def plot_probe_per_t(out_path: Path) -> bool:
         extra=f"{stats.get('n_rollouts')} rollouts/seed, classifier={stats.get('classifier')}",
     )
     fig.tight_layout()
-    fig.subplots_adjust(right=0.82, bottom=0.30)
+    # Generous bottom margin so the vertical bar tick labels (longest:
+    # "VariBAD Hypernetwork") fit fully without clipping.
+    fig.subplots_adjust(right=0.82, bottom=0.42)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -532,14 +438,14 @@ def plot_step4_ladder(out_path: Path) -> bool:
         offset = (i_int - 0.5) * bar_w
         x = np.arange(len(methods)) + offset
         yerr = np.array(errs).T
-        alpha = 0.6 if integ == "concat" else 1.0
         bars = ax.bar(
             x, means, bar_w, yerr=yerr, capsize=3, edgecolor="black",
             linewidth=0.4,
         )
+        # Per-cell colour from the dedicated COLORS keys (no alpha tricks)
+        # so each of the 4 cells is independently distinguishable.
         for bar, m in zip(bars, methods):
-            bar.set_facecolor(COLORS[m])
-            bar.set_alpha(alpha)
+            bar.set_facecolor(COLORS[f"{m}_{integ}"])
         # Value labels inside each bar, just below the lower CI cap so they
         # don't overlap the vertical CI line. Skip NaN bars.
         for xi, mean, e in zip(x, means, errs):
@@ -556,17 +462,18 @@ def plot_step4_ladder(out_path: Path) -> bool:
     integ_pretty = {"concat": "Concat", "hypernet": "Hypernetwork"}
     for method in methods:
         for integ in integrations:
-            alpha = 0.6 if integ == "concat" else 1.0
             legend_handles.append(Patch(
-                facecolor=COLORS[method], alpha=alpha, edgecolor="black",
+                facecolor=COLORS[f"{method}_{integ}"], edgecolor="black",
                 linewidth=0.4,
                 label=f"{method_labels_full[method]} {integ_pretty[integ]}",
             ))
 
     ax.set_xticks(np.arange(len(methods)))
     ax.set_xticklabels(["RL²", "VariBAD"])
-    ax.set_ylabel("Final return (mean across n=8 seeds, 200 iter)")
-    ax.set_title("MarketMakingV1 — RL²/VariBAD × Concat/Hypernetwork")
+    ax.set_title(
+        "MarketMakingV1 — RL²/VariBAD × Concat/Hypernetwork\n"
+        "Final return (mean across n=8 seeds, 200 iter)"
+    )
     _draw_reference_lines(ax, refs)
     # Y-axis convention: start at floor − 5 so bars are comparable to the
     # floor reference (full-budget run). For smoke runs whose means sit
@@ -628,8 +535,11 @@ def plot_step4_learning_curves(out_path: Path) -> bool:
         # cell_key e.g. "rl2_hypernet"
         method = cell_key.split("_")[0]
         integ = "_".join(cell_key.split("_")[1:])
-        color = COLORS.get(method, "#666666")
-        linestyle = "--" if integ == "concat" else "-"
+        # Per-cell colour from the dedicated COLORS keys; solid line for
+        # all four so each cell is identified by its colour, not a line
+        # style + alpha combo (which is harder to distinguish).
+        color = COLORS.get(f"{method}_{integ}", "#666666")
+        linestyle = "-"
         cell_label = f"{method_pretty.get(method, method)} {integ_pretty.get(integ, integ)}"
         exp_name = c["experiment_name"]
         m_path = RESULTS_ROOT / exp_name / "metrics.json"
@@ -657,8 +567,10 @@ def plot_step4_learning_curves(out_path: Path) -> bool:
 
     _draw_reference_lines(ax, refs)
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Mean return (across seeds, shaded = 95% CI)")
-    ax.set_title("MarketMakingV1 — learning curves by method × integration")
+    ax.set_title(
+        "MarketMakingV1 — learning curves by method × integration\n"
+        "Mean return across seeds, shaded = 95% CI"
+    )
     ax.legend(
         loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
@@ -700,10 +612,12 @@ def main() -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # `step3_mm_hypernet` was the half-budget (n=3 × 100 iter) preview that
+    # motivated the full Step-4 run. Now superseded by step4_ladder.png at
+    # n=8 × 200 iter — same 4 cells, same env. Function kept in this module
+    # for archival regen if needed; not generated by default.
     written = 0
     for name, fn in [
-        ("factorial_toys.png", plot_factorial_toys),
-        ("step3_mm_hypernet.png", plot_step3_mm_hypernet),
         ("probe_per_t.png", plot_probe_per_t),
         ("step4_ladder.png", plot_step4_ladder),
         ("step4_learning_curves.png", plot_step4_learning_curves),

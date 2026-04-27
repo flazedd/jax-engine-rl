@@ -270,8 +270,8 @@ Ordering `agnostic ≤ belief ≤ oracle` ✓.
 
 **Artifacts.**
 - `results/milestones/M4/method_ranking.json` (canonical numbers + per-seed finals)
-- `figures/milestones/M4/m4_method_ranking.png` (grouped bar chart)
 - `scripts/m4_full_eval.py` (orchestrator) + `scripts/m4_full_eval_aggregate.py` (post-hoc aggregator from on-disk metrics)
+- `figures/milestones/M4/factorial_toys.png` — the implementation-validation chart. Shows RL²/VariBAD × concat/hypernet on the three toy envs with a per-env PPO floor reference line. (Replaces the earlier `m4_method_ranking.png`; underlying data was collected during M5 Step-3 toy sweep, but the chart's role — *meta-RL works on toys* — is M4.)
 
 **Setup.** 9 (method × validation env) configs at full budget: 200 iter × 512 envs × 3 seeds. Methods: PPO (regime-agnostic floor), RL² (recurrent meta-RL, GRU on `[obs, prev_action_oh, prev_reward, prev_done]`), VariBAD (variational meta-RL with explicit posterior `q(m | τ_{:t})` and Bernoulli reward decoder). Validation envs:
 - `bandit` — 2-arm Bernoulli, episode 10. Per-episode arm probs sampled.

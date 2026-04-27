@@ -1,9 +1,9 @@
 # M6 — persistence sweep, hard level.
 #
-# Same fills as E_final, transition matrix has diag = 0.85,
-# off-diag = 0.075 → mean regime duration ≈ 7 steps.
-# Regimes switch frequently within an episode, so a method must
-# infer the current regime quickly from a short observation window.
+# Same fills as E_final, transition matrix has diag = 0.80,
+# off-diag = 0.10 → mean regime duration ≈ 5 steps. Each 128-step
+# episode sees ~25 regime changes, so a method must infer the current
+# regime from a very short observation window before it switches again.
 env:
   name: market_making_v1
   params:
@@ -15,9 +15,9 @@ env:
 
     n_regimes: 3
     transition_matrix: [
-      0.850, 0.075, 0.075,
-      0.075, 0.850, 0.075,
-      0.075, 0.075, 0.850,
+      0.80, 0.10, 0.10,
+      0.10, 0.80, 0.10,
+      0.10, 0.10, 0.80,
     ]
     regime_p_tight_bid: [0.30, 0.80, 0.50]
     regime_p_wide_bid:  [0.65, 0.05, 0.02]

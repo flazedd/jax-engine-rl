@@ -323,28 +323,88 @@ def plot_posterior_vs_performance(out_path: Path) -> bool:
         return False
 
     apply_style()
-    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    fig, ax = plt.subplots(figsize=(9.5, 5.5))
     by_method: dict[str, list[tuple[float, float]]] = {}
     for p in points:
         by_method.setdefault(p["method"], []).append(
             (float(p["posterior_error"]), float(p["gap_closed"])),
         )
-    for method, pts in by_method.items():
+    # Plot meta-RL methods, in order so that hypernet (upper band) draws
+    # on top of concat (lower band) for any near-overlapping points.
+    for method in _GC_METHOD_ORDER:
+        pts = by_method.get(method)
+        if pts is None:
+            continue
         xs, ys = zip(*pts)
         ax.scatter(xs, ys, color=_METHOD_COLORS.get(method, "#666666"),
-                   label=_METHOD_LABELS.get(method, method), s=30,
-                   edgecolor="black", linewidth=0.4, alpha=0.8)
-    ax.set_xlabel("Posterior error (vs analytical HMM)")
+                   label=_METHOD_LABELS.get(method, method), s=32,
+                   edgecolor="black", linewidth=0.4, alpha=0.85)
+
+    # Reference horizontal lines: gap_closed = 0 (floor) and = 1 (Oracle).
+    ax.axhline(0.0, color=_METHOD_COLORS["regime_agnostic_ppo"],
+               linestyle="--", linewidth=1.0, alpha=0.6,
+               label="Regime-agnostic PPO floor (gap_closed = 0)")
+    ax.axhline(1.0, color=_METHOD_COLORS["oracle_ppo"],
+               linestyle="--", linewidth=1.0, alpha=0.6,
+               label="Oracle-PPO ceiling (gap_closed = 1)")
+
+    ax.set_xlabel(
+        "Posterior error  =  analytical HMM probe accuracy  −  method probe accuracy\n"
+        "(low → method's belief decodes regime almost as well as analytical)"
+    )
+    ax.set_ylabel(
+        "Gap closed  =  (method return − floor) / (oracle − floor)\n"
+        "(0 = floor, 1 = oracle)"
+    )
+
+    # Pull headline correlation from the same stats JSON for an inline
+    # annotation. Keeps the chart self-explanatory.
+    corr_overall = stats.get("correlation_overall", float("nan"))
+    n_points = stats.get("n_scatter_points", len(points))
     ax.set_title(
         "MarketMakingV1 — posterior quality vs task performance\n"
-        "Gap closed (per cell, per seed)"
+        f"Pearson r = {corr_overall:+.3f} across n = {n_points} (cell × seed) points"
+        " · the policy interface dominates"
     )
+
+    # Region annotations — describe what the two horizontal bands mean.
+    # Place text inside the data area in a corner that's empty.
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    x_text = xmin + 0.62 * (xmax - xmin)
+    ax.annotate(
+        "Hypernetwork integration\nclears or exceeds the floor",
+        xy=(x_text, 0.85), xycoords="data",
+        ha="left", va="center", fontsize=8.5,
+        color="#444444", style="italic",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                  edgecolor="#cccccc", alpha=0.85),
+    )
+    ax.annotate(
+        "Concat integration\nstays below the floor\n(M5 decoupling, replicated)",
+        xy=(x_text, -0.6), xycoords="data",
+        ha="left", va="center", fontsize=8.5,
+        color="#444444", style="italic",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                  edgecolor="#cccccc", alpha=0.85),
+    )
+
     ax.legend(
         loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8,
         frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
+
+    # Compute footer — tells the reader the data backing this chart.
+    budget_annotation(
+        fig,
+        rollout_length=int(stats.get("rollout_length", 0)) or None,
+        extra=(
+            f"4 meta-RL cells × 6 (axis × level) × n=8 seeds = {n_points} points · "
+            f"classifier={stats.get('classifier', 'logistic')}"
+        ),
+    )
     fig.tight_layout()
-    fig.subplots_adjust(right=0.65, bottom=0.18)
+    fig.subplots_adjust(right=0.72, bottom=0.22, top=0.86)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

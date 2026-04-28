@@ -187,15 +187,14 @@ def _aligned_curve(entry: dict[str, Any], key_prefix: str) -> tuple[np.ndarray, 
 
 
 def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
-    """Single-panel sweep figure: gap_closed across difficulty levels.
+    """Single-panel sweep figure: absolute mean returns across difficulty.
 
-    The original two-panel layout (absolute returns + gap_closed) ran into
-    visual redundancy on the distinguishability axis where both panels
-    showed similar monotonic declines. gap_closed is the canonical RQ3
-    metric (it normalises method return by the optimality gap and ties
-    directly to the pre-registered hypotheses), so the single-panel form
-    keeps that and folds the absolute floor / oracle values into the
-    legend so context isn't lost.
+    Earlier two-panel layout (absolute + gap_closed) was simplified to a
+    single panel after the gap_closed panel duplicated the absolute one
+    on the distinguishability axis. The absolute view is the more
+    intuitive read for a thesis figure (what is each method actually
+    returning at each difficulty?); gap_closed numbers live in the
+    findings table and are the test statistic for RQ3 hypothesis tests.
     """
     stats_path = RESULTS_ROOT / "milestones" / "M6" / "stats_M6_sweep.json"
     if not stats_path.exists():
@@ -214,14 +213,14 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
     fig, ax = plt.subplots(figsize=(9.0, 5.2))
     x = np.arange(len(_LEVELS))
 
-    # Plot every method (refs dashed, meta-RL solid). Belief-PPO is a
-    # reference benchmark on this panel — dashed like regime-agnostic
-    # and Oracle.
+    # Plot every method (refs dashed, meta-RL solid). Belief-PPO joins
+    # regime-agnostic and Oracle as a dashed reference — it's the
+    # analytical-posterior upper bound on regime-only methods.
     for method in _ABS_METHOD_ORDER:
         entry = by_method.get(method)
         if entry is None:
             continue
-        means, los, his = _aligned_curve(entry, "gc")
+        means, los, his = _aligned_curve(entry, "abs")
         color = _METHOD_COLORS[method]
         is_ref = method in _REFERENCE_METHODS
         linestyle = "--" if is_ref else "-"
@@ -234,29 +233,20 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
             ax.fill_between(x, los, his, color=color,
                             alpha=0.15 if not is_ref else 0.10)
 
-    # Constant-by-construction reference dashes for the 0-1 envelope.
-    # regime_agnostic and oracle method lines already sit on these,
-    # but the dashes give the chart a clear "[floor — oracle]" frame.
-    ax.axhline(0.0, color=_METHOD_COLORS["regime_agnostic_ppo"],
-               linestyle=":", linewidth=0.9, alpha=0.5)
-    ax.axhline(1.0, color=_METHOD_COLORS["oracle_ppo"],
-               linestyle=":", linewidth=0.9, alpha=0.5)
-
     ax.set_xticks(x)
     ax.set_xticklabels([_LEVEL_LABELS[lv] for lv in _LEVELS])
     ax.set_xlabel(_AXIS_LABELS.get(axis, axis))
-    ax.set_ylabel(
-        "Gap closed  =  (method return − floor) / (oracle − floor)"
-    )
+    ax.set_ylabel("Mean episode return")
 
     axis_pretty = axis.capitalize()
     ax.set_title(
         f"MarketMakingV1 — {axis_pretty} difficulty sweep\n"
-        "Gap closed across difficulty (mean across seeds, shaded = 95% CI)"
+        "Mean episode return across difficulty (shaded = 95% CI)"
     )
 
-    # Build legend with absolute floor / oracle values per level so the
-    # absolute scale isn't lost when we drop the absolute panel.
+    # Legend lists every method that appears on the chart. Reference
+    # methods (regime-agnostic, Belief, Oracle) are dashed; meta-RL
+    # methods are solid.
     legend_handles: list[Any] = []
     for method in _ABS_METHOD_ORDER:
         if method not in by_method:
@@ -269,23 +259,6 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
             linewidth=1.6, marker="o",
             label=_METHOD_LABELS[method],
         ))
-    floor_per_level = []
-    oracle_per_level = []
-    for lv in _LEVELS:
-        cells = axis_results.get(lv, {})
-        f = cells.get("regime_agnostic_ppo", {}).get("final_return_mean")
-        o = cells.get("oracle_ppo", {}).get("final_return_mean")
-        floor_per_level.append(f"{f:.0f}" if f is not None else "?")
-        oracle_per_level.append(f"{o:.0f}" if o is not None else "?")
-    legend_handles.append(Line2D(
-        [0], [0], color="white",
-        label=f"Floor:  {' / '.join(floor_per_level)}",
-    ))
-    legend_handles.append(Line2D(
-        [0], [0], color="white",
-        label=f"Oracle: {' / '.join(oracle_per_level)}",
-    ))
-
     ax.legend(
         handles=legend_handles,
         loc="upper left", bbox_to_anchor=(1.02, 1.0),

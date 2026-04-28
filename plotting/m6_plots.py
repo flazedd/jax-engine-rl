@@ -72,22 +72,28 @@ _METHOD_LABELS = {
     "varibad_concat":      "VariBAD Concat",
     "varibad_hypernet":    "VariBAD Hypernetwork",
 }
-# M6 color overrides: belief_ppo is bumped to the analytical-red slot to
-# avoid colliding with varibad_concat purple (the slot is free since M6
-# does not show an analytical-posterior series). Reference methods
-# (regime-agnostic, oracle) are dashed instead of solid; that line-style
-# distinction handles the regime_agnostic-blue ↔ rl2_concat-blue clash
-# on the absolute panel.
+# M6 colors: each of the 7 methods gets a distinct hue so two lines on
+# the same panel never share a colour. The three reference methods
+# (regime-agnostic, Belief, Oracle) keep their canonical project colours
+# from M3/M5 and are drawn *dashed* — they are upper/lower bounds, not
+# methods being benchmarked. The four meta-RL methods are drawn solid;
+# rl2_concat (was blue, collided with regime-agnostic) is bumped to
+# cyan, and varibad_concat (was purple, collided with Belief-PPO) is
+# bumped to pink. RL² and VariBAD hypernet keep their M5 orange/green.
 _METHOD_COLORS = {
-    "regime_agnostic_ppo": COLORS["ppo"],
-    "belief_ppo":          COLORS["analytical"],
-    "oracle_ppo":          COLORS["oracle_ppo"],
-    "rl2_concat":          COLORS["rl2_concat"],
-    "rl2_hypernet":        COLORS["rl2_hypernet"],
-    "varibad_concat":      COLORS["varibad_concat"],
-    "varibad_hypernet":    COLORS["varibad_hypernet"],
+    "regime_agnostic_ppo": COLORS["ppo"],          # blue, dashed (reference)
+    "belief_ppo":          COLORS["belief_ppo"],   # purple, dashed (reference)
+    "oracle_ppo":          COLORS["oracle_ppo"],   # brown, dashed (reference)
+    "rl2_concat":          "#17becf",              # cyan (overridden vs M5 blue)
+    "rl2_hypernet":        COLORS["rl2_hypernet"], # orange (M5 standard)
+    "varibad_concat":      "#e377c2",              # pink (overridden vs M5 purple)
+    "varibad_hypernet":    COLORS["varibad_hypernet"],  # green (M5 standard)
 }
-_REFERENCE_METHODS = {"regime_agnostic_ppo", "oracle_ppo"}
+# All three references render dashed on both panels. Belief-PPO joins
+# regime-agnostic and Oracle here because it's a reference benchmark
+# (analytical-posterior upper bound on regime-only methods), not one of
+# the meta-RL methods being characterised.
+_REFERENCE_METHODS = {"regime_agnostic_ppo", "belief_ppo", "oracle_ppo"}
 
 _AXIS_LABELS = {
     "persistence":        "Persistence (mean regime duration)",
@@ -233,17 +239,25 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
             continue
         means, los, his = _aligned_curve(entry, "gc")
         color = _METHOD_COLORS[method]
-        ax_gc.plot(x, means, marker="o", color=color, linewidth=1.6,
+        is_ref = method in _REFERENCE_METHODS
+        linestyle = "--" if is_ref else "-"
+        ax_gc.plot(x, means, marker="o", color=color, linestyle=linestyle,
+                   linewidth=1.6 if not is_ref else 1.2,
+                   alpha=1.0 if not is_ref else 0.8,
                    label=_METHOD_LABELS[method])
         valid = ~np.isnan(los) & ~np.isnan(his) & (los != his)
         if valid.any():
-            ax_gc.fill_between(x, los, his, color=color, alpha=0.15)
-    # Reference dashes (the same info as regime_agnostic and oracle method
-    # lines on the left panel, in normalised space here).
-    ax_gc.axhline(0.0, color=COLORS["ppo"], linestyle="--", linewidth=1.0,
-                  alpha=0.6, label="Regime-agnostic PPO floor (= 0)")
-    ax_gc.axhline(1.0, color=COLORS["oracle_ppo"], linestyle="--", linewidth=1.0,
-                  alpha=0.6, label="Oracle-PPO ceiling (= 1)")
+            ax_gc.fill_between(x, los, his, color=color,
+                               alpha=0.15 if not is_ref else 0.10)
+    # Constant-by-construction references: regime_agnostic at 0 and
+    # oracle at 1. Dashed in their canonical project colours so the
+    # legend reads consistently with the absolute panel.
+    ax_gc.axhline(0.0, color=_METHOD_COLORS["regime_agnostic_ppo"],
+                  linestyle="--", linewidth=1.0, alpha=0.6,
+                  label="Regime-agnostic PPO floor (= 0)")
+    ax_gc.axhline(1.0, color=_METHOD_COLORS["oracle_ppo"],
+                  linestyle="--", linewidth=1.0, alpha=0.6,
+                  label="Oracle-PPO ceiling (= 1)")
 
     ax_gc.set_xticks(x)
     ax_gc.set_xticklabels([_LEVEL_LABELS[lv] for lv in _LEVELS])
@@ -260,8 +274,9 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
         y=1.02, fontsize=12,
     )
 
-    # Build a single shared legend covering everything that appears in
-    # either panel. Reference methods are dashed in the legend too.
+    # Build a single shared legend covering every method that appears
+    # in either panel. Reference methods (regime-agnostic, Belief,
+    # Oracle) are dashed in the legend too — matches both panels.
     legend_handles: list[Any] = []
     for method in _ABS_METHOD_ORDER:
         if method not in by_method:
@@ -274,11 +289,6 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
             linewidth=1.6, marker="o",
             label=_METHOD_LABELS[method],
         ))
-    legend_handles.append(Line2D(
-        [0], [0], color=COLORS["ppo"], linestyle="--",
-        linewidth=1.0, alpha=0.6,
-        label="Floor / Ceiling references (right panel)",
-    ))
     fig.legend(
         handles=legend_handles,
         loc="upper left", bbox_to_anchor=(0.84, 0.95),

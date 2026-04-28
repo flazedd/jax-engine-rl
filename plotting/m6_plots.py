@@ -187,7 +187,16 @@ def _aligned_curve(entry: dict[str, Any], key_prefix: str) -> tuple[np.ndarray, 
 
 
 def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
-    """Two-panel sweep figure for one axis (persistence or distinguishability)."""
+    """Single-panel sweep figure: gap_closed across difficulty levels.
+
+    The original two-panel layout (absolute returns + gap_closed) ran into
+    visual redundancy on the distinguishability axis where both panels
+    showed similar monotonic declines. gap_closed is the canonical RQ3
+    metric (it normalises method return by the optimality gap and ties
+    directly to the pre-registered hypotheses), so the single-panel form
+    keeps that and folds the absolute floor / oracle values into the
+    legend so context isn't lost.
+    """
     stats_path = RESULTS_ROOT / "milestones" / "M6" / "stats_M6_sweep.json"
     if not stats_path.exists():
         print(f"[m6_plots] skip {axis}_sweep: missing {stats_path}")
@@ -202,38 +211,13 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
     by_method = _per_method_curves(axis_results)
 
     apply_style()
-    fig, (ax_abs, ax_gc) = plt.subplots(
-        1, 2, figsize=(13.5, 5.2), sharex=True,
-    )
+    fig, ax = plt.subplots(figsize=(9.0, 5.2))
     x = np.arange(len(_LEVELS))
 
-    # ----- Left panel: absolute returns ------------------------------------
+    # Plot every method (refs dashed, meta-RL solid). Belief-PPO is a
+    # reference benchmark on this panel — dashed like regime-agnostic
+    # and Oracle.
     for method in _ABS_METHOD_ORDER:
-        entry = by_method.get(method)
-        if entry is None:
-            continue
-        means, los, his = _aligned_curve(entry, "abs")
-        color = _METHOD_COLORS[method]
-        is_ref = method in _REFERENCE_METHODS
-        linestyle = "--" if is_ref else "-"
-        ax_abs.plot(x, means, marker="o", color=color, linestyle=linestyle,
-                    linewidth=1.6 if not is_ref else 1.2,
-                    alpha=1.0 if not is_ref else 0.8,
-                    label=_METHOD_LABELS[method])
-        valid = ~np.isnan(los) & ~np.isnan(his) & (los != his)
-        if valid.any():
-            ax_abs.fill_between(x, los, his, color=color, alpha=0.12)
-
-    ax_abs.set_xticks(x)
-    ax_abs.set_xticklabels([_LEVEL_LABELS[lv] for lv in _LEVELS])
-    ax_abs.set_xlabel(_AXIS_LABELS.get(axis, axis))
-    ax_abs.set_title(
-        "Absolute returns by difficulty\n"
-        "Mean episode return (shaded = 95% CI)"
-    )
-
-    # ----- Right panel: gap_closed -----------------------------------------
-    for method in _GC_METHOD_ORDER:
         entry = by_method.get(method)
         if entry is None:
             continue
@@ -241,42 +225,38 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
         color = _METHOD_COLORS[method]
         is_ref = method in _REFERENCE_METHODS
         linestyle = "--" if is_ref else "-"
-        ax_gc.plot(x, means, marker="o", color=color, linestyle=linestyle,
-                   linewidth=1.6 if not is_ref else 1.2,
-                   alpha=1.0 if not is_ref else 0.8,
-                   label=_METHOD_LABELS[method])
+        ax.plot(x, means, marker="o", color=color, linestyle=linestyle,
+                linewidth=1.6 if not is_ref else 1.2,
+                alpha=1.0 if not is_ref else 0.8,
+                label=_METHOD_LABELS[method])
         valid = ~np.isnan(los) & ~np.isnan(his) & (los != his)
         if valid.any():
-            ax_gc.fill_between(x, los, his, color=color,
-                               alpha=0.15 if not is_ref else 0.10)
-    # Constant-by-construction references: regime_agnostic at 0 and
-    # oracle at 1. Dashed in their canonical project colours so the
-    # legend reads consistently with the absolute panel.
-    ax_gc.axhline(0.0, color=_METHOD_COLORS["regime_agnostic_ppo"],
-                  linestyle="--", linewidth=1.0, alpha=0.6,
-                  label="Regime-agnostic PPO floor (= 0)")
-    ax_gc.axhline(1.0, color=_METHOD_COLORS["oracle_ppo"],
-                  linestyle="--", linewidth=1.0, alpha=0.6,
-                  label="Oracle-PPO ceiling (= 1)")
+            ax.fill_between(x, los, his, color=color,
+                            alpha=0.15 if not is_ref else 0.10)
 
-    ax_gc.set_xticks(x)
-    ax_gc.set_xticklabels([_LEVEL_LABELS[lv] for lv in _LEVELS])
-    ax_gc.set_xlabel(_AXIS_LABELS.get(axis, axis))
-    ax_gc.set_title(
-        "Gap closed by difficulty\n"
-        "(mean − floor) / (oracle − floor)"
+    # Constant-by-construction reference dashes for the 0-1 envelope.
+    # regime_agnostic and oracle method lines already sit on these,
+    # but the dashes give the chart a clear "[floor — oracle]" frame.
+    ax.axhline(0.0, color=_METHOD_COLORS["regime_agnostic_ppo"],
+               linestyle=":", linewidth=0.9, alpha=0.5)
+    ax.axhline(1.0, color=_METHOD_COLORS["oracle_ppo"],
+               linestyle=":", linewidth=0.9, alpha=0.5)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([_LEVEL_LABELS[lv] for lv in _LEVELS])
+    ax.set_xlabel(_AXIS_LABELS.get(axis, axis))
+    ax.set_ylabel(
+        "Gap closed  =  (method return − floor) / (oracle − floor)"
     )
 
-    # ----- Shared figure-level title + outside legend ----------------------
     axis_pretty = axis.capitalize()
-    fig.suptitle(
-        f"MarketMakingV1 — {axis_pretty} difficulty sweep",
-        y=1.02, fontsize=12,
+    ax.set_title(
+        f"MarketMakingV1 — {axis_pretty} difficulty sweep\n"
+        "Gap closed across difficulty (mean across seeds, shaded = 95% CI)"
     )
 
-    # Build a single shared legend covering every method that appears
-    # in either panel. Reference methods (regime-agnostic, Belief,
-    # Oracle) are dashed in the legend too — matches both panels.
+    # Build legend with absolute floor / oracle values per level so the
+    # absolute scale isn't lost when we drop the absolute panel.
     legend_handles: list[Any] = []
     for method in _ABS_METHOD_ORDER:
         if method not in by_method:
@@ -289,9 +269,26 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
             linewidth=1.6, marker="o",
             label=_METHOD_LABELS[method],
         ))
-    fig.legend(
+    floor_per_level = []
+    oracle_per_level = []
+    for lv in _LEVELS:
+        cells = axis_results.get(lv, {})
+        f = cells.get("regime_agnostic_ppo", {}).get("final_return_mean")
+        o = cells.get("oracle_ppo", {}).get("final_return_mean")
+        floor_per_level.append(f"{f:.0f}" if f is not None else "?")
+        oracle_per_level.append(f"{o:.0f}" if o is not None else "?")
+    legend_handles.append(Line2D(
+        [0], [0], color="white",
+        label=f"Floor:  {' / '.join(floor_per_level)}",
+    ))
+    legend_handles.append(Line2D(
+        [0], [0], color="white",
+        label=f"Oracle: {' / '.join(oracle_per_level)}",
+    ))
+
+    ax.legend(
         handles=legend_handles,
-        loc="upper left", bbox_to_anchor=(0.84, 0.95),
+        loc="upper left", bbox_to_anchor=(1.02, 1.0),
         fontsize=8, frameon=True, facecolor="white",
         edgecolor="#cccccc", framealpha=1.0,
     )
@@ -301,7 +298,7 @@ def plot_difficulty_sweep(axis: str, out_path: Path) -> bool:
         budget_annotation(fig, **budget,
                           extra=f"7 methods × 3 {axis} levels")
     fig.tight_layout()
-    fig.subplots_adjust(right=0.83, bottom=0.18, top=0.85)
+    fig.subplots_adjust(right=0.72, bottom=0.18)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

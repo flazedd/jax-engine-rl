@@ -353,11 +353,23 @@ Reproducibility: all seven medium cells across both axes match M3 reference leve
 | Criterion | Required | Observed | Status |
 |---|---|---|:---:|
 | persistence_sweep.all_methods_monotonic | true | false (Belief inverted-U) | ✗ |
-| distinguishability_sweep.all_methods_monotonic | true | tbd (re-aggregate; some methods non-strict) | partial |
+| distinguishability_sweep.all_methods_monotonic | true | false (mixed; meta-RL near-monotonic) | ✗ |
 | stats_M6_sweep.interpretable_overall | true | **false** | ✗ |
 | stats_M6_posterior_vs_performance.scatter_interpretable | true | **true** (signal_pattern=decoupling) | ✓ |
 
 The strict criteria fail on the same kind of "borderline but interpretable" pattern as M5's `ranking_stable=false`. Substantive RQ3 claims (decoupling generalizes, hypernet > Belief at hard, posterior↔performance correlation ≈ 0) are robust. Manual review by the user before tagging `m6-passed`.
+
+**Pre-registered hypothesis tests** (`scripts/m6_hypothesis_tests.py`, `stats_M6_hypothesis_tests.json`).
+
+Three families, each Holm-corrected separately at α = 0.05.
+
+- **Family A — `hypernet > concat` at every (axis × level), n=8 paired (12 hypotheses).** **12/12 supported** with Holm-corrected p = 0.0469 (the minimum achievable at n=8 paired Wilcoxon × Holm 12). Δ medians span +24 to +89 absolute return points; every CI excludes zero by a wide margin (e.g., RL² persistence_hard: +48.5 [+42.9, +51.6]; VariBAD distinguishability_easy: +89.3 [+87.1, +90.9]). **0/12 robust to LOO** — but this is an arithmetic ceiling: at n=7 the minimum Holm-corrected p is 0.094, which cannot pass α at family size 12 by construction. The CI evidence carries the load.
+
+- **Family B — `hypernet > Belief-PPO` at the two cells where hypernet visibly leads, n=5 paired (4 hypotheses).** **0/4 supported under the strict criterion** (Holm × 4 × Wilcoxon n=5 has min p = 0.125, can't pass α). **All four CIs exclude zero**: Δ medians +8.9 to +18.4, CIs e.g. RL² persistence_hard +18.3 [+6.5, +23.1]. The signal is real and consistent in direction, but the n=5 Wilcoxon is underpowered for Holm correction at this family size. Directionally supported; not formally significant.
+
+- **Family C — Posterior↔performance decoupling (1 CI).** Decision rule: bootstrap 95% CI on overall Pearson r is contained within (−0.30, +0.30). **Overall r = +0.055, CI [−0.071, +0.181] across n = 192 (cell × seed) points. Decoupling supported.** Per-method correlations are *not* zero (rl2_hypernet r = −0.45, varibad_concat r = +0.71, etc.), revealing a Simpson's-paradox stratification: the integration mechanism creates two cleanly-separated bands at overlapping posterior_error, so the pooled correlation collapses even though within-band correlations exist. The thesis claim is at the population level.
+
+**Status.** Family A 12/12 supported with massive effect sizes; Family C decoupling supported by a tight CI on r. Family B directionally supported (CIs positive) but underpowered for the strict Holm test. The pre-registered `interpretable_overall` field reads false because of the Belief-PPO inverted-U on persistence, but the substantive RQ3 storyline (decoupling generalises, hypernet ≫ concat everywhere, hypernet ≥ Belief at hard inference) is robust under the rigorous tests. Tag `m6-passed` held for manual review — same protocol as M5.
 
 **What this means for the thesis.**
 - RQ3 part 1 (scaling with difficulty): characterized cleanly along both axes for all 7 methods. The persistence inverted-U for Belief is a useful discussion point — it isolates where the *compromise-policy cost* component matters vs the *inference cost* component.

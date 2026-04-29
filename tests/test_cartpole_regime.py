@@ -33,7 +33,12 @@ _DEFAULT_PARAMS = dict(
     gamma=0.99,
     angular_velocity_noise_std=0.2,
     n_regimes=3,
-    regime_force_magnitude=(5.0, 10.0, 20.0),
+    # r0 favours left, r1 symmetric, r2 favours right
+    regime_action_success=(
+        0.95, 0.30,
+        0.80, 0.80,
+        0.30, 0.95,
+    ),
     transition_matrix=(
         0.98, 0.01, 0.01,
         0.01, 0.98, 0.01,

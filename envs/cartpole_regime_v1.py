@@ -1,23 +1,33 @@
 """Regime-switching CartPole — second POMDP env for the decoupling thesis.
 
-A continuous-state cartpole with HMM-switching force magnitude. The
-agent balances a pole on a cart; on each step it pushes the cart left
-(action 0) or right (action 1). The latent regime governs the
-*magnitude* of that push, so a successful policy must condition its
-control gain on the regime: weak-force regimes need anticipatory or
-more-frequent corrections; strong-force regimes need restraint to
-avoid overshoot.
+A continuous-state cartpole with HMM-switching action-success
+probabilities. The agent balances a pole on a cart; each step it
+chooses to push left (action 0) or right (action 1) at a fixed
+force magnitude (10 N). The latent regime governs the per-direction
+*success probability* — in some regimes leftward pushes are
+reliable but rightward pushes mostly fail, in others the reverse.
+A failed push delivers zero force.
 
-Force-magnitude regimes (rather than gravity regimes) keep the
-regime signal present at every step regardless of pole angle: the
-applied force directly enters θ_ddot via cos(θ), so each observed
-transition is informative. A pure-gravity regime variable would
-silence the signal whenever the policy successfully holds θ near
-zero — exactly the regime R1 (policy divergence) we depend on.
+Why asymmetric stochastic actions. Earlier attempts with regime-
+conditioned gravity, force-magnitude, and wind force all failed R1
+(policy divergence) because cartpole's state observation
+(x, ẋ, θ, θ̇) is itself a sufficient statistic for control: state-
+feedback PPO infers the relevant disturbance within a few steps and
+reacts optimally without needing explicit regime info. Stochastic
+actions break this by making the *direction* of the optimal action
+distribution genuinely regime-dependent — in a regime where right
+pushes mostly fail, the optimal policy must bias toward left even
+when pole tilt would normally call for right. This mirrors the M5
+MarketMakingV1 structure where regime determines which action class
+(sym / favor-ask / favor-bid) is optimal, and the regime-agnostic
+policy is forced to a compromise that bleeds reward.
 
-The analytical posterior is a closed-form Bayesian filter on the
-angular-velocity-change residual (Gaussian under each regime
-hypothesis).
+The analytical posterior is a closed-form Bayesian filter. The
+likelihood under each regime hypothesis is a mixture of two
+Gaussians: P(obs | regime) = p_succeed · N(obs; predicted-applied)
++ (1 − p_succeed) · N(obs; predicted-no-force), capturing the
+two possible underlying force events under that regime's success
+probability for the executed action.
 
 This env satisfies the env-agnostic wrapper contract:
 - exposes `n_regimes`, `initial_distribution`, `transition_matrix`
@@ -52,6 +62,7 @@ _CART_MASS: float = 1.0        # kg
 _TOTAL_MASS: float = _POLE_MASS + _CART_MASS
 _POLE_MASS_LENGTH: float = _POLE_MASS * _POLE_LENGTH_HALF
 _GRAVITY: float = 9.8          # m/s² (Earth; held fixed across regimes)
+_FORCE_MAG: float = 10.0       # N — fixed agent push magnitude per step
 _MAX_X: float = 2.4            # cart-position failure threshold (m)
 _MAX_THETA: float = 12.0 * jnp.pi / 180.0  # pole-angle failure threshold (≈0.209 rad)
 
@@ -89,8 +100,15 @@ class CartPoleRegimeV1:
 
     # Regime-switching HMM. n_regimes=3 is the project standard.
     n_regimes: int = 3
-    # Per-regime push-force magnitude (N). Length n_regimes.
-    regime_force_magnitude: tuple = (5.0, 10.0, 20.0)
+    # Per-(regime, action) probability that the agent's push delivers
+    # force this step. Row-major flat 1D tuple of length
+    # n_regimes * n_actions = 3 * 2 = 6. Index r * n_actions + a.
+    # Default: r0 favours left pushes, r1 symmetric, r2 favours right.
+    regime_action_success: tuple = (
+        0.95, 0.30,
+        0.80, 0.80,
+        0.30, 0.95,
+    )
     # Row-major flat 1D tuple of length n_regimes ** 2.
     transition_matrix: tuple = field(default_factory=tuple)
     initial_distribution: tuple = field(default_factory=tuple)
@@ -98,15 +116,15 @@ class CartPoleRegimeV1:
     lock_regime: int = -1
 
     def __post_init__(self) -> None:
-        for name in ("regime_force_magnitude", "transition_matrix", "initial_distribution"):
+        for name in ("regime_action_success", "transition_matrix", "initial_distribution"):
             v = getattr(self, name)
             if not isinstance(v, tuple):
                 object.__setattr__(self, name, tuple(v))
         n = self.n_regimes
-        if len(self.regime_force_magnitude) != n:
+        if len(self.regime_action_success) != n * N_ACTIONS:
             raise ValueError(
-                f"regime_force_magnitude must have length {n}, got "
-                f"{len(self.regime_force_magnitude)}"
+                f"regime_action_success must have length {n * N_ACTIONS} "
+                f"(n_regimes × n_actions), got {len(self.regime_action_success)}"
             )
         if n > 1:
             if len(self.transition_matrix) != n * n:
@@ -185,6 +203,15 @@ class CartPoleRegimeV1:
         )
         return u[0], u[1], u[2], u[3]
 
+    def _success_probabilities_per_regime(
+        self, action: chex.Array
+    ) -> chex.Array:
+        """P(action succeeds | regime), shape [n_regimes]."""
+        mat = jnp.asarray(self.regime_action_success, dtype=jnp.float32).reshape(
+            self.n_regimes, N_ACTIONS,
+        )
+        return mat[:, action.astype(jnp.int32)]
+
     def _regime_likelihood(
         self,
         theta: chex.Array,
@@ -194,25 +221,37 @@ class CartPoleRegimeV1:
     ) -> chex.Array:
         """P(observed θ-dot transition | regime, prev state, action) — [n_regimes].
 
-        Under regime r the agent's push has magnitude F_r so the
-        predicted θ-dot one step ahead is θ_dot + θ_ddot(F_r) · dt.
-        The observed transition has Gaussian process noise σ², so the
-        likelihood is a Gaussian density on the residual. Returned as
-        un-normalized probabilities (the Bayesian filter normalizes
-        them, so the constant prefactor and global scale cancel). For
-        numerical stability we subtract the max log-likelihood before
-        exp.
+        Mixture of two Gaussians per regime: with probability p_r,a
+        the agent's push of magnitude ±F_MAG is applied this step;
+        with probability 1−p_r,a no force acts. We compute the
+        Gaussian density of the observed θ-dot under each event,
+        weight by the regime-conditional success probability, and
+        sum. Returned as un-normalised probabilities (the Bayesian
+        filter normalises them; constant prefactors cancel). Log-
+        space max-shift for numerical stability.
         """
-        sign = jnp.where(action == 1, 1.0, -1.0)
-        f_per = jnp.asarray(self.regime_force_magnitude, dtype=jnp.float32)
-        # Predicted angular acceleration under each regime's force magnitude.
-        theta_ddot_per = jax.vmap(
-            lambda f: self._angular_acceleration(theta, theta_dot, sign * f)
-        )(f_per)
-        predicted_dot_next = theta_dot + theta_ddot_per * _DT
-        residual = observed_theta_dot_next - predicted_dot_next
+        f_action = jnp.where(action == 1, _FORCE_MAG, -_FORCE_MAG)
+        theta_ddot_succeed = self._angular_acceleration(theta, theta_dot, f_action)
+        theta_ddot_fail = self._angular_acceleration(
+            theta, theta_dot, jnp.asarray(0.0, dtype=jnp.float32),
+        )
+        predicted_succeed = theta_dot + theta_ddot_succeed * _DT
+        predicted_fail = theta_dot + theta_ddot_fail * _DT
         sigma = self.angular_velocity_noise_std
-        log_lik = -0.5 * (residual / sigma) ** 2
+        log_density_succeed = -0.5 * ((observed_theta_dot_next - predicted_succeed) / sigma) ** 2
+        log_density_fail = -0.5 * ((observed_theta_dot_next - predicted_fail) / sigma) ** 2
+
+        p_succ = self._success_probabilities_per_regime(action)
+        # log_lik(r) = logsumexp(log p_r + log_density_succeed,
+        #                       log(1 − p_r) + log_density_fail).
+        # Shape ops keep [n_regimes].
+        eps = 1e-12
+        log_p = jnp.log(jnp.clip(p_succ, eps, 1.0))
+        log_one_minus_p = jnp.log(jnp.clip(1.0 - p_succ, eps, 1.0))
+        a = log_p + log_density_succeed
+        b = log_one_minus_p + log_density_fail
+        m = jnp.maximum(a, b)
+        log_lik = m + jnp.log(jnp.exp(a - m) + jnp.exp(b - m))
         log_lik_shifted = log_lik - jnp.max(log_lik)
         return jnp.exp(log_lik_shifted).astype(jnp.float32)
 
@@ -241,12 +280,20 @@ class CartPoleRegimeV1:
     ) -> tuple[chex.ArrayTree, chex.Array, chex.Array, chex.Array, dict[str, Any]]:
         action = action.astype(jnp.int32)
         regime = state["regime"]
-        force_mag_now = jnp.asarray(
-            self.regime_force_magnitude, dtype=jnp.float32
-        )[regime]
-        force = jnp.where(action == 1, force_mag_now, -force_mag_now)
+        # Determine whether the agent's push succeeds this step under the
+        # true regime's success probability for the chosen direction.
+        success_mat = jnp.asarray(
+            self.regime_action_success, dtype=jnp.float32
+        ).reshape(self.n_regimes, N_ACTIONS)
+        p_success_now = success_mat[regime, action]
+        k_success, k_noise, k_reg, k_init = jax.random.split(key, 4)
+        u = jax.random.uniform(k_success, ())
+        succeeded = u < p_success_now
+        f_action = jnp.where(action == 1, _FORCE_MAG, -_FORCE_MAG)
+        force = jnp.where(succeeded, f_action, jnp.asarray(0.0, dtype=jnp.float32))
 
-        # Forward Euler integration under the true (regime-conditional) force.
+        # Forward Euler integration under the (possibly stochastically
+        # zeroed) action force.
         theta = state["theta"]
         theta_dot = state["theta_dot"]
         theta_ddot = self._angular_acceleration(theta, theta_dot, force)
@@ -256,10 +303,8 @@ class CartPoleRegimeV1:
             - _POLE_MASS_LENGTH * theta_ddot * jnp.cos(theta) / _TOTAL_MASS
         )
 
-        # Process noise on angular velocity. This is what makes the posterior
-        # non-degenerate — without it the first observed transition reveals
-        # the regime exactly.
-        k_noise, k_reg, k_init = jax.random.split(key, 3)
+        # Process noise on angular velocity. This keeps the posterior
+        # non-degenerate even given the action-success Bernoulli signal.
         eps = jax.random.normal(k_noise, ()) * self.angular_velocity_noise_std
 
         x_next = state["x"] + state["x_dot"] * _DT

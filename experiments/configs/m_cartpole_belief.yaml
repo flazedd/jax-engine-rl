@@ -1,0 +1,13 @@
+extends:
+  - base/base_ppo.yaml
+  - envs/e_cartpole_v1.yaml
+experiment_name: m_cartpole_belief
+env:
+  name: cartpole_regime_v1_belief
+agent:
+  name: ppo_belief
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 5
+seed_base: 0

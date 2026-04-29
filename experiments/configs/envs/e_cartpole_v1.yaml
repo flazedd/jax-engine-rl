@@ -1,0 +1,37 @@
+# E_cartpole_v1 — second POMDP env for the decoupling external-validity
+# probe. Regime-switching cartpole with asymmetric stochastic actions:
+# the latent regime governs per-direction push success probability
+# (left-favoured / symmetric / right-favoured). In the left-favoured
+# regime, right pushes mostly fail; the optimal policy must bias
+# toward left pushes regardless of pole tilt. Mirrors MM's
+# regime-conditional action-class structure (sym / favor-ask /
+# favor-bid), giving genuine R1 (policy divergence).
+#
+# regime_action_success is a flat 1D row-major matrix of shape
+# [n_regimes, n_actions] = [3, 2]:
+#   r0: P(left succeeds) = 0.95, P(right succeeds) = 0.30
+#   r1: P(left succeeds) = 0.80, P(right succeeds) = 0.80
+#   r2: P(left succeeds) = 0.30, P(right succeeds) = 0.95
+#
+# diag = 0.98 mirrors the medium difficulty of the MM E_final HMM, so
+# numerical comparisons across the two envs (decoupling effect size,
+# probe accuracy, hypernet-vs-concat margin) are like-for-like.
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.2
+
+    n_regimes: 3
+    regime_action_success: [
+      0.95, 0.30,
+      0.80, 0.80,
+      0.30, 0.95,
+    ]
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

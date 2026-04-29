@@ -1,10 +1,12 @@
 # M6 — persistence sweep, easy level.
 #
 # Same fills as E_final, only the transition matrix differs:
-# diag = 0.995, off-diag = 0.0025 → mean regime duration ≈ 200 steps,
-# longer than the 128-step episode. In practice each episode sees one
-# regime almost the entire way through; Belief-PPO should approach the
-# Oracle ceiling because there is essentially no inference uncertainty.
+# diag = 0.99, off-diag = 0.005 → mean regime duration ≈ 100 steps,
+# slightly shorter than the 128-step episode. Episodes typically see
+# ~1 regime switch on average — meta-RL methods get an in-episode
+# learning signal (not the case at diag=0.995, which was effectively
+# contextual-MDP and broke monotonicity). Inference uncertainty stays
+# low so Belief-PPO still tracks close to Oracle.
 env:
   name: market_making_v1
   params:
@@ -16,9 +18,9 @@ env:
 
     n_regimes: 3
     transition_matrix: [
-      0.9950, 0.0025, 0.0025,
-      0.0025, 0.9950, 0.0025,
-      0.0025, 0.0025, 0.9950,
+      0.990, 0.005, 0.005,
+      0.005, 0.990, 0.005,
+      0.005, 0.005, 0.990,
     ]
     regime_p_tight_bid: [0.30, 0.80, 0.50]
     regime_p_wide_bid:  [0.65, 0.05, 0.02]

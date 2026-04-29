@@ -28,6 +28,10 @@ STEPS: list[tuple[str, list[str]]] = [
         ["uv", "run", "python", "-m", "scripts.m6_posterior_probe"],
     ),
     (
+        "hypothesis tests (Holm-corrected)",
+        ["uv", "run", "python", "-m", "scripts.m6_hypothesis_tests"],
+    ),
+    (
         "plot regeneration (3 RQ3 figures)",
         ["uv", "run", "python", "-m", "plotting.m6_plots"],
     ),

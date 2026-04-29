@@ -31,6 +31,7 @@ from agents.ppo_oracle import PPOOracleAgent
 from agents.ppo_per_regime import PPOPerRegimeAgent
 from agents.rl2 import RL2Agent
 from agents.varibad import VariBADAgent
+from envs.cartpole_regime_v1 import CartPoleRegimeV1
 from envs.market_making_v1 import MarketMakingV1
 from envs.validation.bandit import BanditEnv
 from envs.validation.dummy import DummyEnv
@@ -82,6 +83,16 @@ def _build_env(cfg: ExperimentConfig):
         return BeliefObsEnv(
             inner=MarketMakingV1(**cfg.env.params), constant_belief=True
         )
+    if cfg.env.name == "cartpole_regime_v1":
+        return CartPoleRegimeV1(**cfg.env.params)
+    if cfg.env.name == "cartpole_regime_v1_oracle":
+        return OracleObsEnv(inner=CartPoleRegimeV1(**cfg.env.params))
+    if cfg.env.name == "cartpole_regime_v1_belief":
+        return BeliefObsEnv(inner=CartPoleRegimeV1(**cfg.env.params))
+    if cfg.env.name == "cartpole_regime_v1_stacked":
+        params = dict(cfg.env.params)
+        k = int(params.pop("stack_k", 4))
+        return StackObsEnv(inner=CartPoleRegimeV1(**params), k=k)
     raise ValueError(f"unknown env: {cfg.env.name!r}")
 
 

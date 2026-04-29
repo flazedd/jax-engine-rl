@@ -408,3 +408,87 @@ Three families, each Holm-corrected separately at α = 0.05.
 - The persistence-easy rerun at diag=0.99 (mean duration 100, episode length 128) replaced the original diag=0.995 (mean duration 200) so episodes typically see ~1 regime switch — meta-RL methods now get an in-episode learning signal at easy. This fixed Belief-PPO monotonicity but still leaves the hypernet metric-artifact dip.
 - Probe rolls out the trained policy to collect (belief, regime) pairs. Method test_acc could in principle be inflated if the policy avoids hard-to-decode states — but the analytical reference is rolled on the *same* trajectories, so the comparison is fair.
 
+
+## 2026-04-29 — Second POMDP env build (CartPoleRegimeV1): Phases 1-3 complete, paused before full run
+
+In-progress build of a second regime-switching POMDP environment to externally-validate the M5/M6 hypernet ≫ concat decoupling finding. The motivation is moving from "decoupling shown on market-making" to "decoupling shown on a representative class of regime-switching POMDPs" — the kind of generalisation reviewers will probe.
+
+Total work this session: ~5h coding + ~5min compute, three commits ahead of m6-passed (`b6ba1ef`, `725d7a7`, `802a771`). All 42 prior tests + 7 new cartpole tests green.
+
+**Phase status.**
+
+| Phase | Status | Commit | Notes |
+|---|---|---|---|
+| 1 — env-agnostic wrapper refactor | ✅ done | `b6ba1ef` | `BeliefObsEnv` / `OracleObsEnv` no longer import `MarketMakingV1`; `RL2ObsEnv` / `StackObsEnv` were already generic. Likelihood verified bit-identical to `beliefs.hmm_posterior.likelihood` on 5 representative cases incl. inventory-bound edges. |
+| 2 — `CartPoleRegimeV1` env + 7 tests + train.py wiring | ✅ done | `725d7a7` | Initial implementation with gravity regimes (later replaced — see Phase 3 history). |
+| 3 — env design iteration + R1 verification | ✅ done | `802a771` | Four rounds of regime variable; Round 4 (asymmetric stochastic actions) is the keeper. R1 confirmed at mid-mode. |
+| 4 — full slim run + probe + Family A test + plots + FINDINGS | not started | — | ~half day work + 3-5h compute. Detailed todo below. |
+
+**Phase 1 — wrapper refactor.** The MM-specific posterior code is hard-coded into `BeliefObsEnv`. To plug in any second env, the wrapper had to be generalised. Contract for any env that wants the analytical-posterior wrapper:
+- expose `n_regimes`, `initial_distribution`, `transition_matrix`
+- include `info["regime_likelihood"]: shape [n_regimes]` per step
+
+`MarketMakingV1.step` now adds `info["regime_likelihood"]` from a new helper `_regime_likelihood`, which is bit-identical to the old `beliefs.hmm_posterior.likelihood` (verified on 5 cases). `BeliefObsEnv` does the filter+predict math inline now using `info["regime_likelihood"]` and the env's transition matrix. `OracleObsEnv` had its `inner: MarketMakingV1` annotation generalised to `inner: Any`. All M3/M5/M6 numerical reproducibility preserved.
+
+**Phase 2 — env build.** `envs/cartpole_regime_v1.py` (~250 LOC mirroring `MarketMakingV1`'s structure: frozen dataclass, JIT-safe, HMM transitions, lock_regime support, Gaussian process noise on θ-dot for non-degenerate posterior). 7 tests in `tests/test_cartpole_regime.py` covering shape stability, lock_regime, stationary distribution, regime_likelihood non-negativity, JIT scan rollout, episode reset on done, and analytical-posterior concentration on the locked regime (averaged over 16 seeds because per-episode noise can move the posterior either way for the middle regime). `train.py` registers `cartpole_regime_v1`, `_oracle`, `_belief`, `_stacked` mirroring MM's naming.
+
+**Phase 3 — env design iteration.** This was the time sink of the session. R1 (policy divergence — different optimal policy per regime) is mandatory for the decoupling test to make sense, and it took four design rounds to find a regime variable that gives R1 in cartpole. The key insight, recovered the hard way:
+
+> Cartpole's state observation `(x, ẋ, θ, θ̇)` is itself a sufficient statistic for control. Any regime variable that affects continuous dynamics (gravity, force magnitude, wind force) is rapidly inferred from observed state transitions, so even regime-agnostic state-feedback PPO recovers the regime within a few steps and acts optimally — no explicit regime info needed. R1 fails by construction unless the regime affects something the state cannot reveal.
+
+Round-by-round (mid-mode, 100 iter × 256 envs × n=1):
+
+| Round | Regime variable | Floor | Belief | Oracle | Gap | R1? |
+|---|---|---:|---:|---:|---:|:---:|
+| 1 | gravity (4.9, 9.8, 19.6) m/s² | (not run; failed at locked-posterior test) | | | | ✗ |
+| 2 | force magnitude (5, 10, 20) N | 119 | 119 | 110 | < 1 | ✗ |
+| 3 | wind force (-4, 0, +4) N | 120 | 122 | 121 | < 1.5 | ✗ |
+| **4** | **asymmetric stochastic actions** | **92.6** | **98.3** | **105.5** | **+12.9** | **✓** |
+
+Round 4 — `regime_action_success` matrix with per-(regime, action) Bernoulli success probability:
+- r0: P(left succeeds) = 0.95, P(right succeeds) = 0.30 — right pushes mostly fail
+- r1: P(left succeeds) = 0.80, P(right succeeds) = 0.80 — symmetric
+- r2: P(left succeeds) = 0.30, P(right succeeds) = 0.95 — mirror of r0
+
+This works because the *direction* of optimal action becomes regime-conditional: in r0 the agent must bias toward left pushes regardless of pole tilt, because right pushes mostly fail. Mirrors MM's regime-conditional action-class structure (sym / favor-ask / favor-bid). The likelihood under each regime is now a mixture of two Gaussians: `P(obs | regime) = p_succeed · N(obs; predicted-applied) + (1−p_succeed) · N(obs; predicted-no-force)`, computed in log-space with max-shift for numerical stability.
+
+**R1 verification numbers (Round 4, mid-mode, n=1, 100 iter).**
+
+| Method | Return | Component |
+|---|---:|---|
+| Regime-agnostic PPO | 92.60 | Floor |
+| Belief-PPO | 98.32 | +5.72 (compromise-policy cost) |
+| Oracle-PPO | 105.47 | +7.14 (inference cost), +12.86 total gap |
+
+Effect size is smaller than MM at full budget (gap = 44 in MM medium) but comfortably non-zero. The external-validity claim is "decoupling reproduces", not "with identical magnitude". Still need n=8 × 200 iter to confirm the gap is robust.
+
+**Phase 4 — what's left for next session.**
+
+1. **4 method configs**, each ~10 lines extending the M5 base + pointing at the cartpole env:
+   - `experiments/configs/m_cartpole_rl2_concat.yaml` — extends `m5_step4_rl2_concat.yaml`, env `cartpole_regime_v1` (no wrapper — RL² agent appends its own (action, reward, done) augmentation internally)
+   - `experiments/configs/m_cartpole_rl2_hypernet.yaml` — extends `m5_step4_rl2_hypernet.yaml`
+   - `experiments/configs/m_cartpole_varibad_concat.yaml` — extends `m5_step4_varibad_concat.yaml`
+   - `experiments/configs/m_cartpole_varibad_hypernet.yaml` — extends `m5_step4_varibad_hypernet.yaml`
+2. Super_fast smoke each to verify they wire correctly through `train.py`.
+3. Launch full slim run: 7 cells × n=8 seeds × 200 iter sequential → ~3-5h background.
+4. Adapt `scripts/m6_posterior_probe.py` for the cartpole env. Probably just a config switch + verifying the probe's likelihood is consistent with the env's. The mixture-of-Gaussians likelihood is already in `info["regime_likelihood"]`, so the probe's analytical-reference path needs to use it.
+5. Family A hypothesis test — Holm-corrected over 2 hypotheses (RL² hypernet > concat, VariBAD hypernet > concat at the single difficulty cell), n=8 paired Wilcoxon. Min p at n=8 paired Wilcoxon × Holm 2 = 0.0156, achievable.
+6. Plots: 7-method bar chart with CI bands + posterior-vs-performance scatter (mirroring the M5 / M6 figure styles).
+7. FINDINGS.md entry for the external-validity replication.
+
+**Resume instructions for next session.**
+
+1. Read this entry + `CLAUDE.md` status row.
+2. Verify env is intact: `uv run python -m tests.test_cartpole_regime` — should print 7/7 passed.
+3. Re-verify R1 if you want fresh numbers: `for cfg in m_cartpole_regime_agnostic m_cartpole_belief m_cartpole_oracle; do uv run python -m training.train --config experiments/configs/$cfg.yaml --mid; done`.
+4. Then proceed with Phase 4 step 1 above.
+
+**Key files touched this session.**
+- New: `envs/cartpole_regime_v1.py`, `tests/test_cartpole_regime.py`, `experiments/configs/envs/e_cartpole_v1.yaml`, `experiments/configs/m_cartpole_{regime_agnostic,belief,oracle}.yaml`.
+- Modified: `envs/market_making_v1.py` (added `_regime_likelihood`/`_per_regime_fill_probs` helpers + `info["regime_likelihood"]`), `envs/wrappers/belief_obs.py` (env-agnostic), `envs/wrappers/oracle_obs.py` (env-agnostic), `training/train.py` (registry entries for cartpole).
+- Snapshot tag: `pre-cartpole-refactor` (still on disk; safe to rewind to it if any of this needs to be undone wholesale).
+
+**Caveats / known unknowns.**
+- The smaller R1 gap on cartpole vs MM (12.86 vs 44) means concat may not sit as far below the floor as it does on MM. The decoupling pattern could still hold, but the absolute |Δhypernet−concat| effect size will likely be smaller. That's fine for the external-validity claim — but worth flagging in the eventual FINDINGS entry that effect size depends on env, the qualitative decoupling does not.
+- The cartpole posterior-probe will need its analytical reference adapted to the mixture likelihood. Worth a careful read of `m6_posterior_probe.py` before just running it.
+- Cartpole returns are bounded above by `episode_length = 128` (the upright-bonus ceiling), unlike MM where returns can grow with spread capture. Different scale; not a problem, just different.

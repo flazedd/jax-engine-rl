@@ -1,8 +1,7 @@
-"""OracleObsEnv — wraps an MarketMakingV1, appends the true regime one-hot
-to the observation.
+"""OracleObsEnv — appends the true regime one-hot to the observation.
 
-Used only by Oracle-PPO. Imported via `beliefs/oracle.py` indirection in
-spirit: the wrapper is a sanctioned reader of the regime.
+Wraps any regime-switching env that exposes `n_regimes` and stores the
+true regime under `state["regime"]`. Used only by Oracle-PPO.
 """
 from __future__ import annotations
 
@@ -13,12 +12,10 @@ import chex
 import jax
 import jax.numpy as jnp
 
-from envs.market_making_v1 import MarketMakingV1
-
 
 @dataclass(frozen=True)
 class OracleObsEnv:
-    inner: MarketMakingV1
+    inner: Any  # any env exposing n_regimes and state["regime"]
 
     @property
     def n_inventory_states(self) -> int:
@@ -38,7 +35,7 @@ class OracleObsEnv:
 
     @property
     def gamma(self) -> float:
-        return self.inner.gamma
+        return getattr(self.inner, "gamma", 0.99)
 
     def _augment(self, base_obs: chex.Array, regime: chex.Array) -> chex.Array:
         n_reg = max(1, self.inner.n_regimes)

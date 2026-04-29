@@ -148,6 +148,57 @@ class MarketMakingV1:
         p_ask = jnp.where(ask_tight, pt_ask, pw_ask)
         return p_bid, p_ask
 
+    def _per_regime_fill_probs(self, action: chex.Array) -> tuple[chex.Array, chex.Array]:
+        """P(bid_fill=1|regime,a), P(ask_fill=1|regime,a) — both shape [n_regimes].
+
+        Used by the env-agnostic Belief wrapper to compute the analytical HMM
+        posterior likelihood. Returns raw probabilities (no inventory masking
+        — that is applied per-step using the actual q to mask blocked sides).
+        """
+        n_reg = max(1, self.n_regimes)
+        bid_tight = _TIGHT_MASK_BID[action]
+        ask_tight = _TIGHT_MASK_ASK[action]
+        if self.n_regimes == 1:
+            p_bid = jnp.where(bid_tight, self.p_tight, self.p_wide)
+            p_ask = jnp.where(ask_tight, self.p_tight, self.p_wide)
+            return (
+                jnp.broadcast_to(p_bid.astype(jnp.float32), (n_reg,)),
+                jnp.broadcast_to(p_ask.astype(jnp.float32), (n_reg,)),
+            )
+        pt_bid = jnp.asarray(self.regime_p_tight_bid, dtype=jnp.float32)
+        pw_bid = jnp.asarray(self.regime_p_wide_bid, dtype=jnp.float32)
+        pt_ask = jnp.asarray(self.regime_p_tight_ask, dtype=jnp.float32)
+        pw_ask = jnp.asarray(self.regime_p_wide_ask, dtype=jnp.float32)
+        p_bid = jnp.where(bid_tight, pt_bid, pw_bid)
+        p_ask = jnp.where(ask_tight, pt_ask, pw_ask)
+        return p_bid, p_ask
+
+    def _regime_likelihood(
+        self,
+        action: chex.Array,
+        bid_fill: chex.Array,
+        ask_fill: chex.Array,
+        q: chex.Array,
+    ) -> chex.Array:
+        """P(bid_fill, ask_fill | regime, a, q) — shape [n_regimes].
+
+        Inventory-bounded sides contribute a neutral factor of 1 to the
+        likelihood: bid_ok masks bid likelihood when q == +I_max; ask_ok
+        masks ask likelihood when q == -I_max. This matches the generative
+        process exactly and is the same convention `beliefs.hmm_posterior`
+        uses; we expose it from the env so wrappers stay env-agnostic.
+        """
+        p_bid_raw, p_ask_raw = self._per_regime_fill_probs(action)
+        bid_ok = (q < self.inventory_max).astype(jnp.float32)
+        ask_ok = (q > -self.inventory_max).astype(jnp.float32)
+        p_bid_eff = p_bid_raw * bid_ok
+        p_ask_eff = p_ask_raw * ask_ok
+        bf = bid_fill.astype(jnp.float32)
+        af = ask_fill.astype(jnp.float32)
+        lik_bid = p_bid_eff * bf + (1.0 - p_bid_eff) * (1.0 - bf)
+        lik_ask = p_ask_eff * af + (1.0 - p_ask_eff) * (1.0 - af)
+        return lik_bid * lik_ask
+
     def _sample_regime(self, key: chex.PRNGKey) -> chex.Array:
         if self.lock_regime >= 0:
             return jnp.asarray(self.lock_regime, dtype=jnp.int32)
@@ -244,5 +295,10 @@ class MarketMakingV1:
             "regime_next": regime_next,
             "bid_fill": bid_fill.astype(jnp.int32),
             "ask_fill": ask_fill.astype(jnp.int32),
+            # P(this step's evidence | regime), shape [n_regimes]. Consumed
+            # by the env-agnostic BeliefObsEnv to update the posterior.
+            "regime_likelihood": self._regime_likelihood(
+                action, bid_fill, ask_fill, q
+            ),
         }
         return new_state, obs, reward, done, info

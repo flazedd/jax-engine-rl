@@ -1,12 +1,23 @@
-"""BeliefObsEnv — wraps an MarketMakingV1, appends the analytical HMM posterior
-to the observation.
+"""BeliefObsEnv — env-agnostic analytical-posterior wrapper.
 
-The posterior is tracked in env_state and updated at every step using
-`beliefs.hmm_posterior.full_update`. On episode boundaries (done=True) the
-belief resets to the env's `initial_distribution`.
+Wraps any regime-switching env that exposes:
+- `n_regimes: int`
+- `initial_distribution: tuple` of length `n_regimes`
+- `transition_matrix: tuple` of length `n_regimes ** 2` (row-major)
+- `info["regime_likelihood"]: shape [n_regimes]` from each step
 
-The agent sees `obs = concat(inventory_one_hot, belief_over_regimes)`. This
-is what Belief-PPO consumes.
+The wrapper maintains the analytical HMM posterior in env_state and
+appends it to the observation. Update per step:
+    b_filt(r) ∝ b(r) · P(evidence_t | regime=r)
+    b_pred(r') = sum_r T(r → r') · b_filt(r)
+On `done`, belief is reset to the env's `initial_distribution`.
+
+The agent sees `obs = concat(base_obs, belief_over_regimes)`. This is
+what Belief-PPO consumes.
+
+D2 ablation: if `constant_belief=True`, the agent sees the env's
+`initial_distribution` at every step instead of the live posterior.
+Internal belief tracking still runs so logging stays valid.
 """
 from __future__ import annotations
 
@@ -14,23 +25,28 @@ from dataclasses import dataclass
 from typing import Any
 
 import chex
-import jax
 import jax.numpy as jnp
 
-from beliefs.hmm_posterior import full_update, initial_belief
-from envs.market_making_v1 import MarketMakingV1
+
+def _initial_belief(env: Any) -> chex.Array:
+    return jnp.asarray(env.initial_distribution, dtype=jnp.float32)
+
+
+def _transition_matrix(env: Any) -> chex.Array:
+    n = env.n_regimes
+    return jnp.asarray(env.transition_matrix, dtype=jnp.float32).reshape(n, n)
+
+
+def _filter(belief: chex.Array, likelihood: chex.Array) -> chex.Array:
+    post = belief * likelihood
+    total = jnp.sum(post)
+    return jnp.where(total > 0, post / jnp.maximum(total, 1e-12), belief)
 
 
 @dataclass(frozen=True)
 class BeliefObsEnv:
-    inner: MarketMakingV1
-    # D2 ablation: if True, agent sees `initial_distribution` at every step.
-    # Internal belief tracking still runs so logging is unaffected.
+    inner: Any  # any env exposing the regime-belief support contract above
     constant_belief: bool = False
-
-    @property
-    def n_inventory_states(self) -> int:
-        return self.inner.n_inventory_states
 
     @property
     def obs_size(self) -> int:
@@ -46,46 +62,45 @@ class BeliefObsEnv:
 
     @property
     def gamma(self) -> float:
-        return self.inner.gamma
+        return getattr(self.inner, "gamma", 0.99)
+
+    # Pass-through that several MM-specific scripts rely on. Any env that
+    # exposes `n_inventory_states` will continue to work; envs without it
+    # (e.g. cartpole) won't be hit by those scripts.
+    @property
+    def n_inventory_states(self) -> int:
+        return self.inner.n_inventory_states
 
     def _augment(self, base_obs: chex.Array, belief: chex.Array) -> chex.Array:
         if self.constant_belief:
-            belief = initial_belief(self.inner)
+            belief = _initial_belief(self.inner)
         return jnp.concatenate([base_obs, belief], axis=-1)
 
     def reset(self, key: chex.PRNGKey) -> tuple[chex.ArrayTree, chex.Array]:
         inner_state, base_obs = self.inner.reset(key)
-        b = initial_belief(self.inner)
+        b = _initial_belief(self.inner)
         state = {**inner_state, "belief": b}
         return state, self._augment(base_obs, b)
 
     def step(
         self, state: chex.ArrayTree, action: chex.Array, key: chex.PRNGKey
     ) -> tuple[chex.ArrayTree, chex.Array, chex.Array, chex.Array, dict[str, Any]]:
-        # The inner state keys expected by inner.step are {"q", "t", "regime"}.
-        inner_keys = {"q": state["q"], "t": state["t"], "regime": state["regime"]}
+        # Strip our auxiliary "belief" key out before delegating to inner
+        # so the inner env sees only the keys it expects.
+        inner_state = {k: v for k, v in state.items() if k != "belief"}
         new_inner, base_obs, reward, done, info = self.inner.step(
-            inner_keys, action, key
+            inner_state, action, key
         )
 
-        # Filter the belief using the (action, fills, q) observed this step.
-        # q is the inventory at the *start* of the step (before fills resolved),
-        # which is exactly state["q"]. That is what the likelihood uses to mask
-        # blocked sides.
-        _, b_pred = full_update(
-            state["belief"],
-            self.inner,
-            action,
-            info["bid_fill"],
-            info["ask_fill"],
-            state["q"],
-        )
-        # On episode boundary, reset belief to prior.
-        b_reset = initial_belief(self.inner)
+        # Bayesian filter step: posterior ∝ prior × likelihood.
+        b_filt = _filter(state["belief"], info["regime_likelihood"])
+        # Prediction step for next regime: b_pred(r') = b_filt @ T.
+        T = _transition_matrix(self.inner)
+        b_pred = b_filt @ T
+        b_reset = _initial_belief(self.inner)
         new_belief = jnp.where(done, b_reset, b_pred)
 
         new_state = {**new_inner, "belief": new_belief}
         obs = self._augment(base_obs, new_belief)
-        # Expose belief in info for downstream logging (entropy plots).
         info = {**info, "belief": new_belief}
         return new_state, obs, reward, done, info

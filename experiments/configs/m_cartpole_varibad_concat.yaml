@@ -1,0 +1,21 @@
+# Second-POMDP external-validity probe — VariBAD with concat integration on
+# CartPoleRegimeV1. Mirrors `m5_step4_varibad_concat.yaml`.
+#
+# Note on reward_decoder: cartpole reward is bounded {0, 1} per step rather
+# than the continuous PnL of MM, but Gaussian is kept here to mirror the
+# M5 setup exactly so the cross-env comparison is clean. The decoder is
+# only used for VariBAD's auxiliary reconstruction loss; its
+# misspecification on bounded rewards does not break training.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_cartpole_v1.yaml
+experiment_name: m_cartpole_varibad_concat
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    integration: concat

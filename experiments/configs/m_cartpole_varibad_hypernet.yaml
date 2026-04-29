@@ -1,0 +1,15 @@
+# Second-POMDP external-validity probe — VariBAD with hypernet integration on
+# CartPoleRegimeV1. Mirrors `m5_step4_varibad_hypernet.yaml`.
+extends:
+  - base/base_varibad.yaml
+  - envs/e_cartpole_v1.yaml
+experiment_name: m_cartpole_varibad_hypernet
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    reward_decoder: gaussian
+    integration: hypernet

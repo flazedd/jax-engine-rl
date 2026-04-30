@@ -1,0 +1,25 @@
+# E_cartpole_v1, easy level — strongest within-regime action-success
+# asymmetry. Regime r0's left pushes succeed 98% of the time, right
+# pushes 20%; r2 mirrors. The optimal policy under each off-regime is
+# heavily biased toward one direction; the regime-agnostic policy
+# bleeds badly under any non-neutral regime. Largest expected
+# optimality envelope of the three difficulty levels.
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.2
+
+    n_regimes: 3
+    regime_action_success: [
+      0.98, 0.20,
+      0.80, 0.80,
+      0.20, 0.98,
+    ]
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

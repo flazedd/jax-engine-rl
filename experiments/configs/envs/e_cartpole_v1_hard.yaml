@@ -1,0 +1,31 @@
+# E_cartpole_v1, hard level — weakest within-regime action-success
+# asymmetry. Regime r0's left pushes succeed 90%, right pushes 50%;
+# r2 mirrors. The regime still shifts the optimal action distribution
+# but only modestly, so the regime-agnostic policy's compromise penalty
+# is small. Smallest expected optimality envelope of the three
+# difficulty levels.
+#
+# Initial design used asymmetry 0.20 (left=0.85, right=0.65) but mid-
+# mode R1 failed — Oracle (117.9) landed below Floor (119.7) because
+# the env became too easy for the regime-agnostic policy to balance.
+# Backed off to asymmetry 0.40 to keep the envelope visible while
+# still clearly easier than medium (0.65) and easy (0.78).
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.2
+
+    n_regimes: 3
+    regime_action_success: [
+      0.90, 0.50,
+      0.80, 0.80,
+      0.50, 0.90,
+    ]
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

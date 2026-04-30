@@ -106,8 +106,94 @@ def plot_method_ladder(out_path: Path) -> None:
     print(f"[cartpole_plots] wrote {out_path}", flush=True)
 
 
+_METHOD_LABELS = {
+    "rl2_concat":       "RL² Concat",
+    "rl2_hypernet":     "RL² Hypernet",
+    "varibad_concat":   "VariBAD Concat",
+    "varibad_hypernet": "VariBAD Hypernet",
+}
+
+
+def plot_posterior_vs_performance(out_path: Path) -> bool:
+    """Per-(method, seed) scatter of posterior_error vs gap_closed.
+
+    Mirrors the `figures/milestones/M6/rq3_posterior_vs_performance.png`
+    layout: x = analytical_acc − method_acc (low → method belief
+    decodes regime almost as well as analytical), y = gap_closed
+    (0 = floor, 1 = oracle). Title carries the headline correlation
+    + 95% bootstrap CI."""
+    stats_path = (
+        RESULTS_ROOT / "milestones" / "cartpole"
+        / "stats_cartpole_posterior_vs_performance.json"
+    )
+    if not stats_path.exists():
+        print(f"[cartpole_plots] skip scatter: missing {stats_path}", flush=True)
+        return False
+    with open(stats_path) as f:
+        stats = json.load(f)
+    points = stats.get("scatter_points", [])
+    if not points:
+        return False
+
+    apply_style()
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+
+    by_method: dict[str, list[tuple[float, float]]] = {}
+    for p in points:
+        by_method.setdefault(p["method"], []).append(
+            (float(p["posterior_error"]), float(p["gap_closed"])),
+        )
+
+    method_order = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+    for method in method_order:
+        pts = by_method.get(method)
+        if pts is None:
+            continue
+        xs, ys = zip(*pts)
+        ax.scatter(
+            xs, ys, color=COLORS.get(method, "#666666"),
+            label=_METHOD_LABELS.get(method, method), s=42,
+            edgecolor="black", linewidth=0.5, alpha=0.85,
+        )
+
+    ax.axhline(0.0, color=COLORS["ppo"], linestyle="--", linewidth=1.0,
+               alpha=0.6, label="Floor (gap_closed = 0)")
+    ax.axhline(1.0, color=COLORS["oracle_ppo"], linestyle="--", linewidth=1.0,
+               alpha=0.6, label="Oracle (gap_closed = 1)")
+
+    ax.set_xlabel(
+        "Posterior error  =  analytical HMM probe accuracy  −  method probe accuracy\n"
+        "(low → method belief decodes regime almost as well as analytical)"
+    )
+    ax.set_ylabel(
+        "Gap closed  =  (method return − floor) / (oracle − floor)\n"
+        "(0 = floor, 1 = oracle)"
+    )
+
+    r = stats.get("correlation_overall", float("nan"))
+    ci = stats.get("correlation_overall_ci95", [float("nan"), float("nan")])
+    n = stats.get("n_scatter_points", len(points))
+    ax.set_title(
+        "CartPoleRegimeV1 — posterior quality vs task performance\n"
+        f"Pearson r = {r:+.3f}  CI = [{ci[0]:+.3f}, {ci[1]:+.3f}]  across n = {n} (cell × seed)"
+    )
+
+    ax.legend(**LEGEND_OUTSIDE_RIGHT)
+    budget_annotation(
+        fig,
+        iterations=200, parallel_envs=512, rollout_length=128, num_seeds=8,
+        extra="| 4 meta-RL cells × n=8 seeds = 32 points | classifier=logistic, n_rollouts=200",
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[cartpole_plots] wrote {out_path}", flush=True)
+    return True
+
+
 def main() -> None:
     plot_method_ladder(FIGURES_ROOT / "cartpole_method_ladder.png")
+    plot_posterior_vs_performance(FIGURES_ROOT / "cartpole_posterior_vs_performance.png")
 
 
 if __name__ == "__main__":

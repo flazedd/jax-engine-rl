@@ -642,3 +642,51 @@ The integration mechanism is even more clearly the load-bearing thing than M5/M6
 - Family A and posterior-probe results paint *different* pictures: Family A is "hypernet beats concat by 6-12 points" (qualitative agreement with M5); the probe is "concat decodes better, hypernet performs better" (an inversion of decoding vs performance not present in M5). Both are real and consistent — they describe different relationships. The combined story is "hypernet wins task, concat wins probe, but probe wins are not predictive of task wins".
 
 **Status.** Cartpole external-validity probe is fully complete: ladder + Family A + scatter + decoupling diagnostic. The thesis can now make the cross-env decoupling claim with two independent kinds of evidence (cell-level Family A test + per-seed scatter correlation), each pointing at the same architectural conclusion via different statistics.
+
+## 2026-04-30 — MLP probe falsifies the "linear-probe-blind" interpretation; inversion is real
+
+Direct sanity check on the previous entry's interpretation. The thesis hypothesis was *"hypernet's representation is non-linear/distributed and a logistic probe can't see it"*. Testing this by re-running the same probe with a non-linear MLP classifier (sklearn `MLPClassifier(hidden_layer_sizes=(64,))`) instead of `LogisticRegression`.
+
+If the linear-probe interpretation were correct: MLP would disproportionately help hypernet (recovering its hidden regime info), shrinking or reversing the inversion correlation. Concrete prediction was that |r| would drop, possibly below the 0.30 decoupling threshold.
+
+**Observed (MLP probe, n_rollouts=200, all else identical to the logistic run).**
+
+| Method | Logistic method_acc | MLP method_acc | Δ (MLP − Logistic) |
+|---|---:|---:|---:|
+| RL² Concat | 0.573 | **0.598** | +0.025 |
+| RL² Hypernet | 0.536 | **0.549** | +0.013 |
+| VariBAD Concat | 0.557 | **0.581** | +0.024 |
+| VariBAD Hypernet | 0.515 | **0.539** | +0.024 |
+
+| Stat | Logistic | MLP |
+|---|---|---|
+| Pearson r overall | +0.567 | **+0.639** |
+| 95% bootstrap CI | [+0.329, +0.751] | **[+0.361, +0.837]** |
+| signal_pattern | tight_correlation | tight_correlation |
+
+**The linear-probe interpretation is falsified.** MLP gives all four methods a small near-uniform bump (+0.013 to +0.025), with no preferential help to hypernet. The architectural ordering is preserved (Concat > Hypernet by ~0.05 in probe accuracy, both classifiers); the inversion correlation gets *stronger*, not weaker; and the side-by-side scatter shows the same diagonal cluster-separation pattern in both panels.
+
+Concat genuinely encodes regime more retrievably than Hypernet — both linearly *and* non-linearly. The original "linear-probe-blind" hypothesis was wrong.
+
+**Reformulated thesis claim.** The new interpretation, supported by both probe types:
+
+> Concat learns to *display* the regime; hypernet learns to *act on* it. These are different optimisation targets that produce qualitatively different — and on cartpole, anti-correlated — representations. A probe (whether linear or MLP) measures display; task return measures action; the two are not interchangeable proxies.
+
+The mechanism: concat's regime info enters the policy via concatenation with the state vector, then flows through an MLP. Gradient pressure during PPO training shapes the recurrent / variational state to make regime info *retrievable from the concatenation*, because that is what the downstream MLP needs to read. Hypernet's regime info enters via a parameter-generation network that produces the policy weights themselves; gradient pressure shapes the recurrent state to be useful for *parameter generation*, which is a non-retrievability-preserving transform. The two architectures therefore optimise their hidden representations toward different objectives — even though both nominally "use the regime".
+
+**This is a stronger thesis claim than M5/M6's r ≈ 0**, in two ways:
+
+1. **MM** (M5/M6, r ≈ 0): "decoding accuracy doesn't predict performance." This is consistent with the architectures producing equivalent-quality regime info but using it differently.
+2. **Cartpole** (this entry, r ≈ +0.6 with both probe types): "decoding accuracy *anti-predicts* performance." This rules out the M5/M6-compatible interpretation and forces a stronger one — the architectures produce *qualitatively different* representations whose decodability is itself a misleading proxy.
+
+The MM result is consistent with Cartpole's, but Cartpole's is the load-bearing cross-env claim: *posterior decoding accuracy is fundamentally a misleading proxy for "ability to use the regime productively"*. Even with the most generous probe (MLP), the wrong architecture wins the probe metric.
+
+**Artifacts.**
+- `results/milestones/cartpole/stats_cartpole_posterior_vs_performance_mlp.json` — full MLP probe stats (gitignored).
+- `figures/milestones/cartpole/cartpole_posterior_vs_performance_logistic_vs_mlp.png` — side-by-side scatter showing the inversion survives both probe types.
+- `scripts/cartpole_posterior_probe.py` — added classifier-suffixed output filenames so logistic and MLP results coexist.
+- `plotting/cartpole_plots.py` — added `plot_logistic_vs_mlp_side_by_side`.
+
+**Caveats.**
+- MLP probe `hidden_layer_sizes=(64,)`, `max_iter=200`, with sklearn defaults otherwise. Not tuned for this task. A larger or better-tuned MLP could squeeze more out, but the *direction* of the result (MLP gives a uniform bump, doesn't favour hypernet) makes it unlikely that further tuning would invert the conclusion. Worth confirming with a (128,128) MLP and longer iterations if the thesis review demands it; the gain probably saturates before the inversion flips.
+- The MLP optimiser hit max_iter several times (visible in the script output as ConvergenceWarning). This is sklearn's default behaviour at high-dimensional belief inputs and small training sets; the test accuracy is still computed correctly but the fit is not at its asymptote. Convergence-failed fits would tend to *underestimate* the MLP's representational power — so if MLP is underestimating hypernet's decodability, the true inversion correlation could be smaller than +0.64. Not enough to flip the sign, but worth flagging.

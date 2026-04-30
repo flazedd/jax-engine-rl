@@ -137,8 +137,12 @@ def main() -> int:
 
     out_dir = RESULTS_ROOT / "milestones" / "cartpole"
     out_dir.mkdir(parents=True, exist_ok=True)
-    stats_path = out_dir / "stats_cartpole_posterior_vs_performance.json"
-    summary_path = out_dir / "stats_cartpole_posterior_vs_performance_run.json"
+    # Classifier-suffixed filename so logistic and mlp probes coexist.
+    # The default (logistic) keeps the historical filename so existing
+    # plots and downstream readers continue to work unchanged.
+    suffix = "" if args.classifier == "logistic" else f"_{args.classifier}"
+    stats_path = out_dir / f"stats_cartpole_posterior_vs_performance{suffix}.json"
+    summary_path = out_dir / f"stats_cartpole_posterior_vs_performance{suffix}_run.json"
 
     run = ScriptRun(script="cartpole_posterior_probe")
 

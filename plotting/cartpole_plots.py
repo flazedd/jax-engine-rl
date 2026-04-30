@@ -191,9 +191,94 @@ def plot_posterior_vs_performance(out_path: Path) -> bool:
     return True
 
 
+def plot_logistic_vs_mlp_side_by_side(out_path: Path) -> bool:
+    """Two-panel scatter: logistic-probe (left) vs MLP-probe (right).
+
+    Demonstrates that the inversion (concat decodes better, performs
+    worse) survives moving from a linear classifier to a non-linear one
+    — falsifying the "linear-probe-blind" interpretation of the
+    inverted decoupling. Headline stats live in each panel's title.
+    """
+    paths = {
+        "logistic": (
+            RESULTS_ROOT / "milestones" / "cartpole"
+            / "stats_cartpole_posterior_vs_performance.json"
+        ),
+        "mlp": (
+            RESULTS_ROOT / "milestones" / "cartpole"
+            / "stats_cartpole_posterior_vs_performance_mlp.json"
+        ),
+    }
+    stats_by_clf = {}
+    for clf, p in paths.items():
+        if not p.exists():
+            print(f"[cartpole_plots] skip side-by-side: missing {p}", flush=True)
+            return False
+        with open(p) as f:
+            stats_by_clf[clf] = json.load(f)
+
+    apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(13.0, 5.5), sharey=True)
+    method_order = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+
+    for ax, (clf, stats) in zip(axes, stats_by_clf.items()):
+        by_method: dict[str, list[tuple[float, float]]] = {}
+        for p in stats["scatter_points"]:
+            by_method.setdefault(p["method"], []).append(
+                (float(p["posterior_error"]), float(p["gap_closed"])),
+            )
+        for method in method_order:
+            pts = by_method.get(method)
+            if pts is None:
+                continue
+            xs, ys = zip(*pts)
+            ax.scatter(
+                xs, ys, color=COLORS.get(method, "#666666"),
+                label=_METHOD_LABELS.get(method, method), s=42,
+                edgecolor="black", linewidth=0.5, alpha=0.85,
+            )
+        ax.axhline(0.0, color=COLORS["ppo"], linestyle="--", linewidth=1.0,
+                   alpha=0.6, label="Floor (gap_closed = 0)")
+        ax.axhline(1.0, color=COLORS["oracle_ppo"], linestyle="--", linewidth=1.0,
+                   alpha=0.6, label="Oracle (gap_closed = 1)")
+        r = stats["correlation_overall"]
+        ci = stats["correlation_overall_ci95"]
+        n = stats["n_scatter_points"]
+        clf_label = "logistic regression" if clf == "logistic" else "MLP (1×64)"
+        ax.set_title(
+            f"{clf_label} probe\n"
+            f"r = {r:+.3f}  CI = [{ci[0]:+.3f}, {ci[1]:+.3f}]  n = {n}"
+        )
+        ax.set_xlabel(
+            "Posterior error  =  analytical acc − method acc"
+        )
+    axes[0].set_ylabel(
+        "Gap closed  =  (return − floor) / (oracle − floor)\n(0 = floor, 1 = oracle)"
+    )
+    axes[1].legend(**LEGEND_OUTSIDE_RIGHT)
+    fig.suptitle(
+        "CartPoleRegimeV1 — inverted decoupling survives non-linear probe\n"
+        "(concat decodes better than hypernet under both classifiers; performs worse under both)",
+        y=1.02,
+    )
+    budget_annotation(
+        fig,
+        iterations=200, parallel_envs=512, rollout_length=128, num_seeds=8,
+        extra="| 4 cells × n=8 = 32 points per panel | n_rollouts=200",
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[cartpole_plots] wrote {out_path}", flush=True)
+    return True
+
+
 def main() -> None:
     plot_method_ladder(FIGURES_ROOT / "cartpole_method_ladder.png")
     plot_posterior_vs_performance(FIGURES_ROOT / "cartpole_posterior_vs_performance.png")
+    plot_logistic_vs_mlp_side_by_side(
+        FIGURES_ROOT / "cartpole_posterior_vs_performance_logistic_vs_mlp.png",
+    )
 
 
 if __name__ == "__main__":

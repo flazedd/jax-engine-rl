@@ -273,12 +273,94 @@ def plot_logistic_vs_mlp_side_by_side(out_path: Path) -> bool:
     return True
 
 
+def plot_cross_env_2x2(out_path: Path) -> bool:
+    """2×2 grid (env × probe) showing decoupling-vs-inversion across both
+    envs and both probe classifiers. Top row = MM (decoupling), bottom
+    row = cartpole (inversion). Left column = logistic, right = MLP.
+    The four panels share x and y conventions so the cross-env contrast
+    is visible at a glance."""
+    M6 = REPO_ROOT / "results" / "milestones" / "M6"
+    CP = RESULTS_ROOT / "milestones" / "cartpole"
+    paths = {
+        ("MM", "logistic"): M6 / "stats_M6_posterior_vs_performance.json",
+        ("MM", "mlp"): M6 / "stats_M6_posterior_vs_performance_mlp.json",
+        ("Cartpole", "logistic"): CP / "stats_cartpole_posterior_vs_performance.json",
+        ("Cartpole", "mlp"): CP / "stats_cartpole_posterior_vs_performance_mlp.json",
+    }
+    stats = {}
+    for k, p in paths.items():
+        if not p.exists():
+            print(f"[cartpole_plots] skip 2x2: missing {p}", flush=True)
+            return False
+        with open(p) as f:
+            stats[k] = json.load(f)
+
+    apply_style()
+    fig, axes = plt.subplots(2, 2, figsize=(13.0, 9.0), sharex=False)
+    method_order = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+
+    for row, env in enumerate(("MM", "Cartpole")):
+        for col, clf in enumerate(("logistic", "mlp")):
+            ax = axes[row, col]
+            s = stats[(env, clf)]
+            by_method: dict[str, list[tuple[float, float]]] = {}
+            for p in s["scatter_points"]:
+                by_method.setdefault(p["method"], []).append(
+                    (float(p["posterior_error"]), float(p["gap_closed"])),
+                )
+            for method in method_order:
+                pts = by_method.get(method)
+                if pts is None:
+                    continue
+                xs, ys = zip(*pts)
+                ax.scatter(
+                    xs, ys, color=COLORS.get(method, "#666666"),
+                    label=_METHOD_LABELS.get(method, method) if (row == 0 and col == 1) else None,
+                    s=24, edgecolor="black", linewidth=0.3, alpha=0.75,
+                )
+            ax.axhline(0.0, color=COLORS["ppo"], linestyle="--", linewidth=0.8, alpha=0.5)
+            ax.axhline(1.0, color=COLORS["oracle_ppo"], linestyle="--", linewidth=0.8, alpha=0.5)
+            r = s["correlation_overall"]
+            ci = s.get("correlation_overall_ci95", None)
+            n = s["n_scatter_points"]
+            ci_str = f"  CI [{ci[0]:+.2f}, {ci[1]:+.2f}]" if ci else ""
+            clf_label = "logistic" if clf == "logistic" else "MLP (1×64)"
+            interp = "decoupling" if abs(r) < 0.30 else "inversion"
+            ax.set_title(
+                f"{env} · {clf_label}  ·  r = {r:+.3f}{ci_str}  ·  n = {n}\n"
+                f"({interp})",
+                fontsize=10,
+            )
+            if row == 1:
+                ax.set_xlabel("Posterior error  =  analytical acc − method acc")
+            if col == 0:
+                ax.set_ylabel("Gap closed (0 = floor, 1 = oracle)")
+
+    axes[0, 1].legend(**LEGEND_OUTSIDE_RIGHT)
+    fig.suptitle(
+        "Posterior decoding vs task performance — across two envs and two probe types\n"
+        "MM (top): decoupling under both probes  ·  Cartpole (bottom): inversion under both probes",
+        y=1.0,
+        fontsize=12,
+    )
+    budget_annotation(
+        fig,
+        extra="MM n=192 (24 cells × 8 seeds)  ·  Cartpole n=32 (4 cells × 8 seeds)  ·  n_rollouts=200",
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[cartpole_plots] wrote {out_path}", flush=True)
+    return True
+
+
 def main() -> None:
     plot_method_ladder(FIGURES_ROOT / "cartpole_method_ladder.png")
     plot_posterior_vs_performance(FIGURES_ROOT / "cartpole_posterior_vs_performance.png")
     plot_logistic_vs_mlp_side_by_side(
         FIGURES_ROOT / "cartpole_posterior_vs_performance_logistic_vs_mlp.png",
     )
+    plot_cross_env_2x2(FIGURES_ROOT / "cross_env_decoupling_vs_inversion_2x2.png")
 
 
 if __name__ == "__main__":

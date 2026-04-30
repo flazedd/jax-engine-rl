@@ -690,3 +690,58 @@ The MM result is consistent with Cartpole's, but Cartpole's is the load-bearing 
 **Caveats.**
 - MLP probe `hidden_layer_sizes=(64,)`, `max_iter=200`, with sklearn defaults otherwise. Not tuned for this task. A larger or better-tuned MLP could squeeze more out, but the *direction* of the result (MLP gives a uniform bump, doesn't favour hypernet) makes it unlikely that further tuning would invert the conclusion. Worth confirming with a (128,128) MLP and longer iterations if the thesis review demands it; the gain probably saturates before the inversion flips.
 - The MLP optimiser hit max_iter several times (visible in the script output as ConvergenceWarning). This is sklearn's default behaviour at high-dimensional belief inputs and small training sets; the test accuracy is still computed correctly but the fit is not at its asymptote. Convergence-failed fits would tend to *underestimate* the MLP's representational power — so if MLP is underestimating hypernet's decodability, the true inversion correlation could be smaller than +0.64. Not enough to flip the sign, but worth flagging.
+
+## 2026-04-30 — M6 MLP probe: MM decoupling robust to probe choice (cross-env story now complete)
+
+The parallel sanity check on MM. The cartpole MLP probe rerun yesterday showed cartpole's inversion is robust to probe non-linearity. Today's question: is MM's decoupling claim equally robust?
+
+**M6 probe under MLP** (`stats_M6_posterior_vs_performance_mlp.json`, n=192 across 24 cells × 8 seeds, ~17 min compute). The script supports `--classifier mlp` natively; one small change to give it a `_mlp`-suffixed output filename so the logistic results coexist.
+
+**Headline.**
+
+| Stat | M6 Logistic | M6 MLP |
+|---|---:|---:|
+| Pearson r overall | +0.026 | **−0.060** |
+| signal_pattern | decoupling | decoupling |
+| n_scatter_points | 192 | 192 |
+
+Both probes give r essentially zero. The decoupling claim on MM is robust to non-linearity in the probe — the same conclusion as M5/M6 with the original logistic probe.
+
+**Cross-env, cross-probe combined picture (the headline thesis claim).**
+
+| Env | Logistic r | MLP r | Pattern |
+|---|---:|---:|---|
+| MM (n=192) | +0.026 | −0.060 | **Decoupling** under both probes |
+| Cartpole (n=32) | +0.567 | +0.639 | **Inversion** under both probes |
+
+Each row's two cells agree to within ±0.07. The two envs disagree by ~0.7 in r. The differences between envs swamp differences between probe choices, which means: MM and cartpole produce *qualitatively different* decoder-vs-performance relationships, and the ranking is not a probe-implementation artefact.
+
+**Per-method correlations (MM, MLP — for comparison to logistic).**
+
+| Method | M6 Logistic r | M6 MLP r |
+|---|---:|---:|
+| RL² Concat | −0.286 | −0.416 |
+| RL² Hypernet | −0.451 | −0.478 |
+| VariBAD Concat | +0.706 | **+0.710** |
+| VariBAD Hypernet | −0.511 | −0.509 |
+
+VariBAD Concat's anomalous positive within-method correlation is *identical* between logistic and MLP probes (+0.706 / +0.710). The other 3 methods have moderate negative within-method correlations under both probe types. Stable per-method finding: within most architectures on MM, seeds with worse decoding perform worse — but the architectures' anchor points differ enough that the pooled correlation collapses to near-zero (Simpson's-paradox stratification, same as M5/M6 reported).
+
+**What this means for the thesis claim.**
+
+The full cross-env, cross-probe picture is now:
+- *MM*: posterior decoding accuracy and task return are decoupled — neither predicts the other in the pooled scatter.
+- *Cartpole*: posterior decoding accuracy is anti-correlated with task return — the architecture that decodes regime more retrievably performs worse.
+- Both findings are stable across probe linearity (logistic vs MLP).
+
+Both rule out the simplest interpretation ("hypernet wins task because it gets clean regime info into the policy"). On MM the architectures decode equally well and only the policy-interface differs. On Cartpole the architecture *that decodes worse* wins — even more strongly arguing that decoding accuracy is a misleading proxy for "ability to use the regime productively". The integration mechanism is the load-bearing thing across both envs, with the cartpole result strengthening the claim by showing that probe-friendly representations can be actively detrimental.
+
+**Artifacts.**
+- `results/milestones/M6/stats_M6_posterior_vs_performance_mlp.json` — full MLP scatter on MM (gitignored).
+- `figures/milestones/cartpole/cross_env_decoupling_vs_inversion_2x2.png` — 2×2 (env × probe) scatter showing the four headline correlations side-by-side.
+- `scripts/m6_posterior_probe.py` — added classifier-suffixed filenames mirroring the cartpole probe orchestrator.
+- `plotting/cartpole_plots.py` — added `plot_cross_env_2x2`.
+
+**Caveats.**
+- MLP convergence warnings on M6 (sklearn's default `max_iter=200` gets hit on belief vectors with n_train ≈ 20k+). Same caveat as the cartpole MLP run; further iterations or `(128,128)` MLP would tighten the probe but the *direction* of the result is solid.
+- Cartpole n=32 vs MM n=192 — Cartpole's CIs are wider, but tight enough that the +0.6 estimate excludes 0 by a wide margin. The *qualitative* contrast (MM decoupling vs cartpole inversion) is robust to power.

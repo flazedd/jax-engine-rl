@@ -41,20 +41,23 @@ RESULTS_ROOT = REPO_ROOT / "results"
 
 PROBED_METHODS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
 LEVELS = ("easy", "medium", "hard")
+AXES = ("asymmetry", "persistence")
 
 
-def _experiment_name(method: str, level: str) -> str:
-    """Medium reuses the historical m_cartpole_<method> dirs from the
-    Phase-4 build; easy / hard get level-suffixed names from the sweep."""
+def _experiment_name(method: str, level: str, axis: str = "asymmetry") -> str:
+    """Medium reuses the historical m_cartpole_<method> dirs (shared
+    across axes). Easy / hard for asymmetry get the legacy
+    m_cartpole_<method>_<level>; for persistence get
+    m_cartpole_<method>_persistence_<level>."""
     if level == "medium":
         return f"m_cartpole_{method}"
-    return f"m_cartpole_{method}_{level}"
+    if axis == "asymmetry":
+        return f"m_cartpole_{method}_{level}"
+    return f"m_cartpole_{method}_{axis}_{level}"
 
 
-def _reference_name(method: str, level: str) -> str:
-    if level == "medium":
-        return f"m_cartpole_{method}"
-    return f"m_cartpole_{method}_{level}"
+def _reference_name(method: str, level: str, axis: str = "asymmetry") -> str:
+    return _experiment_name(method, level, axis)
 
 
 def _gap_closed_per_seed(
@@ -154,19 +157,25 @@ def main() -> int:
              "(historical Phase-4 behaviour). Pass `--levels easy medium "
              "hard` for the full sweep probe.",
     )
+    parser.add_argument(
+        "--axis", choices=AXES, default="asymmetry",
+        help="Which difficulty axis the level names refer to. Default "
+             "'asymmetry' (legacy single-axis behaviour). 'persistence' "
+             "looks up persistence-axis experiment dirs.",
+    )
     args = parser.parse_args()
 
     out_dir = RESULTS_ROOT / "milestones" / "cartpole"
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Classifier-suffixed filename so logistic and mlp probes coexist.
-    # If the run is a multi-level sweep, also tag the filename with
-    # `_sweep` so it doesn't collide with the historical single-cell
-    # output.
+    # Classifier-, sweep-, and axis-suffixed filename so all variants
+    # coexist on disk.
     is_sweep = set(args.levels) != {"medium"}
     sweep_suffix = "_sweep" if is_sweep else ""
+    axis_suffix = "" if args.axis == "asymmetry" else f"_{args.axis}"
     cls_suffix = "" if args.classifier == "logistic" else f"_{args.classifier}"
-    stats_path = out_dir / f"stats_cartpole_posterior_vs_performance{sweep_suffix}{cls_suffix}.json"
-    summary_path = out_dir / f"stats_cartpole_posterior_vs_performance{sweep_suffix}{cls_suffix}_run.json"
+    base = f"stats_cartpole_posterior_vs_performance{sweep_suffix}{axis_suffix}{cls_suffix}"
+    stats_path = out_dir / f"{base}.json"
+    summary_path = out_dir / f"{base}_run.json"
 
     run = ScriptRun(script="cartpole_posterior_probe")
 
@@ -178,8 +187,8 @@ def main() -> int:
     ref_cache: dict[str, tuple[float, float]] = {}
 
     for level in args.levels:
-        floor_exp = _reference_name("regime_agnostic", level)
-        oracle_exp = _reference_name("oracle", level)
+        floor_exp = _reference_name("regime_agnostic", level, args.axis)
+        oracle_exp = _reference_name("oracle", level, args.axis)
         floor_returns = _load_per_seed_returns(floor_exp)
         oracle_returns = _load_per_seed_returns(oracle_exp)
         floor_mean = float(np.mean(floor_returns))
@@ -187,7 +196,7 @@ def main() -> int:
         ref_cache[level] = (floor_mean, oracle_mean)
 
         for method in PROBED_METHODS:
-            experiment_name = _experiment_name(method, level)
+            experiment_name = _experiment_name(method, level, args.axis)
             try:
                 probe = _probe_cell(
                     experiment_name,
@@ -209,6 +218,7 @@ def main() -> int:
                 probe["analytical_test_acc_per_seed"], gc_per_seed,
             ):
                 scatter_points.append({
+                    "axis": args.axis,
                     "level": level,
                     "method": method,
                     "experiment_name": experiment_name,

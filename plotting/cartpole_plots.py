@@ -508,6 +508,157 @@ def plot_difficulty_sweep_scatter(out_path: Path) -> bool:
     return True
 
 
+def plot_axis_returns(out_path: Path, axis: str) -> bool:
+    """7-method × 3-level line plot for a given difficulty axis."""
+    levels = ("easy", "medium", "hard")
+    methods = (
+        "regime_agnostic", "belief", "oracle",
+        "rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet",
+    )
+
+    def get_seeds(method: str, level: str) -> np.ndarray:
+        if level == "medium":
+            name = f"m_cartpole_{method}"
+        elif axis == "asymmetry":
+            name = f"m_cartpole_{method}_{level}"
+        else:
+            name = f"m_cartpole_{method}_{axis}_{level}"
+        with open(RESULTS_ROOT / name / "metrics.json") as f:
+            return np.asarray(json.load(f)["per_seed_final_return"], dtype=float)
+
+    means = {m: [float(get_seeds(m, l).mean()) for l in levels] for m in methods}
+    cis = {}
+    for m in methods:
+        cis[m] = []
+        for l in levels:
+            arr = get_seeds(m, l)
+            rng = np.random.default_rng(0)
+            boot = rng.choice(arr, size=(10_000, arr.size), replace=True).mean(axis=1)
+            cis[m].append((float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))))
+
+    apply_style()
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    xs = np.arange(len(levels))
+
+    plot_order = (
+        ("oracle",           "Oracle-PPO",        COLORS["oracle_ppo"], "--"),
+        ("belief",           "Belief-PPO",        COLORS["belief_ppo"], "--"),
+        ("regime_agnostic",  "Regime-agnostic",   COLORS["ppo"],        "--"),
+        ("rl2_hypernet",     "RL² Hypernet",      COLORS["rl2_hypernet"], "-"),
+        ("varibad_hypernet", "VariBAD Hypernet",  COLORS["varibad_hypernet"], "-"),
+        ("rl2_concat",       "RL² Concat",        COLORS["rl2_concat"], "-"),
+        ("varibad_concat",   "VariBAD Concat",    COLORS["varibad_concat"], "-"),
+    )
+    for key, label, color, linestyle in plot_order:
+        ys = means[key]
+        lo = np.array([c[0] for c in cis[key]])
+        hi = np.array([c[1] for c in cis[key]])
+        ax.plot(xs, ys, marker="o", color=color, linewidth=1.6,
+                linestyle=linestyle, label=label)
+        ax.fill_between(xs, lo, hi, color=color, alpha=0.15, linewidth=0)
+
+    axis_label = (
+        "Within-regime asymmetry strength (easy=0.78, medium=0.65, hard=0.40)"
+        if axis == "asymmetry"
+        else "HMM persistence — diagonal (easy=0.99, medium=0.98, hard=0.92)"
+    )
+    ax.set_xticks(xs)
+    ax.set_xticklabels([l.capitalize() for l in levels])
+    ax.set_xlabel(f"Difficulty: {axis_label}")
+    ax.set_ylabel("Mean episode return")
+    ax.set_title(
+        f"CartPoleRegimeV1 — {axis} sweep\n"
+        f"Hypernet beats Concat at every level (Family A 6/6 Holm-supported, LOO-robust)"
+    )
+    ax.legend(**LEGEND_OUTSIDE_RIGHT)
+    budget_annotation(
+        fig,
+        iterations=200, parallel_envs=512, rollout_length=128,
+        extra="| 7 methods × 3 levels | refs n=5, meta-RL n=8 | shaded = 95% bootstrap CI",
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[cartpole_plots] wrote {out_path}", flush=True)
+    return True
+
+
+def plot_two_axis_scatter_grid(out_path: Path) -> bool:
+    """4×3 grid: rows = (asymmetry-logistic, asymmetry-mlp,
+    persistence-logistic, persistence-mlp); columns = (easy, medium,
+    hard). 12 panels total. Headline figure for the cartpole
+    cross-axis robustness claim."""
+    cp = RESULTS_ROOT / "milestones" / "cartpole"
+    sources = (
+        ("Asymmetry · logistic",   cp / "stats_cartpole_posterior_vs_performance_sweep.json"),
+        ("Asymmetry · MLP",        cp / "stats_cartpole_posterior_vs_performance_sweep_mlp.json"),
+        ("Persistence · logistic", cp / "stats_cartpole_posterior_vs_performance_sweep_persistence.json"),
+        ("Persistence · MLP",      cp / "stats_cartpole_posterior_vs_performance_sweep_persistence_mlp.json"),
+    )
+    stats_by = {}
+    for label, p in sources:
+        if not p.exists():
+            print(f"[cartpole_plots] skip 4x3 grid: missing {p}", flush=True)
+            return False
+        with open(p) as f:
+            stats_by[label] = json.load(f)
+
+    apply_style()
+    fig, axes = plt.subplots(4, 3, figsize=(14.0, 16.0), sharey=True)
+    method_order = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+    levels = ("easy", "medium", "hard")
+
+    for row, (label, _) in enumerate(sources):
+        s = stats_by[label]
+        by_level: dict[str, dict[str, list[tuple[float, float]]]] = {}
+        for p in s["scatter_points"]:
+            by_level.setdefault(p["level"], {}).setdefault(p["method"], []).append(
+                (float(p["posterior_error"]), float(p["gap_closed"])),
+            )
+        for col, level in enumerate(levels):
+            ax = axes[row, col]
+            for method in method_order:
+                pts = by_level.get(level, {}).get(method)
+                if pts is None:
+                    continue
+                xs, ys = zip(*pts)
+                show_legend = (row == 0 and col == 2)
+                ax.scatter(
+                    xs, ys, color=COLORS.get(method, "#666666"),
+                    label=_METHOD_LABELS.get(method, method) if show_legend else None,
+                    s=24, edgecolor="black", linewidth=0.3, alpha=0.8,
+                )
+            ax.axhline(0.0, color=COLORS["ppo"], linestyle="--", linewidth=0.7, alpha=0.5)
+            ax.axhline(1.0, color=COLORS["oracle_ppo"], linestyle="--", linewidth=0.7, alpha=0.5)
+            xs_all = [x for m in method_order for x, _ in by_level.get(level, {}).get(m, [])]
+            ys_all = [y for m in method_order for _, y in by_level.get(level, {}).get(m, [])]
+            if len(xs_all) >= 3 and np.std(xs_all) > 0 and np.std(ys_all) > 0:
+                r_cell = float(np.corrcoef(xs_all, ys_all)[0, 1])
+            else:
+                r_cell = float("nan")
+            if col == 0:
+                ax.set_ylabel(f"{label}\nGap closed")
+            ax.set_title(f"{level.capitalize()}  ·  r = {r_cell:+.3f}", fontsize=10)
+            if row == 3:
+                ax.set_xlabel("Posterior error")
+
+    axes[0, 2].legend(**LEGEND_OUTSIDE_RIGHT)
+    fig.suptitle(
+        "CartPoleRegimeV1 — posterior decoding vs task performance across both difficulty axes\n"
+        "Inversion robust at every level on both axes  ·  attenuates only where envelope is smallest (asymmetry-hard)",
+        fontsize=12,
+    )
+    budget_annotation(
+        fig,
+        extra="12 panels (2 axes × 2 probes × 3 levels) · n=32 per panel · n_rollouts=200",
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[cartpole_plots] wrote {out_path}", flush=True)
+    return True
+
+
 def main() -> None:
     plot_method_ladder(FIGURES_ROOT / "cartpole_method_ladder.png")
     plot_posterior_vs_performance(FIGURES_ROOT / "cartpole_posterior_vs_performance.png")
@@ -517,6 +668,12 @@ def main() -> None:
     plot_cross_env_2x2(FIGURES_ROOT / "cross_env_decoupling_vs_inversion_2x2.png")
     plot_difficulty_sweep_returns(FIGURES_ROOT / "cartpole_difficulty_sweep_returns.png")
     plot_difficulty_sweep_scatter(FIGURES_ROOT / "cartpole_difficulty_sweep_scatter.png")
+    plot_axis_returns(
+        FIGURES_ROOT / "cartpole_persistence_sweep_returns.png", "persistence",
+    )
+    plot_two_axis_scatter_grid(
+        FIGURES_ROOT / "cartpole_two_axis_scatter_grid.png",
+    )
 
 
 if __name__ == "__main__":

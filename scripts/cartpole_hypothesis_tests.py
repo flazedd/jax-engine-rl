@@ -23,10 +23,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 
 
-def _load_seeds(method: str, level: str = "medium") -> np.ndarray:
-    """Medium reuses the historical m_cartpole_<method> dirs; easy /
-    hard get level-suffixed names from the difficulty sweep."""
-    name = f"m_cartpole_{method}" if level == "medium" else f"m_cartpole_{method}_{level}"
+def _load_seeds(method: str, level: str = "medium", axis: str = "asymmetry") -> np.ndarray:
+    """Medium reuses the historical m_cartpole_<method> dirs (shared
+    across axes). Asymmetry easy / hard use the legacy
+    m_cartpole_<method>_<level> names; persistence easy / hard use
+    m_cartpole_<method>_persistence_<level>."""
+    if level == "medium":
+        name = f"m_cartpole_{method}"
+    elif axis == "asymmetry":
+        name = f"m_cartpole_{method}_{level}"
+    else:
+        name = f"m_cartpole_{method}_{axis}_{level}"
     p = RESULTS_ROOT / name / "metrics.json"
     with open(p) as f:
         m = json.load(f)
@@ -69,15 +76,22 @@ def main() -> int:
              "Pass `--levels easy medium hard` for the difficulty sweep "
              "(family-of-6 Holm correction).",
     )
+    parser.add_argument(
+        "--axis", choices=("asymmetry", "persistence"), default="asymmetry",
+        help="Which difficulty axis the easy / hard levels refer to. "
+             "Default 'asymmetry'. 'persistence' looks up the persistence-"
+             "axis cells.",
+    )
     args = parser.parse_args()
 
     run = ScriptRun(script="cartpole_hypothesis_tests")
     out_dir = RESULTS_ROOT / "milestones" / "cartpole"
     out_dir.mkdir(parents=True, exist_ok=True)
     is_sweep = set(args.levels) != {"medium"}
-    suffix = "_sweep" if is_sweep else ""
-    stats_path = out_dir / f"stats_cartpole_hypothesis_tests{suffix}.json"
-    summary_path = out_dir / f"stats_cartpole_hypothesis_tests{suffix}_run.json"
+    sweep_suffix = "_sweep" if is_sweep else ""
+    axis_suffix = "" if args.axis == "asymmetry" else f"_{args.axis}"
+    stats_path = out_dir / f"stats_cartpole_hypothesis_tests{sweep_suffix}{axis_suffix}.json"
+    summary_path = out_dir / f"stats_cartpole_hypothesis_tests{sweep_suffix}{axis_suffix}_run.json"
 
     t0 = time.perf_counter()
 
@@ -86,11 +100,11 @@ def main() -> int:
     methods_by_level: dict[str, dict[str, np.ndarray]] = {}
     for level in args.levels:
         references_by_level[level] = {
-            m: _load_seeds(m, level)
+            m: _load_seeds(m, level, args.axis)
             for m in ("regime_agnostic", "belief", "oracle")
         }
         methods_by_level[level] = {
-            m: _load_seeds(m, level)
+            m: _load_seeds(m, level, args.axis)
             for m in ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
         }
 

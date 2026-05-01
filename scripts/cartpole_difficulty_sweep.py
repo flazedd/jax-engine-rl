@@ -52,12 +52,22 @@ METHODS: list[tuple[str, str]] = [
 ]
 REFERENCE_METHODS = {"regime_agnostic", "belief", "oracle"}
 LEVELS = ("easy", "medium", "hard")
+AXES = ("asymmetry", "persistence")
 
 
-def _load_env_params(level: str) -> dict[str, Any]:
-    """Medium reuses the historical e_cartpole_v1.yaml; easy / hard get
-    their own files."""
-    fname = "e_cartpole_v1.yaml" if level == "medium" else f"e_cartpole_v1_{level}.yaml"
+def _load_env_params(axis: str, level: str) -> dict[str, Any]:
+    """Medium is shared across both axes (same env config, same trained
+    cells). Easy / hard read from axis-specific YAMLs.
+
+    Asymmetry axis (legacy naming): `e_cartpole_v1_<level>.yaml`.
+    Persistence axis: `e_cartpole_v1_persistence_<level>.yaml`.
+    """
+    if level == "medium":
+        fname = "e_cartpole_v1.yaml"
+    elif axis == "asymmetry":
+        fname = f"e_cartpole_v1_{level}.yaml"
+    else:
+        fname = f"e_cartpole_v1_{axis}_{level}.yaml"
     env_yaml = CONFIG_ROOT / "envs" / fname
     if not env_yaml.exists():
         raise FileNotFoundError(f"missing cartpole env config: {env_yaml}")
@@ -66,19 +76,28 @@ def _load_env_params(level: str) -> dict[str, Any]:
     return d["env"]["params"]
 
 
-def _experiment_name(method: str, level: str) -> str:
-    """Medium cells reuse the historical `m_cartpole_<method>` paths so
-    we do not retrain them. Easy / hard cells get level-suffixed names."""
+def _experiment_name(method: str, axis: str, level: str) -> str:
+    """Medium cells reuse the historical `m_cartpole_<method>` paths
+    (shared across axes — the env at medium is identical for both).
+
+    Asymmetry easy/hard reuse the legacy `m_cartpole_<method>_<level>`
+    naming from the original asymmetry sweep so we do not retrain.
+
+    Persistence easy/hard get axis-prefixed names so they coexist with
+    the asymmetry runs in `results/`.
+    """
     if level == "medium":
         return f"m_cartpole_{method}"
-    return f"m_cartpole_{method}_{level}"
+    if axis == "asymmetry":
+        return f"m_cartpole_{method}_{level}"
+    return f"m_cartpole_{method}_{axis}_{level}"
 
 
-def _build_cell_cfg(method: str, base_yaml: str, level: str, mode: str):
+def _build_cell_cfg(method: str, base_yaml: str, axis: str, level: str, mode: str):
     cfg = load_config(CONFIG_ROOT / base_yaml)
     apply_run_mode(cfg, mode)
-    cfg.env.params = copy.deepcopy(_load_env_params(level))
-    cfg.experiment_name = _experiment_name(method, level)
+    cfg.env.params = copy.deepcopy(_load_env_params(axis, level))
+    cfg.experiment_name = _experiment_name(method, axis, level)
     return cfg
 
 
@@ -159,9 +178,9 @@ def _per_level_summary(by_level: dict[str, dict[str, dict]]) -> dict[str, Any]:
 
 
 def _train_cell(
-    method: str, base_yaml: str, level: str, mode: str, skip_existing: bool,
+    method: str, base_yaml: str, axis: str, level: str, mode: str, skip_existing: bool,
 ) -> dict[str, Any] | None:
-    cfg = _build_cell_cfg(method, base_yaml, level, mode)
+    cfg = _build_cell_cfg(method, base_yaml, axis, level, mode)
     if skip_existing:
         existing = _read_metrics(cfg.experiment_name)
         if existing and existing.get("iterations", 0) >= cfg.iterations:
@@ -219,6 +238,11 @@ def main() -> int:
     parser.add_argument("--refs-only", action="store_true",
                         help="train only the 3 reference methods (gate before full)")
     parser.add_argument("--levels", nargs="+", choices=LEVELS, default=list(LEVELS))
+    parser.add_argument("--axis", choices=AXES, default="asymmetry",
+                        help="Which difficulty axis to sweep. Default 'asymmetry' "
+                             "(legacy single-axis behaviour). 'persistence' sweeps "
+                             "the HMM transition diagonal, mirroring M6's persistence "
+                             "axis on MM.")
     parser.add_argument("--no-skip-existing", action="store_true")
     args = parser.parse_args()
     if sum([args.super_fast, args.fast, args.mid]) > 1:
@@ -237,12 +261,15 @@ def main() -> int:
     run = ScriptRun(script="cartpole_difficulty_sweep", run_mode=mode)
     out_dir = RESULTS_ROOT / "milestones" / "cartpole"
     out_dir.mkdir(parents=True, exist_ok=True)
-    stats_path = out_dir / "stats_cartpole_sweep.json"
-    summary_path = out_dir / "stats_cartpole_sweep_run.json"
+    # Per-axis stats filename so the asymmetry and persistence sweeps
+    # coexist on disk (default 'asymmetry' keeps the legacy filename).
+    axis_suffix = "" if args.axis == "asymmetry" else f"_{args.axis}"
+    stats_path = out_dir / f"stats_cartpole_sweep{axis_suffix}.json"
+    summary_path = out_dir / f"stats_cartpole_sweep{axis_suffix}_run.json"
 
     t_start = time.perf_counter()
     print(
-        f"[cp_sweep] start: methods={[m for m,_ in methods_to_run]}, "
+        f"[cp_sweep] start: axis={args.axis}, methods={[m for m,_ in methods_to_run]}, "
         f"levels={args.levels}, mode={mode}, skip_existing={skip_existing}",
         flush=True,
     )
@@ -251,7 +278,7 @@ def main() -> int:
     failed: list[str] = []
     for level in args.levels:
         for method, base_yaml in methods_to_run:
-            cell = _train_cell(method, base_yaml, level, mode, skip_existing)
+            cell = _train_cell(method, base_yaml, args.axis, level, mode, skip_existing)
             if cell is None:
                 failed.append(f"{method}/{level}")
                 continue
@@ -267,6 +294,7 @@ def main() -> int:
     summary = _per_level_summary(results)
     stats = {
         "env_version_medium": "e_cartpole_v1",
+        "axis": args.axis,
         "levels": list(args.levels),
         "methods": [m for m, _ in methods_to_run],
         "run_mode": mode,

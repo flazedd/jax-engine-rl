@@ -1,0 +1,32 @@
+# E_cartpole_v1, persistence-hard level — same fills as the asymmetry-
+# medium cell, transition matrix has diag = 0.92, off-diag = 0.04 →
+# mean regime duration ≈ 12.5 steps. Each 128-step episode sees ~10
+# regime changes, so a method must infer the current regime from a
+# short observation window before it switches again.
+#
+# Initial design used diag=0.85 (mean duration 6.7) but mid-mode R1
+# failed — Belief (106.77) and Oracle (107.71) both landed below
+# Floor (110.81) because regimes switched faster than the analytical
+# posterior could track them, and the regime-agnostic policy's
+# committed balance strategy outperformed the regime-conditional
+# methods' attempts to react. Backed off to diag=0.92 to keep R1
+# while still clearly faster-switching than medium (diag=0.98).
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.2
+
+    n_regimes: 3
+    regime_action_success: [
+      0.95, 0.30,
+      0.80, 0.80,
+      0.30, 0.95,
+    ]
+    transition_matrix: [
+      0.92, 0.04, 0.04,
+      0.04, 0.92, 0.04,
+      0.04, 0.04, 0.92,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

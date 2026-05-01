@@ -1,0 +1,26 @@
+# E_cartpole_v1, persistence-easy level — same fills as the asymmetry-
+# medium cell (regime_action_success unchanged), only the transition
+# matrix differs. diag = 0.99, off-diag = 0.005 → mean regime duration
+# ≈ 100 steps, slightly shorter than the 128-step episode. Episodes
+# typically see ~1 regime switch on average — meta-RL methods get an
+# in-episode learning signal at easy. Mirrors M6's persistence-easy
+# design (also diag=0.99) so the cross-env axis comparison is direct.
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.2
+
+    n_regimes: 3
+    regime_action_success: [
+      0.95, 0.30,
+      0.80, 0.80,
+      0.30, 0.95,
+    ]
+    transition_matrix: [
+      0.990, 0.005, 0.005,
+      0.005, 0.990, 0.005,
+      0.005, 0.005, 0.990,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

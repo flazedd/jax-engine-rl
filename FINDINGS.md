@@ -745,3 +745,89 @@ Both rule out the simplest interpretation ("hypernet wins task because it gets c
 **Caveats.**
 - MLP convergence warnings on M6 (sklearn's default `max_iter=200` gets hit on belief vectors with n_train ≈ 20k+). Same caveat as the cartpole MLP run; further iterations or `(128,128)` MLP would tighten the probe but the *direction* of the result is solid.
 - Cartpole n=32 vs MM n=192 — Cartpole's CIs are wider, but tight enough that the +0.6 estimate excludes 0 by a wide margin. The *qualitative* contrast (MM decoupling vs cartpole inversion) is robust to power.
+
+## 2026-05-01 — Cartpole difficulty sweep: inversion generalises across most levels, attenuates at hard
+
+The biggest cross-env-validity bet completed. Sweeps the within-regime action-success asymmetry across 3 levels — easy (range 0.78), medium (current, range 0.65), hard (range 0.40) — to test whether the inverted-decoupling pattern from the medium-only Phase 4 result generalises across cartpole difficulty. Same role M6 played for M5 on MarketMakingV1.
+
+**Wall time.** Training sweep 352 min (5.9 h) — 14 new cells × n=8/n=5 × 200 iter at full budget; 7 medium cells reused. Probe sweep ≈ 12 min (logistic) + 9 min (MLP). Total ~6.3 h compute.
+
+**Headline 7-method × 3-level matrix.**
+
+| Level | Floor | Belief | Oracle | RL² Cat | RL² Hyp | VB Cat | VB Hyp | Envelope |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Easy   | 82.19 | 85.77 | 96.95 | 78.11 | 81.75 | 73.66 | 81.37 | +14.76 |
+| Medium | 96.11 | 99.67 | 107.40 | 90.68 | 96.95 | 84.49 | 96.71 | +11.29 |
+| Hard   | 114.15 | 116.55 | 117.23 | 109.79 | 116.73 | 103.79 | 116.10 | +3.08 |
+
+Hard initially designed at asymmetry 0.20 but mid-mode R1 failed (Oracle landed below Floor — env became too easy for the regime-agnostic policy). Backed off to 0.40, which preserves R1 while keeping the gap clearly smaller than medium.
+
+**Gap monotonically shrinks easy → hard.** Absolute returns rise (less asymmetry → easier overall balancing); the regime-info envelope shrinks. Both behaviours match the design.
+
+**Hypernet plateau is easy/medium-specific, not universal.**
+
+| Level | Hypernet (RL² / VB) | Belief | Δ vs Belief (RL² / VB) |
+|---|---:|---:|---:|
+| Easy   | 81.75 / 81.37 | 85.77 | −4.02 / −4.40 |
+| Medium | 96.95 / 96.71 | 99.67 | −2.72 / −2.96 |
+| Hard   | 116.73 / 116.10 | 116.55 | **+0.18 / −0.45** |
+
+The "hypernet plateaus at floor, doesn't reach belief" caveat from Phase 4 was a moderate-asymmetry artefact. At hard, hypernet *reaches Belief*. Worth a note in the thesis: the hypernet plateau is associated with a meaningful inference cost (Oracle − Belief) the architecture can't close; when that cost shrinks (hard has Oracle − Belief = +0.68), hypernet matches Belief.
+
+**Family A — `hypernet > concat` × 3 levels (Holm × 6, n=8 paired Wilcoxon).**
+
+| Hypothesis | Δ median | CI95 | n_pos | p_holm | Sup | LOO |
+|---|---:|---|---:|---:|:---:|:---:|
+| RL² hypernet > concat — easy | +3.72 | [+1.88, +5.77] | 8/8 | 0.0234 | ✓ | ✓ |
+| VariBAD hypernet > concat — easy | +9.66 | [+2.89, +10.98] | 8/8 | 0.0195 | ✓ | ✓ |
+| RL² hypernet > concat — medium | +5.84 | [+5.70, +7.31] | 8/8 | 0.0156 | ✓ | ✓ |
+| VariBAD hypernet > concat — medium | +12.29 | [+9.67, +14.20] | 8/8 | 0.0117 | ✓ | ✓ |
+| RL² hypernet > concat — hard | +7.38 | [+5.26, +8.46] | 8/8 | 0.0078 | ✓ | ✓ |
+| VariBAD hypernet > concat — hard | +12.01 | [+11.08, +13.37] | 8/8 | 0.0039 | ✓ | ✓ |
+
+**Family A: 6/6 supported, 6/6 LOO-robust.** All 8 paired seeds favour hypernet at every (method, level) cell, even with the more aggressive Holm × 6 correction.
+
+**Posterior-vs-performance correlation by level (per-level pooled across 4 methods × 8 seeds = n=32 each panel).**
+
+| Level | Logistic r | Logistic CI | MLP r | MLP CI | Envelope |
+|---|---:|---|---:|---|---:|
+| Easy | +0.471 | [+0.26, +0.68] | +0.545 | [+0.33, +0.71] | +14.76 |
+| Medium | +0.567 | [+0.33, +0.75] | +0.639 | [+0.36, +0.83] | +11.29 |
+| Hard | +0.279 | [−0.02, +0.55] | +0.099 | [−0.24, +0.40] | +3.08 |
+| Pooled (all 96) | +0.286 | [+0.13, +0.43] | +0.153 | [+0.00, +0.31] | — |
+
+**Inversion robust at easy + medium, attenuates at hard.** Both probe types agree at each level (no probe-type artefact). At easy and medium the inversion is strong (r ≈ +0.5–0.6 with both probes); at hard the correlation collapses to +0.10–0.28 with CI overlapping zero.
+
+The hard-level attenuation is mechanistically driven: with envelope only +3.08, gap_closed = (return − 114.15) / 3.08 has a denominator small enough that per-seed gap_closed becomes very noisy, and the cross-method scatter in posterior_error (only ~0.02 between the most- and least-decodable architectures) is too small to drive a clean correlation. The inversion phenomenon is real; it just requires enough envelope to manifest in normalised gap_closed.
+
+**Reformulated thesis claim.** The cartpole inversion now reads:
+
+> Across moderate-to-strong regime asymmetry (easy + medium difficulty), the architecture that decodes regime more retrievably performs *worse* on task return — robust to logistic vs MLP probes (r ≈ +0.5–0.6 in all four panels). At low asymmetry where the optimality envelope itself collapses (hard, ≈3 points), the inversion attenuates and the picture reverts toward decoupling. The integration mechanism produces qualitatively different representations whenever the regime materially changes the optimal policy.
+
+This is a more nuanced and defensible claim than the medium-only finding. It's also more thesis-friendly — the existence of the attenuation regime is itself an explanation for why MM (M6) shows decoupling rather than inversion. MM's per-cell envelopes range from 26 to 50; cartpole's from 3 to 15. The cartpole inversion may be a "sufficiently large envelope at sufficient asymmetry" phenomenon that MM does not reach because its envelope doesn't compress as aggressively.
+
+**Pass-criterion status (per `docs/milestones/m6.md`-style criteria adapted for cartpole).**
+
+| Criterion | Required | Observed | Status |
+|---|---|---|:---:|
+| All references R1 holds at every level | yes | yes (gaps +14.76 / +11.29 / +3.08) | ✓ |
+| Family A `hypernet > concat` × all (method, level) | all supported | 6/6 Holm | ✓ |
+| Posterior-vs-performance scatter interpretable | yes | yes at every level (signal_pattern set) | ✓ |
+| Per-method monotonicity of gap_closed | non-increasing | **non-monotonic** for hypernet methods | ✗ |
+| Ranking stability across levels | stable | unstable (concat-vs-hypernet ordering preserved; concat-vs-concat order varies) | ✗ |
+
+`all_methods_monotonic = False` because hypernet's gap_closed *increases* with difficulty (more headroom at hard since envelope is small). This is a metric artefact analogous to M6's `interpretable_overall = False` — the gap_closed normalisation tells a different story than absolute returns. The substantive sweep claims (Family A 6/6, inversion at easy + medium) are robust.
+
+**Artifacts.**
+- `experiments/configs/envs/e_cartpole_v1_easy.yaml`, `e_cartpole_v1_hard.yaml` — env configs.
+- `scripts/cartpole_difficulty_sweep.py` — 7-method × 3-level orchestrator.
+- `scripts/cartpole_posterior_probe.py` — extended with `--levels` + `_sweep` filename suffix.
+- `scripts/cartpole_hypothesis_tests.py` — extended with `--levels` for Family A × 3 levels.
+- `plotting/cartpole_plots.py` — adds `plot_difficulty_sweep_returns` + `plot_difficulty_sweep_scatter`.
+- `figures/milestones/cartpole/cartpole_difficulty_sweep_returns.png` — 7-method line plot.
+- `figures/milestones/cartpole/cartpole_difficulty_sweep_scatter.png` — 6-panel scatter (3 levels × 2 probes).
+- `results/milestones/cartpole/stats_cartpole_sweep.json`, `stats_cartpole_posterior_vs_performance_sweep{,_mlp}.json`, `stats_cartpole_hypothesis_tests_sweep.json` — per-cell aggregate stats (gitignored).
+
+**Caveats.**
+- Hard-level attenuation is mechanically explained by envelope collapse but worth flagging in the thesis. A natural follow-up question: does the attenuation hold under a *different* difficulty axis? E.g., varying HMM persistence rather than asymmetry strength — same axis M6 used for MM. Not run here; would be ~6h compute.
+- Single-axis sweep (asymmetry strength). M6 had two axes (persistence + distinguishability). Adding a second cartpole axis would mirror M6's full structure but is another full sweep.

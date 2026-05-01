@@ -23,8 +23,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 
 
-def _load_seeds(method: str) -> np.ndarray:
-    p = RESULTS_ROOT / f"m_cartpole_{method}" / "metrics.json"
+def _load_seeds(method: str, level: str = "medium") -> np.ndarray:
+    """Medium reuses the historical m_cartpole_<method> dirs; easy /
+    hard get level-suffixed names from the difficulty sweep."""
+    name = f"m_cartpole_{method}" if level == "medium" else f"m_cartpole_{method}_{level}"
+    p = RESULTS_ROOT / name / "metrics.json"
     with open(p) as f:
         m = json.load(f)
     return np.asarray(m["per_seed_final_return"], dtype=float)
@@ -57,33 +60,57 @@ def _loo(diffs: np.ndarray) -> bool:
 
 
 def main() -> int:
+    import argparse
+    parser = argparse.ArgumentParser(prog="scripts.cartpole_hypothesis_tests")
+    parser.add_argument(
+        "--levels", nargs="+", choices=("easy", "medium", "hard"),
+        default=["medium"],
+        help="Levels to test. Default: medium only (single-cell Family A). "
+             "Pass `--levels easy medium hard` for the difficulty sweep "
+             "(family-of-6 Holm correction).",
+    )
+    args = parser.parse_args()
+
     run = ScriptRun(script="cartpole_hypothesis_tests")
     out_dir = RESULTS_ROOT / "milestones" / "cartpole"
     out_dir.mkdir(parents=True, exist_ok=True)
-    stats_path = out_dir / "stats_cartpole_hypothesis_tests.json"
-    summary_path = out_dir / "stats_cartpole_hypothesis_tests_run.json"
+    is_sweep = set(args.levels) != {"medium"}
+    suffix = "_sweep" if is_sweep else ""
+    stats_path = out_dir / f"stats_cartpole_hypothesis_tests{suffix}.json"
+    summary_path = out_dir / f"stats_cartpole_hypothesis_tests{suffix}_run.json"
 
     t0 = time.perf_counter()
 
-    references = {m: _load_seeds(m) for m in ("regime_agnostic", "belief", "oracle")}
-    methods = {
-        m: _load_seeds(m) for m in (
-            "rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet",
-        )
-    }
+    # Per-level reference + method per-seed returns.
+    references_by_level: dict[str, dict[str, np.ndarray]] = {}
+    methods_by_level: dict[str, dict[str, np.ndarray]] = {}
+    for level in args.levels:
+        references_by_level[level] = {
+            m: _load_seeds(m, level)
+            for m in ("regime_agnostic", "belief", "oracle")
+        }
+        methods_by_level[level] = {
+            m: _load_seeds(m, level)
+            for m in ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+        }
 
-    hypotheses = [
-        ("rl2_hypernet_beats_concat", "rl2_hypernet", "rl2_concat"),
-        ("varibad_hypernet_beats_concat", "varibad_hypernet", "varibad_concat"),
-    ]
+    # Family A: hypernet > concat at each (method × level) cell.
+    hypotheses: list[tuple[str, str, str, str]] = []
+    for level in args.levels:
+        for hyp, conc in [
+            ("rl2_hypernet", "rl2_concat"),
+            ("varibad_hypernet", "varibad_concat"),
+        ]:
+            hypotheses.append((f"{hyp}_beats_concat_{level}", hyp, conc, level))
 
     raw = []
-    for name, hyp, conc in hypotheses:
-        diffs = methods[hyp] - methods[conc]
+    for name, hyp, conc, level in hypotheses:
+        diffs = methods_by_level[level][hyp] - methods_by_level[level][conc]
         res = stats.wilcoxon(diffs, alternative="greater")
         ci_low, ci_high = _bootstrap_median_ci(diffs)
         raw.append({
             "name": name,
+            "level": level,
             "p_raw": float(res.pvalue),
             "delta_median": float(np.median(diffs)),
             "delta_mean": float(diffs.mean()),
@@ -95,7 +122,6 @@ def main() -> int:
             "diffs": diffs.tolist(),
         })
 
-    # Holm correction over the family.
     sorted_idx = sorted(range(len(raw)), key=lambda i: raw[i]["p_raw"])
     m = len(raw)
     for rank, idx in enumerate(sorted_idx):
@@ -107,13 +133,21 @@ def main() -> int:
 
     payload = {
         "env": "cartpole_regime_v1",
-        "n_seeds": int(next(iter(methods.values())).shape[0]),
-        "reference_means": {k: float(v.mean()) for k, v in references.items()},
-        "method_means": {k: float(v.mean()) for k, v in methods.items()},
+        "levels": list(args.levels),
+        "n_seeds": int(next(iter(methods_by_level[args.levels[0]].values())).shape[0]),
+        "reference_means": {
+            level: {k: float(v.mean()) for k, v in refs.items()}
+            for level, refs in references_by_level.items()
+        },
+        "method_means": {
+            level: {k: float(v.mean()) for k, v in mths.items()}
+            for level, mths in methods_by_level.items()
+        },
         "family_a": {
             "hypotheses": raw,
             "n_supported": n_supported,
             "n_loo_robust": n_loo_robust,
+            "n_total": len(raw),
         },
     }
     with open(stats_path, "w") as f:
@@ -137,7 +171,7 @@ def main() -> int:
     )
     for r in raw:
         print(
-            f"[cartpole_tests]   {r['name']:35s} | "
+            f"[cartpole_tests]   {r['name']:45s} | "
             f"Δmedian={r['delta_median']:+.2f} "
             f"CI=[{r['ci_low']:+.2f}, {r['ci_high']:+.2f}] | "
             f"n_pos={r['n_pos']}/{r['n_total']} | "

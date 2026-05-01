@@ -40,6 +40,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 
 PROBED_METHODS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+LEVELS = ("easy", "medium", "hard")
+
+
+def _experiment_name(method: str, level: str) -> str:
+    """Medium reuses the historical m_cartpole_<method> dirs from the
+    Phase-4 build; easy / hard get level-suffixed names from the sweep."""
+    if level == "medium":
+        return f"m_cartpole_{method}"
+    return f"m_cartpole_{method}_{level}"
+
+
+def _reference_name(method: str, level: str) -> str:
+    if level == "medium":
+        return f"m_cartpole_{method}"
+    return f"m_cartpole_{method}_{level}"
 
 
 def _gap_closed_per_seed(
@@ -133,65 +148,92 @@ def main() -> int:
     parser.add_argument(
         "--classifier", choices=["logistic", "mlp"], default="logistic",
     )
+    parser.add_argument(
+        "--levels", nargs="+", choices=LEVELS, default=["medium"],
+        help="Which difficulty levels to probe. Default: medium only "
+             "(historical Phase-4 behaviour). Pass `--levels easy medium "
+             "hard` for the full sweep probe.",
+    )
     args = parser.parse_args()
 
     out_dir = RESULTS_ROOT / "milestones" / "cartpole"
     out_dir.mkdir(parents=True, exist_ok=True)
     # Classifier-suffixed filename so logistic and mlp probes coexist.
-    # The default (logistic) keeps the historical filename so existing
-    # plots and downstream readers continue to work unchanged.
-    suffix = "" if args.classifier == "logistic" else f"_{args.classifier}"
-    stats_path = out_dir / f"stats_cartpole_posterior_vs_performance{suffix}.json"
-    summary_path = out_dir / f"stats_cartpole_posterior_vs_performance{suffix}_run.json"
+    # If the run is a multi-level sweep, also tag the filename with
+    # `_sweep` so it doesn't collide with the historical single-cell
+    # output.
+    is_sweep = set(args.levels) != {"medium"}
+    sweep_suffix = "_sweep" if is_sweep else ""
+    cls_suffix = "" if args.classifier == "logistic" else f"_{args.classifier}"
+    stats_path = out_dir / f"stats_cartpole_posterior_vs_performance{sweep_suffix}{cls_suffix}.json"
+    summary_path = out_dir / f"stats_cartpole_posterior_vs_performance{sweep_suffix}{cls_suffix}_run.json"
 
     run = ScriptRun(script="cartpole_posterior_probe")
-
-    # Reference returns for gap_closed normalisation.
-    floor_returns = _load_per_seed_returns("m_cartpole_regime_agnostic")
-    oracle_returns = _load_per_seed_returns("m_cartpole_oracle")
-    floor_mean = float(np.mean(floor_returns))
-    oracle_mean = float(np.mean(oracle_returns))
 
     t_start = time.perf_counter()
     scatter_points: list[dict[str, Any]] = []
     failed: list[str] = []
-    for method in PROBED_METHODS:
-        experiment_name = f"m_cartpole_{method}"
-        try:
-            probe = _probe_cell(
-                experiment_name,
-                n_rollouts=args.n_rollouts,
-                rollout_length=args.rollout_length,
-                classifier=args.classifier,
+    # Reference means cached per level — different levels have different
+    # floor / oracle, and gap_closed must be normalised within-level.
+    ref_cache: dict[str, tuple[float, float]] = {}
+
+    for level in args.levels:
+        floor_exp = _reference_name("regime_agnostic", level)
+        oracle_exp = _reference_name("oracle", level)
+        floor_returns = _load_per_seed_returns(floor_exp)
+        oracle_returns = _load_per_seed_returns(oracle_exp)
+        floor_mean = float(np.mean(floor_returns))
+        oracle_mean = float(np.mean(oracle_returns))
+        ref_cache[level] = (floor_mean, oracle_mean)
+
+        for method in PROBED_METHODS:
+            experiment_name = _experiment_name(method, level)
+            try:
+                probe = _probe_cell(
+                    experiment_name,
+                    n_rollouts=args.n_rollouts,
+                    rollout_length=args.rollout_length,
+                    classifier=args.classifier,
+                )
+            except Exception as e:
+                print(f"[probe] {experiment_name} FAILED: {e}", flush=True)
+                failed.append(experiment_name)
+                continue
+
+            per_seed_return = _load_per_seed_returns(experiment_name)
+            gc_per_seed = _gap_closed_per_seed(
+                per_seed_return, floor_mean, oracle_mean,
             )
-        except Exception as e:
-            print(f"[probe] {experiment_name} FAILED: {e}", flush=True)
-            failed.append(experiment_name)
-            continue
+            for seed, m_acc, a_acc, gc in zip(
+                probe["seeds"], probe["method_test_acc_per_seed"],
+                probe["analytical_test_acc_per_seed"], gc_per_seed,
+            ):
+                scatter_points.append({
+                    "level": level,
+                    "method": method,
+                    "experiment_name": experiment_name,
+                    "seed": seed,
+                    "method_test_acc": m_acc,
+                    "analytical_test_acc": a_acc,
+                    "posterior_error": a_acc - m_acc,
+                    "gap_closed": gc,
+                })
 
-        per_seed_return = _load_per_seed_returns(experiment_name)
-        gc_per_seed = _gap_closed_per_seed(per_seed_return, floor_mean, oracle_mean)
-        for seed, m_acc, a_acc, gc in zip(
-            probe["seeds"], probe["method_test_acc_per_seed"],
-            probe["analytical_test_acc_per_seed"], gc_per_seed,
-        ):
-            scatter_points.append({
-                "method": method,
-                "experiment_name": experiment_name,
-                "seed": seed,
-                "method_test_acc": m_acc,
-                "analytical_test_acc": a_acc,
-                "posterior_error": a_acc - m_acc,
-                "gap_closed": gc,
-            })
+            m_mean = float(np.mean(probe["method_test_acc_per_seed"]))
+            a_mean = float(np.mean(probe["analytical_test_acc_per_seed"]))
+            print(
+                f"[probe] {experiment_name:>45s} | method={m_mean:.3f} "
+                f"analytical={a_mean:.3f} posterior_error={a_mean - m_mean:+.3f}",
+                flush=True,
+            )
 
-        m_mean = float(np.mean(probe["method_test_acc_per_seed"]))
-        a_mean = float(np.mean(probe["analytical_test_acc_per_seed"]))
-        print(
-            f"[probe] {experiment_name:>40s} | method={m_mean:.3f} "
-            f"analytical={a_mean:.3f} posterior_error={a_mean - m_mean:+.3f}",
-            flush=True,
-        )
+    # For backwards compat with the single-level path, expose floor/oracle
+    # at the medium cell as before. Multi-level runs include all levels
+    # via the per-point `level` field.
+    if "medium" in ref_cache:
+        floor_mean, oracle_mean = ref_cache["medium"]
+    else:
+        floor_mean, oracle_mean = ref_cache[args.levels[0]]
 
     if not scatter_points:
         run.fail(reason="no scatter points collected", summary_path=summary_path)

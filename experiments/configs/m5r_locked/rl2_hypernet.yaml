@@ -1,0 +1,15 @@
+extends:
+- m5r_base/rl2_hypernet.yaml
+experiment_name: m5r_locked_rl2_hypernet_PLACEHOLDER
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    learning_rate: 0.0009153637157585062
+    hidden_dim: 128
+    ent_coef: 0.001678839337506744
+    max_grad_norm: 0.10964529151194047
+    hypernet_init_scale: 0.01

@@ -1,0 +1,17 @@
+extends:
+- m5r_base/varibad_hypernet.yaml
+experiment_name: m5r_locked_varibad_hypernet_PLACEHOLDER
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    learning_rate: 0.0007702058787008303
+    hidden_dim: 128
+    ent_coef: 0.018499848403045038
+    max_grad_norm: 0.9674806568679204
+    kl_coef: 0.0032989906010150185
+    latent_dim: 4
+    hypernet_init_scale: 0.001

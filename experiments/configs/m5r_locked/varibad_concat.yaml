@@ -1,0 +1,17 @@
+extends:
+- m5r_base/varibad_concat.yaml
+experiment_name: m5r_locked_varibad_concat_PLACEHOLDER
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    learning_rate: 0.0008630335973428665
+    hidden_dim: 128
+    ent_coef: 0.00029674115176480276
+    max_grad_norm: 3.4431900402603235
+    kl_coef: 0.08974954108503588
+    latent_dim: 4
+    belief_layernorm: true

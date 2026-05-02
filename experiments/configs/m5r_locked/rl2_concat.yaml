@@ -1,0 +1,15 @@
+extends:
+- m5r_base/rl2_concat.yaml
+experiment_name: m5r_locked_rl2_concat_PLACEHOLDER
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    learning_rate: 0.0005322764743707252
+    hidden_dim: 128
+    ent_coef: 0.004876713425514383
+    max_grad_norm: 4.71057109826001
+    belief_layernorm: false

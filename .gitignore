@@ -223,3 +223,6 @@ __marimo__/
 # M5R fair-tune: per-trial YAMLs are auto-materialised by scripts/m5r_tune.py
 # from experiments/configs/m5r_search_space.yaml + the cell base configs.
 /experiments/configs/m5r_trials/
+# Stage B / Stage C YAMLs are auto-materialised from the locked configs.
+/experiments/configs/m5r_gate/
+/experiments/configs/m5r_final/

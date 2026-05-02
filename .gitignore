@@ -219,3 +219,7 @@ __marimo__/
 /results/milestones/M*/*
 !/results/milestones/M*/PASS.md
 !/results/milestones/M*/FAIL.md
+
+# M5R fair-tune: per-trial YAMLs are auto-materialised by scripts/m5r_tune.py
+# from experiments/configs/m5r_search_space.yaml + the cell base configs.
+/experiments/configs/m5r_trials/

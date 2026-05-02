@@ -100,13 +100,25 @@ class VariBADPolicy(nn.Module):
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
+    # Concat-side architectural-care knob: LayerNorm the [μ, σ] belief vector
+    # before concatenating with obs. No-op for the hypernet path. Default
+    # False preserves prior behaviour.
+    belief_layernorm: bool = False
+    # Hypernet-side architectural-care knob: init scale on the hypernet output
+    # layer. 0.0 = Beck et al. zero-init. Default 0.01 preserves prior code.
+    hypernet_init_scale: float = 0.01
 
     @nn.compact
     def __call__(
         self, obs: chex.Array, mu: chex.Array, log_var: chex.Array
     ) -> tuple[chex.Array, chex.Array]:
         sigma = jnp.exp(0.5 * log_var)
-        x = jnp.concatenate([obs, mu, sigma], axis=-1)
+        belief = jnp.concatenate([mu, sigma], axis=-1)
+        if self.belief_layernorm and self.integration == "concat":
+            belief_for_concat = nn.LayerNorm()(belief)
+        else:
+            belief_for_concat = belief
+        x = jnp.concatenate([obs, belief_for_concat], axis=-1)
         x = nn.Dense(self.hidden_dim, kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)))(x)
         x = nn.tanh(x)
         x = nn.Dense(self.hidden_dim, kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)))(x)
@@ -115,12 +127,12 @@ class VariBADPolicy(nn.Module):
         if self.integration == "concat":
             logits = nn.Dense(self.n_actions, kernel_init=nn.initializers.orthogonal(0.01))(x)
         elif self.integration == "hypernet":
-            belief = jnp.concatenate([mu, sigma], axis=-1)
             hn = Hypernet(
                 target_obs_dim=self.obs_size,
                 target_hidden=self.hypernet_target_hidden,
                 target_output_dim=self.n_actions,
                 hypernet_hidden=self.hypernet_hidden,
+                init_scale=self.hypernet_init_scale,
             )
             flat_weights = hn(belief)
             logits = hn.apply_target(flat_weights, obs)
@@ -154,6 +166,9 @@ class VariBADAgent:
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
+    # Architectural-care knobs (defaults preserve previous behaviour).
+    belief_layernorm: bool = False
+    hypernet_init_scale: float = 0.01
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -181,6 +196,8 @@ class VariBADAgent:
             integration=self.integration,
             hypernet_target_hidden=self.hypernet_target_hidden,
             hypernet_hidden=self.hypernet_hidden,
+            belief_layernorm=self.belief_layernorm,
+            hypernet_init_scale=self.hypernet_init_scale,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:

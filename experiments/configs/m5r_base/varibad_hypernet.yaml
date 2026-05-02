@@ -1,0 +1,14 @@
+# M5R fair-tune base — VariBAD hypernet on the held-out tuning environment.
+extends:
+  - base/base_varibad.yaml
+  - envs/m5r_tuning.yaml
+experiment_name: m5r_tune_varibad_hypernet_base
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    integration: hypernet
+    reward_decoder: gaussian

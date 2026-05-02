@@ -1,0 +1,15 @@
+# M5R fair-tune base — RL² concat on the held-out tuning environment.
+# Frozen knobs are pinned via base_rl2.yaml; the tuning runner overrides
+# only the search-space knobs declared in m5r_search_space.yaml.
+extends:
+  - base/base_rl2.yaml
+  - envs/m5r_tuning.yaml
+experiment_name: m5r_tune_rl2_concat_base
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    integration: concat

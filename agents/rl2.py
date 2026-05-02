@@ -40,6 +40,12 @@ class GRUActorCritic(nn.Module):
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
+    # Concat-side architectural-care knob: LayerNorm the GRU hidden (the
+    # implicit "belief") before the policy head. No-op for the hypernet path.
+    belief_layernorm: bool = False
+    # Hypernet-side architectural-care knob: init scale on the hypernet output
+    # layer. 0.0 = Beck et al. zero-init.
+    hypernet_init_scale: float = 0.01
 
     @nn.compact
     def __call__(
@@ -53,16 +59,18 @@ class GRUActorCritic(nn.Module):
         new_carry, _ = nn.GRUCell(features=self.hidden_dim)(carry, x)
 
         if self.integration == "concat":
+            policy_in = nn.LayerNorm()(new_carry) if self.belief_layernorm else new_carry
             logits = nn.Dense(
                 self.n_actions,
                 kernel_init=nn.initializers.orthogonal(0.01),
-            )(new_carry)
+            )(policy_in)
         elif self.integration == "hypernet":
             hn = Hypernet(
                 target_obs_dim=self.obs_size,
                 target_hidden=self.hypernet_target_hidden,
                 target_output_dim=self.n_actions,
                 hypernet_hidden=self.hypernet_hidden,
+                init_scale=self.hypernet_init_scale,
             )
             flat_weights = hn(new_carry)
             logits = hn.apply_target(flat_weights, obs)
@@ -94,6 +102,9 @@ class RL2Agent:
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
+    # Architectural-care knobs (defaults preserve previous behaviour).
+    belief_layernorm: bool = False
+    hypernet_init_scale: float = 0.01
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -114,6 +125,8 @@ class RL2Agent:
             integration=self.integration,
             hypernet_target_hidden=self.hypernet_target_hidden,
             hypernet_hidden=self.hypernet_hidden,
+            belief_layernorm=self.belief_layernorm,
+            hypernet_init_scale=self.hypernet_init_scale,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:

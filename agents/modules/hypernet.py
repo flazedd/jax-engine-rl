@@ -29,6 +29,7 @@ class Hypernet(nn.Module):
     target_hidden: int
     target_output_dim: int  # action_dim
     hypernet_hidden: int
+    init_scale: float = 0.01
 
     def target_param_count(self) -> int:
         """Total scalar weights needed to parameterize the target network."""
@@ -47,11 +48,13 @@ class Hypernet(nn.Module):
             kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
         )(belief)
         h = nn.tanh(h)
-        # Final layer initialized small so the target starts near identity-ish
-        # (small weights ≈ small logits ≈ near-uniform action distribution).
+        # Final-layer init scale is exposed because it is the integration-care
+        # analog of LayerNorm on the concat side: 0.0 = Beck et al. zero-init
+        # (all beliefs map to a single shared target at start); 0.01 = current
+        # default; larger = more belief-driven variance at init.
         return nn.Dense(
             self.target_param_count(),
-            kernel_init=nn.initializers.orthogonal(0.01),
+            kernel_init=nn.initializers.orthogonal(self.init_scale),
         )(h)
 
     def apply_target(

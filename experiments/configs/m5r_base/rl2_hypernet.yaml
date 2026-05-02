@@ -1,0 +1,13 @@
+# M5R fair-tune base — RL² hypernet on the held-out tuning environment.
+extends:
+  - base/base_rl2.yaml
+  - envs/m5r_tuning.yaml
+experiment_name: m5r_tune_rl2_hypernet_base
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    integration: hypernet

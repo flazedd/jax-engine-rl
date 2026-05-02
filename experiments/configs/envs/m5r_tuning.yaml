@@ -1,0 +1,33 @@
+# M5R — held-out tuning environment for the fair-tune sweep.
+#
+# Distinct from every M3/M5/M6 evaluation cell along both axes so that
+# hyperparameters tuned here do not leak into the test environments:
+#
+#   transition_diag = 0.975  (vs eval cells' 0.99 / 0.98 / 0.95)
+#   p_tight = [0.20, 0.85, 0.50]  (between dist-easy [0.10,0.90,0.50]
+#                                  and dist-medium  [0.30,0.80,0.50])
+#   p_wide  = [0.75, 0.035, 0.035] (between dist-easy and dist-medium)
+#
+# The action-class invariant is preserved: R0 favours wide quoting,
+# R1/R2 favour tight (sym), so the regime-conditional optimum is
+# qualitatively the same as on E_final.
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.975, 0.0125, 0.0125,
+      0.0125, 0.975, 0.0125,
+      0.0125, 0.0125, 0.975,
+    ]
+    regime_p_tight_bid: [0.20, 0.85, 0.50]
+    regime_p_wide_bid:  [0.75, 0.035, 0.035]
+    regime_p_tight_ask: [0.20, 0.85, 0.50]
+    regime_p_wide_ask:  [0.75, 0.035, 0.035]
+    initial_distribution: [0.333, 0.333, 0.334]

@@ -18,6 +18,7 @@ from plotting.style import apply_style
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
+PROJECT_FIG_DIR = REPO_ROOT / "figures" / "milestones" / "M5R"
 THESIS_FIG_DIR = (
     REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
 )
@@ -103,11 +104,13 @@ def main() -> int:
         bbox_to_anchor=(0.5, -0.005),
     )
     fig.tight_layout(rect=(0, 0.03, 1, 0.97))
+    PROJECT_FIG_DIR.mkdir(parents=True, exist_ok=True)
     THESIS_FIG_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = THESIS_FIG_DIR / "m5r_action_given_regime.png"
-    fig.savefig(out_path, bbox_inches="tight")
+    for target_dir in (PROJECT_FIG_DIR, THESIS_FIG_DIR):
+        out_path = target_dir / "m5r_action_given_regime.png"
+        fig.savefig(out_path, bbox_inches="tight")
+        print(f"[m5r_action_plots] wrote {out_path}", flush=True)
     plt.close(fig)
-    print(f"[m5r_action_plots] wrote {out_path}", flush=True)
     return 0
 
 

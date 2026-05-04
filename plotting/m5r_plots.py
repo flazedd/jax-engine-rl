@@ -27,9 +27,15 @@ from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 FINAL_DIR = RESULTS_ROOT / "M5R" / "final"
+PROJECT_FIG_DIR = REPO_ROOT / "figures" / "milestones" / "M5R"
 THESIS_FIG_DIR = (
     REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
 )
+
+
+def _both_targets(name: str) -> list[Path]:
+    """Write figure to both the project milestones dir and the thesis figures dir."""
+    return [PROJECT_FIG_DIR / name, THESIS_FIG_DIR / name]
 
 CELLS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
 CELL_LABEL = {
@@ -244,21 +250,24 @@ def plot_posterior_vs_performance(out_path: Path) -> None:
 
 
 def main() -> int:
+    PROJECT_FIG_DIR.mkdir(parents=True, exist_ok=True)
     THESIS_FIG_DIR.mkdir(parents=True, exist_ok=True)
-    plot_method_ladder(THESIS_FIG_DIR / "m5r_method_ladder.png")
-    plot_sweep(
-        PERSISTENCE_LEVELS,
-        "M5R persistence sweep — final return per cell",
-        THESIS_FIG_DIR / "m5r_persistence_sweep.png",
-    )
-    plot_sweep(
-        DISTINGUISHABILITY_LEVELS,
-        "M5R distinguishability sweep — final return per cell",
-        THESIS_FIG_DIR / "m5r_distinguishability_sweep.png",
-    )
-    plot_posterior_vs_performance(
-        THESIS_FIG_DIR / "m5r_posterior_vs_performance.png"
-    )
+    for target in _both_targets("m5r_method_ladder.png"):
+        plot_method_ladder(target)
+    for target in _both_targets("m5r_persistence_sweep.png"):
+        plot_sweep(
+            PERSISTENCE_LEVELS,
+            "M5R persistence sweep — final return per cell",
+            target,
+        )
+    for target in _both_targets("m5r_distinguishability_sweep.png"):
+        plot_sweep(
+            DISTINGUISHABILITY_LEVELS,
+            "M5R distinguishability sweep — final return per cell",
+            target,
+        )
+    for target in _both_targets("m5r_posterior_vs_performance.png"):
+        plot_posterior_vs_performance(target)
     return 0
 
 

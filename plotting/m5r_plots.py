@@ -1,0 +1,266 @@
+"""M5R figure regeneration.
+
+Produces four figures from the matched-tuning final-eval results:
+  - m5r_method_ladder.png         — 4-cell ladder on E_final
+  - m5r_persistence_sweep.png     — 3-panel persistence sweep
+  - m5r_distinguishability_sweep.png — 3-panel distinguishability sweep
+  - m5r_posterior_vs_performance.png — scatter from logistic probe
+
+The figures are written directly into the thesis figure directory so the
+PDF picks them up on the next build.
+
+Usage:
+  uv run python -m plotting.m5r_plots
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Patch
+
+from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+RESULTS_ROOT = REPO_ROOT / "results"
+FINAL_DIR = RESULTS_ROOT / "M5R" / "final"
+THESIS_FIG_DIR = (
+    REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
+)
+
+CELLS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+CELL_LABEL = {
+    "rl2_concat": "RL² Concat",
+    "rl2_hypernet": "RL² Hypernet",
+    "varibad_concat": "VariBAD Concat",
+    "varibad_hypernet": "VariBAD Hypernet",
+}
+PERSISTENCE_LEVELS = (
+    ("persistence_easy", "Easy ($P_{ii}=0.99$)"),
+    ("e_final", "Medium ($P_{ii}=0.98$)"),
+    ("persistence_hard", "Hard ($P_{ii}=0.95$)"),
+)
+DISTINGUISHABILITY_LEVELS = (
+    ("distinguishability_easy", "Easy"),
+    ("e_final", "Medium"),
+    ("distinguishability_hard", "Hard"),
+)
+
+
+def _load() -> dict:
+    with open(FINAL_DIR / "per_cell_env.json") as f:
+        return json.load(f)
+
+
+def _load_probe(classifier: str = "logistic") -> dict | None:
+    suffix = "" if classifier == "logistic" else f"_{classifier}"
+    p = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}.json"
+    if not p.exists():
+        return None
+    with open(p) as f:
+        return json.load(f)
+
+
+def _draw_refs(ax, refs: dict, label_each: bool = True) -> None:
+    """Add horizontal reference lines for floor / belief / oracle."""
+    label_map = {
+        "regime_agnostic_ppo": "Floor",
+        "belief_ppo": "Belief-PPO",
+        "oracle_ppo": "Oracle-PPO",
+    }
+    color_map = {
+        "regime_agnostic_ppo": COLORS["ppo"],
+        "belief_ppo": COLORS["belief_ppo"],
+        "oracle_ppo": COLORS["oracle_ppo"],
+    }
+    style_map = {
+        "regime_agnostic_ppo": "--",
+        "belief_ppo": ":",
+        "oracle_ppo": "-.",
+    }
+    for key, label in label_map.items():
+        v = refs.get(key)
+        if v is None:
+            continue
+        ax.axhline(
+            v, linestyle=style_map[key], color=color_map[key], linewidth=1.2,
+            label=label if label_each else None,
+        )
+
+
+def _ladder_bars(ax, env_block: dict, with_ylim_floor: bool = True) -> None:
+    """Plot a 4-cell ladder with CIs on a single Axes."""
+    cells = env_block["cells"]
+    refs = env_block["refs"]
+    methods = ("rl2", "varibad")
+    integrations = ("concat", "hypernet")
+    bar_w = 0.38
+    method_pos = np.arange(len(methods))
+    for i_int, integ in enumerate(integrations):
+        means, lo_err, hi_err = [], [], []
+        for method in methods:
+            key = f"{method}_{integ}"
+            c = cells.get(key)
+            if c is None:
+                means.append(np.nan); lo_err.append(0); hi_err.append(0)
+                continue
+            m = c["final_return_mean"]
+            lo, hi = c["final_return_ci95"]
+            means.append(m); lo_err.append(m - lo); hi_err.append(hi - m)
+        offset = (i_int - 0.5) * bar_w
+        x = method_pos + offset
+        bars = ax.bar(
+            x, means, bar_w, yerr=[lo_err, hi_err], capsize=3,
+            edgecolor="black", linewidth=0.4,
+        )
+        for bar, method in zip(bars, methods):
+            bar.set_facecolor(COLORS[f"{method}_{integ}"])
+        for xi, m in zip(x, means):
+            if not np.isnan(m):
+                ax.annotate(
+                    f"{m:.1f}", xy=(xi, m), xytext=(0, 4),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=7,
+                )
+    ax.set_xticks(method_pos)
+    ax.set_xticklabels(["RL²", "VariBAD"])
+    _draw_refs(ax, refs)
+    if with_ylim_floor:
+        floor = refs.get("regime_agnostic_ppo", float("nan"))
+        oracle = refs.get("oracle_ppo", float("nan"))
+        if not np.isnan(floor):
+            finite = [c["final_return_mean"]
+                      for c in cells.values()
+                      if not np.isnan(c.get("final_return_mean", np.nan))]
+            ymin = min([floor, *finite]) - 6
+            ymax = max([oracle if not np.isnan(oracle) else 200, *finite, floor]) + 6
+            ax.set_ylim(ymin, ymax)
+
+
+def _legend_handles() -> list[Patch]:
+    methods = ("rl2", "varibad")
+    integrations = ("concat", "hypernet")
+    method_full = {"rl2": "RL²", "varibad": "VariBAD"}
+    integ_pretty = {"concat": "Concat", "hypernet": "Hypernet"}
+    handles = []
+    for m in methods:
+        for i in integrations:
+            handles.append(Patch(
+                facecolor=COLORS[f"{m}_{i}"], edgecolor="black", linewidth=0.4,
+                label=f"{method_full[m]} {integ_pretty[i]}",
+            ))
+    return handles
+
+
+def plot_method_ladder(out_path: Path) -> None:
+    apply_style()
+    data = _load()
+    env_block = data["per_env"]["e_final"]
+    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
+    _ladder_bars(ax, env_block)
+    ax.set_title(
+        "M5R method ladder on $E_{\\mathrm{med}}$ "
+        "(matched-tuning, $n=8$ seeds)"
+    )
+    ax.set_ylabel("Final-episode return")
+    ref_handles, ref_labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles=_legend_handles() + ref_handles,
+        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.65)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def plot_sweep(axis_levels: tuple, title: str, out_path: Path) -> None:
+    apply_style()
+    data = _load()
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False)
+    for ax, (env_label, level_label) in zip(axes, axis_levels):
+        env_block = data["per_env"][env_label]
+        _ladder_bars(ax, env_block)
+        ax.set_title(level_label)
+        ax.set_ylabel("Final return")
+    fig.suptitle(title)
+    ref_handles, ref_labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles=_legend_handles() + ref_handles,
+        loc="lower center", ncol=4, fontsize=7,
+        bbox_to_anchor=(0.5, -0.02), frameon=True,
+        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
+    fig.tight_layout(rect=[0, 0.06, 1, 0.95])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def plot_posterior_vs_performance(out_path: Path) -> None:
+    """Scatter of probe accuracy vs gap-closed for the logistic probe."""
+    apply_style()
+    probe = _load_probe("logistic")
+    if probe is None:
+        print("[m5r_plots] skip posterior_vs_performance: probe data missing")
+        return
+    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
+    methods = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+    by_method = {m: [] for m in methods}
+    for p in probe["scatter_points"]:
+        by_method.setdefault(p["method"], []).append(p)
+    for m in methods:
+        pts = by_method[m]
+        if not pts:
+            continue
+        xs = [1.0 - p["posterior_error"] for p in pts]
+        ys = [p["gap_closed"] for p in pts]
+        ax.scatter(
+            xs, ys, color=COLORS[m], s=22, alpha=0.7,
+            edgecolor="black", linewidth=0.3, label=CELL_LABEL[m],
+        )
+    ax.set_xlabel("Linear-probe regime-decoding accuracy")
+    ax.set_ylabel("Gap-closed vs.\\ Oracle")
+    r = probe["correlation_overall"]
+    n = probe["n_scatter_points"]
+    ax.set_title(
+        f"Posterior–performance scatter, $r$ = {r:+.3f}, $n$ = {n}\n"
+        "(matched-tuning final eval, all 5 envs pooled)"
+    )
+    ax.axhspan(-0.30, 0.30, color="#eeeeee", alpha=0.0)  # no fill, label only
+    ax.axhline(0.0, color="black", linewidth=0.5, alpha=0.5)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8,
+              frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.72)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def main() -> int:
+    THESIS_FIG_DIR.mkdir(parents=True, exist_ok=True)
+    plot_method_ladder(THESIS_FIG_DIR / "m5r_method_ladder.png")
+    plot_sweep(
+        PERSISTENCE_LEVELS,
+        "M5R persistence sweep — final return per cell",
+        THESIS_FIG_DIR / "m5r_persistence_sweep.png",
+    )
+    plot_sweep(
+        DISTINGUISHABILITY_LEVELS,
+        "M5R distinguishability sweep — final return per cell",
+        THESIS_FIG_DIR / "m5r_distinguishability_sweep.png",
+    )
+    plot_posterior_vs_performance(
+        THESIS_FIG_DIR / "m5r_posterior_vs_performance.png"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

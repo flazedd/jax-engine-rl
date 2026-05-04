@@ -27,6 +27,7 @@ METHOD_ORDER = (
     ("oracle_ppo",          "Oracle-PPO"),
     ("belief_ppo",          "Belief-PPO"),
     ("regime_agnostic_ppo", "Regime-agnostic"),
+    ("stacked_obs_ppo",     "Stacked-obs PPO"),
     ("rl2_hypernet",        "RL² Hypernet"),
     ("varibad_hypernet",    "VariBAD Hypernet"),
     ("rl2_concat",          "RL² Concat"),
@@ -50,11 +51,16 @@ def main() -> int:
     n_regimes = stats["n_regimes"]
 
     apply_style()
+    # Drop methods that have no data (e.g. stacked-obs before its rerun completes).
+    method_order = tuple(
+        (key, label) for key, label in METHOD_ORDER
+        if stats["by_method"].get(key) is not None
+    )
     fig, axes = plt.subplots(
-        len(METHOD_ORDER), n_regimes, figsize=(8.0, 12.0),
+        len(method_order), n_regimes, figsize=(8.0, 13.5),
         sharex=True, sharey=True,
     )
-    for row, (key, label) in enumerate(METHOD_ORDER):
+    for row, (key, label) in enumerate(method_order):
         m_data = stats["by_method"].get(key)
         if m_data is None:
             continue

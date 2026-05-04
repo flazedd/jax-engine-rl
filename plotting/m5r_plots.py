@@ -24,6 +24,9 @@ from matplotlib.patches import Patch
 
 from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
 
+# Stacked-obs PPO is not in the COLORS dict; pick a distinct gray.
+STACKED_OBS_COLOR = "#7f7f7f"
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 FINAL_DIR = RESULTS_ROOT / "M5R" / "final"
@@ -70,6 +73,15 @@ def _load_probe(classifier: str = "logistic") -> dict | None:
         return json.load(f)
 
 
+def _load_stacked_obs() -> dict | None:
+    """Load stacked-obs sweep stats (mean / CI per env). None if missing."""
+    p = FINAL_DIR / "m5r_stacked_obs_sweep.json"
+    if not p.exists():
+        return None
+    with open(p) as f:
+        return json.load(f)
+
+
 def _draw_refs(ax, refs: dict, label_each: bool = True) -> None:
     """Add horizontal reference lines for floor / belief / oracle."""
     label_map = {
@@ -97,14 +109,47 @@ def _draw_refs(ax, refs: dict, label_each: bool = True) -> None:
         )
 
 
-def _ladder_bars(ax, env_block: dict, with_ylim_floor: bool = True) -> None:
-    """Plot a 4-cell ladder with CIs on a single Axes."""
+def _ladder_bars(
+    ax, env_block: dict, env_label: str | None = None,
+    stacked_data: dict | None = None,
+    with_ylim_floor: bool = True,
+) -> None:
+    """Plot the ladder with stacked-obs as a 5th group plus CIs.
+
+    The x-axis has three positions: stacked-obs, RL², VariBAD. Stacked-obs
+    is one bar at position 0; the meta-RL groups have two offset bars each.
+    `env_label` and `stacked_data` are required to plot the stacked-obs bar;
+    if either is None or no data exists for that env, the stacked group is
+    skipped silently (so legacy callers still get the 4-cell view).
+    """
     cells = env_block["cells"]
     refs = env_block["refs"]
     methods = ("rl2", "varibad")
     integrations = ("concat", "hypernet")
     bar_w = 0.38
-    method_pos = np.arange(len(methods))
+
+    # Decide whether to include the stacked-obs group.
+    stacked_cell = None
+    if stacked_data is not None and env_label is not None:
+        stacked_cell = stacked_data.get("by_env", {}).get(env_label)
+
+    show_stacked = stacked_cell is not None
+    method_x = np.arange(len(methods)) + (1.0 if show_stacked else 0.0)
+
+    if show_stacked:
+        m = stacked_cell["final_return_mean"]
+        lo, hi = stacked_cell["final_return_ci95"]
+        ax.bar(
+            [0.0], [m], bar_w, yerr=[[m - lo], [hi - m]], capsize=3,
+            edgecolor="black", linewidth=0.4, color=STACKED_OBS_COLOR,
+        )
+        if not np.isnan(m):
+            ax.annotate(
+                f"{m:.1f}", xy=(0.0, m), xytext=(0, 4),
+                textcoords="offset points",
+                ha="center", va="bottom", fontsize=7,
+            )
+
     for i_int, integ in enumerate(integrations):
         means, lo_err, hi_err = [], [], []
         for method in methods:
@@ -117,7 +162,7 @@ def _ladder_bars(ax, env_block: dict, with_ylim_floor: bool = True) -> None:
             lo, hi = c["final_return_ci95"]
             means.append(m); lo_err.append(m - lo); hi_err.append(hi - m)
         offset = (i_int - 0.5) * bar_w
-        x = method_pos + offset
+        x = method_x + offset
         bars = ax.bar(
             x, means, bar_w, yerr=[lo_err, hi_err], capsize=3,
             edgecolor="black", linewidth=0.4,
@@ -131,8 +176,13 @@ def _ladder_bars(ax, env_block: dict, with_ylim_floor: bool = True) -> None:
                     textcoords="offset points",
                     ha="center", va="bottom", fontsize=7,
                 )
-    ax.set_xticks(method_pos)
-    ax.set_xticklabels(["RL²", "VariBAD"])
+
+    if show_stacked:
+        ax.set_xticks([0.0, *method_x])
+        ax.set_xticklabels(["Stacked-obs", "RL²", "VariBAD"])
+    else:
+        ax.set_xticks(method_x)
+        ax.set_xticklabels(["RL²", "VariBAD"])
     _draw_refs(ax, refs)
     if with_ylim_floor:
         floor = refs.get("regime_agnostic_ppo", float("nan"))
@@ -141,17 +191,24 @@ def _ladder_bars(ax, env_block: dict, with_ylim_floor: bool = True) -> None:
             finite = [c["final_return_mean"]
                       for c in cells.values()
                       if not np.isnan(c.get("final_return_mean", np.nan))]
+            if show_stacked and not np.isnan(stacked_cell["final_return_mean"]):
+                finite.append(stacked_cell["final_return_mean"])
             ymin = min([floor, *finite]) - 6
             ymax = max([oracle if not np.isnan(oracle) else 200, *finite, floor]) + 6
             ax.set_ylim(ymin, ymax)
 
 
-def _legend_handles() -> list[Patch]:
+def _legend_handles(include_stacked: bool = True) -> list[Patch]:
     methods = ("rl2", "varibad")
     integrations = ("concat", "hypernet")
     method_full = {"rl2": "RL²", "varibad": "VariBAD"}
     integ_pretty = {"concat": "Concat", "hypernet": "Hypernet"}
     handles = []
+    if include_stacked:
+        handles.append(Patch(
+            facecolor=STACKED_OBS_COLOR, edgecolor="black", linewidth=0.4,
+            label="Stacked-obs PPO",
+        ))
     for m in methods:
         for i in integrations:
             handles.append(Patch(
@@ -164,9 +221,10 @@ def _legend_handles() -> list[Patch]:
 def plot_method_ladder(out_path: Path) -> None:
     apply_style()
     data = _load()
+    stacked = _load_stacked_obs()
     env_block = data["per_env"]["e_final"]
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
-    _ladder_bars(ax, env_block)
+    _ladder_bars(ax, env_block, env_label="e_final", stacked_data=stacked)
     ax.set_title("Method ladder on $E_{\\mathrm{med}}$")
     ax.set_ylabel("Final-episode return")
     ref_handles, ref_labels = ax.get_legend_handles_labels()
@@ -185,10 +243,11 @@ def plot_method_ladder(out_path: Path) -> None:
 def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
     apply_style()
     data = _load()
+    stacked = _load_stacked_obs()
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False)
     for ax, (env_label, level_label) in zip(axes, axis_levels):
         env_block = data["per_env"][env_label]
-        _ladder_bars(ax, env_block)
+        _ladder_bars(ax, env_block, env_label=env_label, stacked_data=stacked)
         ax.set_title(level_label)
         ax.set_ylabel("Final return")
     fig.suptitle(suptitle, fontsize=12)

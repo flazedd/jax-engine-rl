@@ -32,6 +32,7 @@ METHODS: list[tuple[str, str]] = [
     ("regime_agnostic_ppo", "m3_regime_agnostic"),
     ("belief_ppo",          "m3_belief"),
     ("oracle_ppo",          "m3_oracle"),
+    ("stacked_obs_ppo",     "m5r_stacked_obs_e_final"),
     ("rl2_concat",          "m5r_final_rl2_concat_e_final"),
     ("rl2_hypernet",        "m5r_final_rl2_hypernet_e_final"),
     ("varibad_concat",      "m5r_final_varibad_concat_e_final"),

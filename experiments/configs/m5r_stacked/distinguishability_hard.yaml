@@ -1,0 +1,13 @@
+extends:
+- base/base_ppo.yaml
+- envs/m6_distinguishability_hard.yaml
+experiment_name: m5r_stacked_obs_distinguishability_hard
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+env:
+  name: market_making_v1_stacked
+  params:
+    stack_k: 4

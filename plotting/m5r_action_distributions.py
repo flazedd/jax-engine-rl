@@ -89,11 +89,6 @@ def main() -> int:
             bbox=dict(boxstyle="round,pad=0.25", facecolor="white",
                       edgecolor="#cccccc", alpha=0.9),
         )
-    fig.suptitle(
-        "MarketMakingV1 $E_{\\mathrm{med}}$, matched-tuning protocol\n"
-        "P(action | true regime) per method",
-        fontsize=11, y=0.995,
-    )
     handles = [
         plt.Rectangle((0, 0), 1, 1, color=ACTION_COLORS[n], edgecolor="black", linewidth=0.5)
         for n in action_names

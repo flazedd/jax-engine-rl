@@ -167,6 +167,7 @@ def plot_method_ladder(out_path: Path) -> None:
     env_block = data["per_env"]["e_final"]
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
     _ladder_bars(ax, env_block)
+    ax.set_title("Method ladder on $E_{\\mathrm{med}}$")
     ax.set_ylabel("Final-episode return")
     ref_handles, ref_labels = ax.get_legend_handles_labels()
     ax.legend(
@@ -181,7 +182,7 @@ def plot_method_ladder(out_path: Path) -> None:
     print(f"[m5r_plots] wrote {out_path}")
 
 
-def plot_sweep(axis_levels: tuple, out_path: Path) -> None:
+def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
     apply_style()
     data = _load()
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False)
@@ -190,6 +191,7 @@ def plot_sweep(axis_levels: tuple, out_path: Path) -> None:
         _ladder_bars(ax, env_block)
         ax.set_title(level_label)
         ax.set_ylabel("Final return")
+    fig.suptitle(suptitle, fontsize=12)
     ref_handles, ref_labels = axes[0].get_legend_handles_labels()
     fig.legend(
         handles=_legend_handles() + ref_handles,
@@ -197,7 +199,7 @@ def plot_sweep(axis_levels: tuple, out_path: Path) -> None:
         bbox_to_anchor=(0.5, -0.02), frameon=True,
         facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    fig.tight_layout(rect=[0, 0.06, 1, 0.98])
+    fig.tight_layout(rect=[0, 0.06, 1, 0.95])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
@@ -227,6 +229,7 @@ def plot_posterior_vs_performance(out_path: Path) -> None:
         )
     ax.set_xlabel("Linear-probe regime-decoding accuracy")
     ax.set_ylabel("Gap-closed vs.\\ Oracle")
+    ax.set_title("Posterior accuracy vs.\\ final return")
     ax.axhspan(-0.30, 0.30, color="#eeeeee", alpha=0.0)
     ax.axhline(0.0, color="black", linewidth=0.5, alpha=0.5)
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8,
@@ -244,9 +247,17 @@ def main() -> int:
     for target in _both_targets("m5r_method_ladder.png"):
         plot_method_ladder(target)
     for target in _both_targets("m5r_persistence_sweep.png"):
-        plot_sweep(PERSISTENCE_LEVELS, target)
+        plot_sweep(
+            PERSISTENCE_LEVELS,
+            "Final return across the persistence axis",
+            target,
+        )
     for target in _both_targets("m5r_distinguishability_sweep.png"):
-        plot_sweep(DISTINGUISHABILITY_LEVELS, target)
+        plot_sweep(
+            DISTINGUISHABILITY_LEVELS,
+            "Final return across the distinguishability axis",
+            target,
+        )
     for target in _both_targets("m5r_posterior_vs_performance.png"):
         plot_posterior_vs_performance(target)
     return 0

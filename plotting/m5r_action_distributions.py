@@ -89,6 +89,10 @@ def main() -> int:
             bbox=dict(boxstyle="round,pad=0.25", facecolor="white",
                       edgecolor="#cccccc", alpha=0.9),
         )
+    fig.suptitle(
+        "Action distribution conditional on the true regime",
+        fontsize=12, y=0.995,
+    )
     handles = [
         plt.Rectangle((0, 0), 1, 1, color=ACTION_COLORS[n], edgecolor="black", linewidth=0.5)
         for n in action_names

@@ -225,7 +225,7 @@ def plot_method_ladder(out_path: Path) -> None:
     env_block = data["per_env"]["e_final"]
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
     _ladder_bars(ax, env_block, env_label="e_final", stacked_data=stacked)
-    ax.set_title("Method ladder on $E_{\\mathrm{med}}$")
+    ax.set_title("Method ladder on MarketMakingV1, medium difficulty")
     ax.set_ylabel("Final-episode return")
     ref_handles, ref_labels = ax.get_legend_handles_labels()
     ax.legend(

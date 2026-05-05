@@ -96,7 +96,8 @@ def main() -> int:
                       edgecolor="#cccccc", alpha=0.9),
         )
     fig.suptitle(
-        "Action distribution conditional on the true regime",
+        "Action distribution conditional on the true regime\n"
+        "MarketMakingV1, medium difficulty",
         fontsize=12, y=0.995,
     )
     handles = [

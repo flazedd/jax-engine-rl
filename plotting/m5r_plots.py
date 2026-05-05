@@ -288,7 +288,10 @@ def plot_posterior_vs_performance(out_path: Path) -> None:
         )
     ax.set_xlabel("Linear-probe regime-decoding accuracy")
     ax.set_ylabel("Gap-closed vs.\\ Oracle")
-    ax.set_title("Posterior accuracy vs.\\ final return")
+    ax.set_title(
+        "Posterior accuracy vs.\\ final return\n"
+        "MarketMakingV1, all five difficulty levels pooled"
+    )
     ax.axhspan(-0.30, 0.30, color="#eeeeee", alpha=0.0)
     ax.axhline(0.0, color="black", linewidth=0.5, alpha=0.5)
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8,
@@ -308,13 +311,13 @@ def main() -> int:
     for target in _both_targets("m5r_persistence_sweep.png"):
         plot_sweep(
             PERSISTENCE_LEVELS,
-            "Final return across the persistence axis",
+            "MarketMakingV1, persistence-axis difficulty sweep",
             target,
         )
     for target in _both_targets("m5r_distinguishability_sweep.png"):
         plot_sweep(
             DISTINGUISHABILITY_LEVELS,
-            "Final return across the distinguishability axis",
+            "MarketMakingV1, distinguishability-axis difficulty sweep",
             target,
         )
     for target in _both_targets("m5r_posterior_vs_performance.png"):

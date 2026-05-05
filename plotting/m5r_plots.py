@@ -144,8 +144,10 @@ def _ladder_bars(
             edgecolor="black", linewidth=0.4, color=STACKED_OBS_COLOR,
         )
         if not np.isnan(m):
+            # Place label above the upper CI cap, not above the bar top, so
+            # the annotation cannot collide with the error-bar whisker.
             ax.annotate(
-                f"{m:.1f}", xy=(0.0, m), xytext=(0, 4),
+                f"{m:.1f}", xy=(0.0, hi), xytext=(0, 5),
                 textcoords="offset points",
                 ha="center", va="bottom", fontsize=7,
             )
@@ -169,10 +171,11 @@ def _ladder_bars(
         )
         for bar, method in zip(bars, methods):
             bar.set_facecolor(COLORS[f"{method}_{integ}"])
-        for xi, m in zip(x, means):
+        for xi, m, he in zip(x, means, hi_err):
             if not np.isnan(m):
+                # Label sits above the upper CI cap, not the bar top.
                 ax.annotate(
-                    f"{m:.1f}", xy=(xi, m), xytext=(0, 4),
+                    f"{m:.1f}", xy=(xi, m + he), xytext=(0, 5),
                     textcoords="offset points",
                     ha="center", va="bottom", fontsize=7,
                 )

@@ -1,9 +1,11 @@
-# M6 — persistence sweep, hard level.
+# M6 — persistence sweep, hard level (v2 candidate).
 #
-# Same fills as E_final, transition matrix has diag = 0.80,
-# off-diag = 0.10 → mean regime duration ≈ 5 steps. Each 128-step
-# episode sees ~25 regime changes, so a method must infer the current
-# regime from a very short observation window before it switches again.
+# Replaces the original diag=0.80 hard cell, which failed R4 (the
+# analytical posterior could not concentrate at all under such fast
+# switching). This cell targets diag=0.96, which is meaningfully
+# harder than medium (diag=0.98) while leaving the inference problem
+# soluble: mean regime duration ~25 steps vs medium's ~50, so the
+# inference cost grows but does not dominate the optimal envelope.
 env:
   name: market_making_v1
   params:
@@ -15,9 +17,9 @@ env:
 
     n_regimes: 3
     transition_matrix: [
-      0.80, 0.10, 0.10,
-      0.10, 0.80, 0.10,
-      0.10, 0.10, 0.80,
+      0.96, 0.02, 0.02,
+      0.02, 0.96, 0.02,
+      0.02, 0.02, 0.96,
     ]
     regime_p_tight_bid: [0.30, 0.80, 0.50]
     regime_p_wide_bid:  [0.65, 0.05, 0.02]

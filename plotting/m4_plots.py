@@ -105,7 +105,7 @@ def plot_factorial_toys(out_path: Path) -> bool:
         by_key[(r["method"], r["env"], variant)] = r
 
     apply_style()
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), sharey=False)
+    fig, axes = plt.subplots(3, 1, figsize=(11.0, 12.0), sharey=False)
 
     methods = ["rl2", "varibad"]
     method_labels = {"rl2": "RL²", "varibad": "VariBAD"}
@@ -115,6 +115,22 @@ def plot_factorial_toys(out_path: Path) -> bool:
     def _cell_color(method: str, variant: str) -> str:
         integ = "hypernet" if "hypernet" in variant else "concat"
         return COLORS[f"{method}_{integ}"]
+
+    floor_label_template = "PPO floor"
+    floor_drawn = False
+    legend_handles: list[Any] = []
+    from matplotlib.lines import Line2D as _Line2D
+    from matplotlib.patches import Patch as _Patch
+    for m in methods:
+        for v in _VARIANT_ORDER:
+            legend_handles.append(_Patch(
+                facecolor=_cell_color(m, v), edgecolor="black", linewidth=0.4,
+                label=f"{method_labels[m]} {_VARIANT_LABELS[v]}",
+            ))
+    legend_handles.append(_Line2D(
+        [0], [0], color=COLORS["ppo"], linestyle="--", linewidth=1.2, alpha=0.6,
+        label=floor_label_template,
+    ))
 
     for ax, env in zip(axes, _TOY_ENVS):
         for i_method, method in enumerate(methods):
@@ -139,63 +155,39 @@ def plot_factorial_toys(out_path: Path) -> bool:
             colors = [_cell_color(method, v) for v in _VARIANT_ORDER]
             ax.bar(
                 x, means, bar_w, yerr=yerr, color=colors,
-                edgecolor="black", linewidth=0.4, capsize=2,
+                edgecolor="black", linewidth=0.4, capsize=3,
             )
-        # PPO floor for this env (loaded from M4 ranking JSON). Same
-        # floor/belief/oracle convention as the M5 ladder — dashed,
-        # PPO blue, alpha 0.6. The floor value matches the
-        # `concat_nobonus` bar by construction (M4's PPO baseline and
-        # the factorial concat cell are the same training run); the
-        # line makes the "did meta-RL clear the floor?" check visually
-        # explicit and lets this single chart serve M4's purpose.
-        floor_line = None
         floor_val = floors.get(env)
         if floor_val is not None:
-            floor_line = ax.axhline(
+            ax.axhline(
                 floor_val, color=COLORS["ppo"],
-                linestyle="--", linewidth=1.0, alpha=0.6,
+                linestyle="--", linewidth=1.2, alpha=0.6,
+            )
+            ax.text(
+                0.99, floor_val, f"  PPO floor = {floor_val:.1f}",
+                transform=ax.get_yaxis_transform(),
+                ha="left", va="center", fontsize=10, color=COLORS["ppo"],
             )
         ax.set_xticks(np.arange(n_v))
-        ax.set_xticklabels([_VARIANT_LABELS[v] for v in _VARIANT_ORDER], fontsize=8)
-        ax.set_title(_TOY_ENV_LABELS[env])
-        from matplotlib.lines import Line2D as _Line2D
-        from matplotlib.patches import Patch as _Patch
-        legend_handles: list[Any] = [
-            _Patch(facecolor=_cell_color(m, v), edgecolor="black",
-                   linewidth=0.4,
-                   label=f"{method_labels[m]} {_VARIANT_LABELS[v]}")
-            for m in methods for v in _VARIANT_ORDER
-        ]
-        if floor_line is not None:
-            legend_handles.append(_Line2D(
-                [0], [0], color=COLORS["ppo"], linestyle="--",
-                linewidth=1.0, alpha=0.6,
-                label=f"PPO floor = {floor_val:.1f}",
-            ))
-        ax.legend(
-            handles=legend_handles,
-            loc="upper center", bbox_to_anchor=(0.5, -0.10),
-            fontsize=7, ncol=2,
-            frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+        ax.set_xticklabels(
+            [_VARIANT_LABELS[v] for v in _VARIANT_ORDER], fontsize=11,
         )
+        ax.tick_params(axis="y", labelsize=11)
+        ax.set_ylabel("Final return", fontsize=11)
+        ax.set_title(_TOY_ENV_LABELS[env], fontsize=13)
+        ax.grid(axis="y", alpha=0.3, linestyle=":")
 
     fig.suptitle(
-        "Toy environments — meta-RL implementation validation (RL²/VariBAD × Concat/Hypernetwork)\n"
-        "Final return (mean across 3 seeds)",
-        y=1.02,
-        fontsize=11,
+        "Implementation validation: meta-RL on standard benchmarks",
+        fontsize=14, y=0.998,
     )
-    sample_cfg = stats["configs"][0] if stats["configs"] else {}
-    _budget_annotation(
-        fig,
-        iterations=sample_cfg.get("iterations"),
-        num_seeds=sample_cfg.get("num_seeds"),
-        extra="across 12 method×env×integration cells",
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center", ncol=3, fontsize=12,
+        bbox_to_anchor=(0.5, -0.005), frameon=True,
+        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    fig.tight_layout()
-    # Bump bottom margin to fit 5 legend entries (4 cells + floor) at
-    # ncol=2 — three rows instead of two.
-    fig.subplots_adjust(bottom=0.36)
+    fig.tight_layout(rect=[0, 0.05, 1, 0.97])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

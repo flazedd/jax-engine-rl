@@ -261,8 +261,8 @@ def plot_probe_per_t(out_path: Path) -> bool:
 
     apply_style()
     fig, (ax_bar, ax_curve) = plt.subplots(
-        1, 2, figsize=(11.0, 4.0),
-        gridspec_kw={"width_ratios": [1.0, 1.7]},
+        2, 1, figsize=(11.0, 11.0),
+        gridspec_kw={"height_ratios": [1.0, 1.4]},
     )
 
     method_items = list(stats["methods"].items())
@@ -318,18 +318,18 @@ def plot_probe_per_t(out_path: Path) -> bool:
     # the gap consistent regardless of data scale).
     for xi, mean, lo_err in zip(x_bar, bar_means, bar_lo):
         ax_bar.annotate(f"{mean:.2f}", xy=(xi, mean - lo_err),
-                        xytext=(0, -3), textcoords="offset points",
-                        ha="center", va="top", fontsize=9, color="black")
-    # Random-guess line — drawn but not legended on this panel. The right
-    # panel's outside legend already documents the same dotted line, so
-    # adding a second legend here would overlap the vertical bar labels.
+                        xytext=(0, -4), textcoords="offset points",
+                        ha="center", va="top", fontsize=11, color="black")
     ax_bar.axhline(chance, color="#999999", linestyle=":", linewidth=1.0)
     ax_bar.set_xticks(x_bar)
-    # Vertical labels avoid the adjacent-bar overlap that rotation=25-35
-    # still leaves on this narrow panel; reads cleanly with `ha="center"`.
-    ax_bar.set_xticklabels(bar_labels, fontsize=8, rotation=90, ha="center")
+    # The full-width panel gives enough room for ~25-degree rotation, which
+    # reads more naturally than vertical labels.
+    ax_bar.set_xticklabels(bar_labels, fontsize=11, rotation=20, ha="right")
+    ax_bar.tick_params(axis="y", labelsize=11)
+    ax_bar.set_ylabel("Test accuracy", fontsize=11)
     ax_bar.set_ylim(max(0.0, chance - 0.05), 1.05)
-    ax_bar.set_title("Headline test accuracy\n(regime classification, test set)")
+    ax_bar.set_title("Headline test accuracy: regime classification, test set",
+                     fontsize=13)
 
     # ----- Right panel: per-timestep curves (smoothed) ---------------------
     analytical_drawn = False
@@ -369,30 +369,22 @@ def plot_probe_per_t(out_path: Path) -> bool:
 
     ax_curve.axhline(chance, color="#999999", linestyle=":", linewidth=1.0,
                      label=f"Random guess ({100.0/n_classes:.1f}%)")
-    ax_curve.set_xlabel("Timestep within episode")
+    ax_curve.set_xlabel("Timestep within episode", fontsize=11)
+    ax_curve.set_ylabel("Test accuracy", fontsize=11)
+    ax_curve.tick_params(axis="both", labelsize=11)
     ax_curve.set_title(
-        f"Per-timestep accuracy (rolling-mean window {smoothing_window})\n"
-        "Regime classification, test set"
+        f"Per-timestep accuracy, rolling-mean window {smoothing_window}",
+        fontsize=13,
     )
     ax_curve.set_ylim(max(0.0, chance - 0.05), 1.05)
     ax_curve.legend(
-        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
-        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+        loc="lower right", fontsize=10, ncol=2,
+        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=0.95,
     )
 
     env_label = stats.get("env_label", "MarketMakingV1")
-    fig.suptitle(f"Posterior-quality probe on {env_label}", y=1.02)
-    n_seeds = max(m["n_seeds"] for _, m in method_items)
-    _budget_annotation(
-        fig,
-        rollout_length=int(stats.get("rollout_length", 0)) or None,
-        num_seeds=n_seeds,
-        extra=f"{stats.get('n_rollouts')} rollouts/seed, classifier={stats.get('classifier')}",
-    )
-    fig.tight_layout()
-    # Generous bottom margin so the vertical bar tick labels (longest:
-    # "VariBAD Hypernetwork") fit fully without clipping.
-    fig.subplots_adjust(right=0.82, bottom=0.42)
+    fig.suptitle(f"Posterior-quality probe on {env_label}", fontsize=14, y=0.995)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -526,7 +518,7 @@ def plot_step4_learning_curves(out_path: Path) -> bool:
     refs = _load_m3_refs()
 
     apply_style()
-    fig, ax = plt.subplots(figsize=FIGSIZE_WIDE)
+    fig, ax = plt.subplots(figsize=(13.5, 7.5))
 
     cells = stats.get("cells", {})
     method_pretty = {"rl2": "RL²", "varibad": "VariBAD"}
@@ -566,30 +558,22 @@ def plot_step4_learning_curves(out_path: Path) -> bool:
         ax.fill_between(iters, lo, hi, color=color, alpha=0.15)
 
     _draw_reference_lines(ax, refs)
-    ax.set_xlabel("Iteration")
+    ax.set_xlabel("Iteration", fontsize=12)
+    ax.set_ylabel("Mean return across seeds", fontsize=12)
+    ax.tick_params(axis="both", labelsize=11)
     ax.set_title(
-        "MarketMakingV1 — learning curves by method × integration\n"
-        "Mean return across seeds, shaded = 95% CI"
+        "MarketMakingV1 — learning curves by method × integration "
+        "(shaded = 95% CI)",
+        fontsize=14,
     )
-    ax.legend(
-        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
-        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="lower center", ncol=4, fontsize=15,
+        bbox_to_anchor=(0.5, -0.005), frameon=True,
+        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    # Compute budget from the first cell's metrics.
-    first_cell = next(iter(cells.values()), None)
-    if first_cell is not None:
-        first_meta_path = RESULTS_ROOT / first_cell["experiment_name"] / "metrics.json"
-        if first_meta_path.exists():
-            mm = json.load(open(first_meta_path))
-            _budget_annotation(
-                fig,
-                iterations=int(mm["iterations"]),
-                parallel_envs=int(mm["parallel_envs"]),
-                rollout_length=int(mm["rollout_length"]),
-                num_seeds=int(mm["num_seeds"]),
-            )
-    fig.tight_layout()
-    fig.subplots_adjust(right=0.78, bottom=0.18)
+    fig.tight_layout(rect=[0, 0.09, 1, 0.97])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

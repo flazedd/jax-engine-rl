@@ -1,7 +1,9 @@
 """M5R action-distribution figure.
 
-Reads the matched-tuning action-distribution JSON and writes a 7-method
-× 3-regime grid of stacked bars to the thesis figure directory.
+Reads the matched-tuning action-distribution JSON and writes a per-method
+grid of grouped bar charts to the thesis figure directory. Each row is a
+single wide panel for one method, with the three regimes side by side and
+one bar per action within each regime.
 
 Usage:
   uv run python -m plotting.m5r_action_distributions
@@ -49,67 +51,78 @@ def main() -> int:
         stats = json.load(f)
     action_names = stats["action_names"]
     n_regimes = stats["n_regimes"]
+    n_actions = len(action_names)
 
     apply_style()
-    # Drop methods that have no data (e.g. stacked-obs before its rerun completes).
     method_order = tuple(
         (key, label) for key, label in METHOD_ORDER
         if stats["by_method"].get(key) is not None
     )
     fig, axes = plt.subplots(
-        len(method_order), n_regimes, figsize=(8.0, 13.5),
+        len(method_order), 1, figsize=(11.0, 1.7 * len(method_order)),
         sharex=True, sharey=True,
     )
+    if len(method_order) == 1:
+        axes = [axes]
+
+    bar_w = 0.25
+    regime_centres = np.arange(n_regimes)  # one slot per regime
+    action_offsets = (np.arange(n_actions) - (n_actions - 1) / 2) * bar_w
+
     for row, (key, label) in enumerate(method_order):
+        ax = axes[row]
         m_data = stats["by_method"].get(key)
         if m_data is None:
             continue
-        mean = np.asarray(m_data["mean_action_given_regime"])
-        std = np.asarray(m_data["std_action_given_regime"])
+        mean = np.asarray(m_data["mean_action_given_regime"])  # [R, A]
+        std = np.asarray(m_data["std_action_given_regime"])    # [R, A]
         sym_range = float(mean[:, 0].max() - mean[:, 0].min())
-        for col in range(n_regimes):
-            ax = axes[row, col]
-            xs = np.arange(len(action_names))
-            heights = mean[col]
-            errs = std[col]
-            colors = [ACTION_COLORS[n] for n in action_names]
+        for a_idx, a_name in enumerate(action_names):
+            xs = regime_centres + action_offsets[a_idx]
+            heights = mean[:, a_idx]
+            errs = std[:, a_idx]
             ax.bar(
-                xs, heights, color=colors, alpha=0.85,
+                xs, heights, width=bar_w,
+                color=ACTION_COLORS[a_name], alpha=0.85,
                 edgecolor="black", linewidth=0.5,
                 yerr=errs, capsize=3,
                 error_kw=dict(ecolor="black", lw=0.7),
             )
-            for x, h in zip(xs, heights):
-                ax.text(x, h + 0.03, f"{h:.2f}", ha="center", va="bottom", fontsize=7.5)
-            ax.set_ylim(0.0, 1.05)
-            ax.set_xticks(xs)
-            ax.set_xticklabels(action_names, fontsize=8, rotation=15)
-            if col == 0:
-                ax.set_ylabel(f"{label}\nP(action | regime)", fontsize=9)
-            if row == 0:
-                ax.set_title(f"r{col}", fontsize=10)
-        axes[row, -1].text(
-            1.02, 0.5, f"sym Δ\n{sym_range:.2f}",
-            transform=axes[row, -1].transAxes,
-            ha="left", va="center", fontsize=8.5,
-            bbox=dict(boxstyle="round,pad=0.25", facecolor="white",
+            for x, h, e in zip(xs, heights, errs):
+                ax.text(x, h + e + 0.02, f"{h:.2f}",
+                        ha="center", va="bottom", fontsize=8)
+        ax.set_ylim(0.0, 1.18)
+        ax.set_xticks(regime_centres)
+        ax.set_xticklabels([f"r{r}" for r in range(n_regimes)], fontsize=11)
+        ax.tick_params(axis="y", labelsize=10)
+        ax.set_ylabel("P(action | regime)", fontsize=10)
+        ax.set_title(label, fontsize=12, loc="left")
+        ax.text(
+            1.005, 0.5, f"sym Δ = {sym_range:.2f}",
+            transform=ax.transAxes,
+            ha="left", va="center", fontsize=10,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
                       edgecolor="#cccccc", alpha=0.9),
         )
+        ax.grid(axis="y", alpha=0.3, linestyle=":")
+
+    axes[-1].set_xlabel("Regime", fontsize=11)
     fig.suptitle(
-        "Action distribution conditional on the true regime\n"
-        "MarketMakingV1, medium difficulty",
-        fontsize=12, y=0.995,
+        "Action distribution conditional on the true regime, MarketMakingV1, "
+        "medium difficulty",
+        fontsize=13, y=0.998,
     )
     handles = [
-        plt.Rectangle((0, 0), 1, 1, color=ACTION_COLORS[n], edgecolor="black", linewidth=0.5)
+        plt.Rectangle((0, 0), 1, 1, color=ACTION_COLORS[n],
+                      edgecolor="black", linewidth=0.5)
         for n in action_names
     ]
     fig.legend(
         handles, action_names,
-        loc="lower center", ncol=len(action_names), fontsize=9,
-        bbox_to_anchor=(0.5, -0.005),
+        loc="lower center", ncol=len(action_names), fontsize=12,
+        bbox_to_anchor=(0.5, -0.01),
     )
-    fig.tight_layout(rect=(0, 0.03, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.025, 0.92, 0.985))
     PROJECT_FIG_DIR.mkdir(parents=True, exist_ok=True)
     THESIS_FIG_DIR.mkdir(parents=True, exist_ok=True)
     for target_dir in (PROJECT_FIG_DIR, THESIS_FIG_DIR):

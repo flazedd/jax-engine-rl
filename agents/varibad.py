@@ -107,6 +107,13 @@ class VariBADPolicy(nn.Module):
     # Hypernet-side architectural-care knob: init scale on the hypernet output
     # layer. 0.0 = Beck et al. zero-init. Default 0.01 preserves prior code.
     hypernet_init_scale: float = 0.01
+    # Configurable policy trunk replacing the historical fixed 2-layer MLP at
+    # `hidden_dim` width. policy_trunk_layers=2, policy_trunk_hidden=hidden_dim
+    # reproduces the previous architecture; per-cell values are set in the
+    # locked configs to equalise total parameter counts across the
+    # matched-compute factorial.
+    policy_trunk_layers: int = 2
+    policy_trunk_hidden: int = 0  # 0 = fall back to hidden_dim
 
     @nn.compact
     def __call__(
@@ -119,10 +126,14 @@ class VariBADPolicy(nn.Module):
         else:
             belief_for_concat = belief
         x = jnp.concatenate([obs, belief_for_concat], axis=-1)
-        x = nn.Dense(self.hidden_dim, kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)))(x)
-        x = nn.tanh(x)
-        x = nn.Dense(self.hidden_dim, kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)))(x)
-        x = nn.tanh(x)
+
+        trunk_width = self.policy_trunk_hidden or self.hidden_dim
+        for _ in range(self.policy_trunk_layers):
+            x = nn.Dense(
+                trunk_width,
+                kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
+            )(x)
+            x = nn.tanh(x)
 
         if self.integration == "concat":
             logits = nn.Dense(self.n_actions, kernel_init=nn.initializers.orthogonal(0.01))(x)
@@ -169,6 +180,11 @@ class VariBADAgent:
     # Architectural-care knobs (defaults preserve previous behaviour).
     belief_layernorm: bool = False
     hypernet_init_scale: float = 0.01
+    # Matched-compute knobs: policy trunk between [obs, belief] and the
+    # action / value heads. Defaults reproduce the historical 2-layer MLP
+    # at `hidden_dim` width.
+    policy_trunk_layers: int = 2
+    policy_trunk_hidden: int = 0  # 0 = fall back to hidden_dim
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -198,6 +214,8 @@ class VariBADAgent:
             hypernet_hidden=self.hypernet_hidden,
             belief_layernorm=self.belief_layernorm,
             hypernet_init_scale=self.hypernet_init_scale,
+            policy_trunk_layers=self.policy_trunk_layers,
+            policy_trunk_hidden=self.policy_trunk_hidden,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:

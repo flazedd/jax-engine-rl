@@ -11,8 +11,14 @@
 # The `search_seed` is the substantive pre-registration — it determines
 # the exact sequence of trials drawn per cell. Changing any field below
 # after a run begins constitutes a new experiment, not a continuation.
+#
+# Matched-compute design: hidden_dim, latent_dim, and policy_trunk_* are
+# pinned in the m5r_base configs so total parameter count sits within
+# ±1% of 180k for every cell. They are not searched here; only the
+# optimisation knobs (LR, ent_coef, max_grad_norm, kl_coef, layernorm,
+# init_scale) are.
 
-search_seed: 20260502
+search_seed: 20260506
 trials_per_cell: 30
 trial_run_mode: mid              # 100 iter × 256 envs × 1 seed
 selection_window: 50             # last N iters used for selection metric
@@ -25,9 +31,6 @@ cells:
         dist: log_uniform
         low:  1.0e-5
         high: 1.0e-3
-      agent.params.hidden_dim:
-        dist: choice
-        values: [32, 64, 128]
       agent.params.ent_coef:
         dist: log_uniform
         low:  1.0e-4
@@ -47,9 +50,6 @@ cells:
         dist: log_uniform
         low:  1.0e-5
         high: 1.0e-3
-      agent.params.hidden_dim:
-        dist: choice
-        values: [32, 64, 128]
       agent.params.ent_coef:
         dist: log_uniform
         low:  1.0e-4
@@ -69,9 +69,6 @@ cells:
         dist: log_uniform
         low:  1.0e-5
         high: 1.0e-3
-      agent.params.hidden_dim:
-        dist: choice
-        values: [32, 64, 128]
       agent.params.ent_coef:
         dist: log_uniform
         low:  1.0e-4
@@ -84,9 +81,6 @@ cells:
         dist: log_uniform
         low:  1.0e-3
         high: 1.0
-      agent.params.latent_dim:
-        dist: choice
-        values: [4, 8, 16]
       agent.params.belief_layernorm:
         dist: choice
         values: [true, false]
@@ -98,9 +92,6 @@ cells:
         dist: log_uniform
         low:  1.0e-5
         high: 1.0e-3
-      agent.params.hidden_dim:
-        dist: choice
-        values: [32, 64, 128]
       agent.params.ent_coef:
         dist: log_uniform
         low:  1.0e-4
@@ -113,9 +104,6 @@ cells:
         dist: log_uniform
         low:  1.0e-3
         high: 1.0
-      agent.params.latent_dim:
-        dist: choice
-        values: [4, 8, 16]
       agent.params.hypernet_init_scale:
         dist: choice
         values: [0.0, 1.0e-3, 1.0e-2]

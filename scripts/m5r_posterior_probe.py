@@ -67,6 +67,8 @@ def _probe_cell(
 
     method_accs: list[float] = []
     analytical_accs: list[float] = []
+    method_per_t: list[list[float]] = []
+    analytical_per_t: list[list[float]] = []
     for seed in seeds:
         bundle = load_experiment(exp_dir, seed)
         result = probe_one_seed(
@@ -75,10 +77,16 @@ def _probe_cell(
         )
         method_accs.append(float(result["method"]["test_acc"]))
         analytical_accs.append(float(result["analytical"]["test_acc"]))
+        method_per_t.append(list(map(float, result["method"]["per_t_test_acc"])))
+        analytical_per_t.append(
+            list(map(float, result["analytical"]["per_t_test_acc"]))
+        )
     return {
         "seeds": seeds,
         "method_test_acc_per_seed": method_accs,
         "analytical_test_acc_per_seed": analytical_accs,
+        "method_per_t_test_acc_per_seed": method_per_t,
+        "analytical_per_t_test_acc_per_seed": analytical_per_t,
     }
 
 
@@ -140,6 +148,7 @@ def main() -> int:
 
     t_start = time.perf_counter()
     scatter_points: list[dict[str, Any]] = []
+    per_method_per_env: dict[str, dict[str, dict[str, Any]]] = {}
     failed: list[str] = []
     n_total = 0
     for env_label, env_block in per_cell_env.get("per_env", {}).items():
@@ -181,6 +190,21 @@ def main() -> int:
                     "posterior_error": a_acc - m_acc,
                     "gap_closed": gc,
                 })
+            method_per_t = np.asarray(probe["method_per_t_test_acc_per_seed"])
+            analytical_per_t = np.asarray(probe["analytical_per_t_test_acc_per_seed"])
+            per_method_per_env.setdefault(env_label, {})[method] = {
+                "n_seeds": int(method_per_t.shape[0]),
+                "method_per_t_test_acc_mean": method_per_t.mean(axis=0).tolist(),
+                "method_per_t_test_acc_per_seed": method_per_t.tolist(),
+                "analytical_per_t_test_acc_mean": analytical_per_t.mean(axis=0).tolist(),
+                "method_test_acc_mean": float(np.mean(probe["method_test_acc_per_seed"])),
+                "method_test_acc_per_seed": probe["method_test_acc_per_seed"],
+                "method_test_acc_ci95": [
+                    float(np.percentile(np.asarray(probe["method_test_acc_per_seed"]), 2.5)),
+                    float(np.percentile(np.asarray(probe["method_test_acc_per_seed"]), 97.5)),
+                ],
+                "analytical_test_acc_per_seed": probe["analytical_test_acc_per_seed"],
+            }
             m_mean = float(np.mean(probe["method_test_acc_per_seed"]))
             a_mean = float(np.mean(probe["analytical_test_acc_per_seed"]))
             print(
@@ -227,6 +251,7 @@ def main() -> int:
         "n_cells_attempted": n_total,
         "n_cells_failed": len(failed),
         "scatter_points": scatter_points,
+        "per_method_per_env": per_method_per_env,
         "correlation_overall": correlation_overall,
         "correlation_per_method": correlation_per_method,
         "decoupling_detected": decoupling,

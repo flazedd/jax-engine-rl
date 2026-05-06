@@ -1,10 +1,12 @@
-# M6 — distinguishability sweep, hard level.
+# M6 — distinguishability sweep, hard level (v2).
 #
-# Same transition matrix as E_final (diag 0.98). Regime-conditional fill
-# probabilities are compressed so regimes look similar from observation:
-# any single fill carries weak information about the current regime.
-# Action-class invariant preserved: R0 still favors wide, R1/R2 still
-# favor tight (sym).
+# Replaces the original hard cell, which failed R3 and R4 because the
+# per-regime contrast was so narrow that no method had a positive
+# optimal envelope to recover. This cell widens the contrast just
+# enough to give a non-degenerate envelope and to clear R2 at the
+# diagnostic 40-iter PPO budget, while staying clearly narrower than
+# medium (tight=.30,.80,.50 wide=.65,.05,.02), so the cell remains
+# harder than medium.
 env:
   name: market_making_v1
   params:
@@ -20,8 +22,8 @@ env:
       0.01, 0.98, 0.01,
       0.01, 0.01, 0.98,
     ]
-    regime_p_tight_bid: [0.40, 0.65, 0.50]
-    regime_p_wide_bid:  [0.50, 0.10, 0.05]
-    regime_p_tight_ask: [0.40, 0.65, 0.50]
-    regime_p_wide_ask:  [0.50, 0.10, 0.05]
+    regime_p_tight_bid: [0.30, 0.78, 0.50]
+    regime_p_wide_bid:  [0.62, 0.05, 0.02]
+    regime_p_tight_ask: [0.30, 0.78, 0.50]
+    regime_p_wide_ask:  [0.62, 0.05, 0.02]
     initial_distribution: [0.333, 0.333, 0.334]

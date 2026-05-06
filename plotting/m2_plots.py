@@ -137,18 +137,18 @@ def plot_per_regime_ppo(
     vi_per_regime_returns: np.ndarray,
     output_path: Path,
 ) -> None:
-    """One subplot per regime: PPO learning curve with VI horizontal line."""
+    """One subplot per regime, stacked vertically: PPO learning curve with VI line."""
     apply_style()
     metrics = list(per_regime_metrics)
     n_reg = len(metrics)
-    fig, axes = plt.subplots(1, n_reg, figsize=(4.5 * n_reg, 3.4), sharey=True)
+    fig, axes = plt.subplots(n_reg, 1, figsize=(11.0, 3.5 * n_reg), sharex=True)
     if n_reg == 1:
         axes = [axes]
+    color = COLORS.get("per_regime_ppo", "#17becf")
     for r, (ax, m) in enumerate(zip(axes, metrics)):
         curve = np.asarray(m["mean_return_per_iter"])
         per_seed = np.asarray(m["per_seed_mean_return_per_iter"])  # [seeds, T]
         iters = np.arange(curve.size)
-        color = COLORS.get("per_regime_ppo", "#17becf")
         ax.plot(iters, curve, color=color, label="PPO (mean over seeds)")
         if per_seed.shape[0] > 1:
             lo = np.percentile(per_seed, 2.5, axis=0)
@@ -157,29 +157,32 @@ def plot_per_regime_ppo(
                             label="PPO seed 95% range")
         ax.axhline(
             vi_per_regime_returns[r],
-            color="black",
-            linestyle="--",
-            linewidth=1.0,
-            label=f"VI optimum = {vi_per_regime_returns[r]:.1f}",
+            color="black", linestyle="--", linewidth=1.2,
         )
-        ax.set_title(f"Regime {r} ({_regime_label(r)})")
-        ax.set_xlabel("Iteration")
-        # Per-panel legend below the panel — keeps each panel's VI line
-        # value tied to its own regime. Push it well below the xlabel.
-        ax.legend(
-            loc="upper center", bbox_to_anchor=(0.5, -0.30), fontsize=7,
-            ncol=1,
-            frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+        ax.text(
+            0.99, vi_per_regime_returns[r],
+            f"  VI optimum = {vi_per_regime_returns[r]:.1f}",
+            transform=ax.get_yaxis_transform(),
+            ha="left", va="center", fontsize=11, color="black",
         )
+        ax.set_title(f"Regime {r} ({_regime_label(r)})", fontsize=13, loc="left")
+        ax.set_ylabel("Episode return", fontsize=11)
+        ax.tick_params(axis="both", labelsize=11)
+        ax.grid(axis="y", alpha=0.3, linestyle=":")
+    axes[-1].set_xlabel("Iteration", fontsize=12)
+
     fig.suptitle(
-        "MarketMakingV1 — per-regime PPO learning curves vs VI optimum\n"
-        "Episode return"
+        "MarketMakingV1 per-regime PPO learning curves vs VI optimum",
+        fontsize=14, y=0.995,
     )
-    # Pull budget from the first regime's metrics (all share the same).
-    if metrics:
-        budget_annotation(fig, **_budget_from_metrics(metrics[0]))
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=0.42)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="lower center", ncol=2, fontsize=12,
+        bbox_to_anchor=(0.5, -0.005), frameon=True,
+        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
+    fig.tight_layout(rect=[0, 0.04, 1, 0.97])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
@@ -188,30 +191,35 @@ def plot_per_regime_ppo(
 def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
     """Entropy of analytical HMM posterior, averaged over simulated trajectories."""
     apply_style()
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
+    fig, ax = plt.subplots(figsize=(11.0, 5.5))
     # Drop the terminal step: the BeliefObsEnv wrapper resets the posterior
     # to the flat prior on done=True, so ent_curve[-1] is log(n_regimes)
     # by construction — a recording artifact, not a real re-entropification.
     curve = ent_curve[:-1] if ent_curve.size > 1 else ent_curve
     t = np.arange(curve.size)
     ax.plot(t, curve, color=COLORS.get("belief_ppo", "#9467bd"),
-            label="Mean posterior entropy")
+            linewidth=2.0, label="Mean posterior entropy")
     ax.axhline(
-        np.log(3),
-        color="gray",
-        linestyle="--",
-        linewidth=1.0,
+        np.log(3), color="gray", linestyle="--", linewidth=1.2,
         label="log(3) = 1.099 (flat prior)",
     )
-    ax.set_xlabel("Timestep within episode")
+    ax.set_xlabel("Timestep within episode", fontsize=12)
+    ax.set_ylabel("Posterior entropy (nats)", fontsize=12)
+    ax.tick_params(axis="both", labelsize=11)
     ax.set_title(
-        "MarketMakingV1 — analytical posterior entropy over time "
-        "(random-policy rollouts)\nMean posterior entropy (nats)"
+        "MarketMakingV1 analytical posterior entropy over time "
+        "(random-policy rollouts)",
+        fontsize=14,
     )
-    ax.legend(**LEGEND_OUTSIDE_RIGHT)
-    budget_annotation(fig, extra="random-policy rollouts (analytical posterior)")
-    fig.tight_layout()
-    fig.subplots_adjust(right=0.65, bottom=0.18)
+    ax.grid(axis="y", alpha=0.3, linestyle=":")
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="lower center", ncol=2, fontsize=12,
+        bbox_to_anchor=(0.5, -0.005), frameon=True,
+        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+    )
+    fig.tight_layout(rect=[0, 0.07, 1, 0.97])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)

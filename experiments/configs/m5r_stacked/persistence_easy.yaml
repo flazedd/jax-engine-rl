@@ -11,3 +11,6 @@ env:
   name: market_making_v1_stacked
   params:
     stack_k: 4
+agent:
+  params:
+    hidden_dim: 50

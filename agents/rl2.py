@@ -46,6 +46,13 @@ class GRUActorCritic(nn.Module):
     # Hypernet-side architectural-care knob: init scale on the hypernet output
     # layer. 0.0 = Beck et al. zero-init.
     hypernet_init_scale: float = 0.01
+    # Optional policy trunk inserted between the GRU output and the policy
+    # head (concat) or hypernet input (hypernet). Used to equalise total
+    # parameter counts across the matched-compute factorial. The value head
+    # always reads the GRU output directly, so the trunk only affects the
+    # policy path.
+    policy_trunk_layers: int = 0
+    policy_trunk_hidden: int = 0
 
     @nn.compact
     def __call__(
@@ -58,8 +65,16 @@ class GRUActorCritic(nn.Module):
         x = nn.tanh(x)
         new_carry, _ = nn.GRUCell(features=self.hidden_dim)(carry, x)
 
+        trunk_out = new_carry
+        for _ in range(self.policy_trunk_layers):
+            trunk_out = nn.Dense(
+                self.policy_trunk_hidden,
+                kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
+            )(trunk_out)
+            trunk_out = nn.tanh(trunk_out)
+
         if self.integration == "concat":
-            policy_in = nn.LayerNorm()(new_carry) if self.belief_layernorm else new_carry
+            policy_in = nn.LayerNorm()(trunk_out) if self.belief_layernorm else trunk_out
             logits = nn.Dense(
                 self.n_actions,
                 kernel_init=nn.initializers.orthogonal(0.01),
@@ -72,7 +87,7 @@ class GRUActorCritic(nn.Module):
                 hypernet_hidden=self.hypernet_hidden,
                 init_scale=self.hypernet_init_scale,
             )
-            flat_weights = hn(new_carry)
+            flat_weights = hn(trunk_out)
             logits = hn.apply_target(flat_weights, obs)
         else:
             raise ValueError(f"unknown integration: {self.integration!r}")
@@ -105,6 +120,10 @@ class RL2Agent:
     # Architectural-care knobs (defaults preserve previous behaviour).
     belief_layernorm: bool = False
     hypernet_init_scale: float = 0.01
+    # Matched-compute knobs: optional policy trunk between GRU output and
+    # action / hypernet head. Defaults of 0 disable the trunk.
+    policy_trunk_layers: int = 0
+    policy_trunk_hidden: int = 0
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -127,6 +146,8 @@ class RL2Agent:
             hypernet_hidden=self.hypernet_hidden,
             belief_layernorm=self.belief_layernorm,
             hypernet_init_scale=self.hypernet_init_scale,
+            policy_trunk_layers=self.policy_trunk_layers,
+            policy_trunk_hidden=self.policy_trunk_hidden,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:

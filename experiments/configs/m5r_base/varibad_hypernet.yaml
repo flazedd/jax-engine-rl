@@ -1,4 +1,7 @@
 # M5R fair-tune base — VariBAD hypernet on the held-out tuning environment.
+# hidden_dim, latent_dim, hypernet sizing, and policy_trunk_* are locked so
+# the cell sits at ~5k parameters, the matched-compute target shared with
+# references.
 extends:
   - base/base_varibad.yaml
   - envs/m5r_tuning.yaml
@@ -12,3 +15,9 @@ agent:
   params:
     integration: hypernet
     reward_decoder: gaussian
+    hidden_dim: 18
+    latent_dim: 2
+    hypernet_target_hidden: 4
+    hypernet_hidden: 8
+    policy_trunk_layers: 2
+    policy_trunk_hidden: 18

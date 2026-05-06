@@ -55,6 +55,9 @@ def _materialise(env_label: str, env_yaml: str) -> Path:
             "name": "market_making_v1_stacked",
             "params": {"stack_k": 4},
         },
+        # hidden_dim=50 lands the agent at ~5,000 parameters, the matched
+        # compute target shared with the meta-RL cells and the references.
+        "agent": {"params": {"hidden_dim": 50}},
     }
     with open(yaml_path, "w") as f:
         yaml.safe_dump(doc, f, sort_keys=False, default_flow_style=False)

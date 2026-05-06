@@ -1,6 +1,8 @@
+# Small-budget probe: VariBAD hypernet at ~5k parameters.
 extends:
-- m5r_base/varibad_hypernet.yaml
-experiment_name: m5r_locked_varibad_hypernet_PLACEHOLDER
+  - base/base_varibad.yaml
+  - envs/e_final.yaml
+experiment_name: m5r_smallbudget_varibad_hypernet
 iterations: 200
 parallel_envs: 512
 rollout_length: 128
@@ -17,7 +19,3 @@ agent:
     hypernet_init_scale: 0.01
     policy_trunk_layers: 2
     policy_trunk_hidden: 18
-    learning_rate: 3.0e-4
-    ent_coef: 0.01
-    max_grad_norm: 0.5
-    kl_coef: 0.1

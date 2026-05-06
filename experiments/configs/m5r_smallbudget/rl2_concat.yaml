@@ -1,0 +1,18 @@
+# Small-budget probe: RL² concat at ~5k parameters on the medium-difficulty
+# environment. Tests whether meta-RL methods can learn at the reference-level
+# parameter count.
+extends:
+  - base/base_rl2.yaml
+  - envs/e_final.yaml
+experiment_name: m5r_smallbudget_rl2_concat
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 8
+seed_base: 0
+agent:
+  params:
+    integration: concat
+    hidden_dim: 27
+    policy_trunk_layers: 0
+    policy_trunk_hidden: 0

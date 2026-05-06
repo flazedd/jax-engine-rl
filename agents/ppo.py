@@ -24,6 +24,12 @@ class ActorCritic(nn.Module):
     n_actions: int
     hidden_dim: int = 64
     tanh_activation: bool = True
+    # Optional extra trunk layers appended after the default 2-layer body
+    # at `policy_trunk_hidden` width. Used by the stacked-obs cell of the
+    # matched-compute factorial to reach ~180k parameters. Defaults of 0
+    # reproduce the historical 2-layer-at-hidden_dim architecture.
+    policy_trunk_layers: int = 0
+    policy_trunk_hidden: int = 0
 
     @nn.compact
     def __call__(self, obs: chex.Array) -> tuple[chex.Array, chex.Array]:
@@ -32,6 +38,12 @@ class ActorCritic(nn.Module):
         x = act(x)
         x = nn.Dense(self.hidden_dim, kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)))(x)
         x = act(x)
+        for _ in range(self.policy_trunk_layers):
+            x = nn.Dense(
+                self.policy_trunk_hidden,
+                kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
+            )(x)
+            x = act(x)
         logits = nn.Dense(
             self.n_actions,
             kernel_init=nn.initializers.orthogonal(0.01),

@@ -15,3 +15,6 @@ parallel_envs: 512
 rollout_length: 128
 num_seeds: 8
 seed_base: 0
+agent:
+  params:
+    hidden_dim: 50  # matched-compute: ~5k parameters

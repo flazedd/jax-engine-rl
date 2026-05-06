@@ -68,9 +68,15 @@ def _budget(run_mode: str) -> dict[str, int]:
         return dict(iterations=2, parallel_envs=16, rollout_length=32, num_seeds=1)
     if run_mode == "fast":
         return dict(iterations=20, parallel_envs=128, rollout_length=128, num_seeds=1)
-    # The M2 diagnostic full-mode budget. Deliberately smaller than M1 full
-    # — the goal is directional confidence, not final-quality CIs.
-    return dict(iterations=40, parallel_envs=256, rollout_length=128, num_seeds=3)
+    # The M2 diagnostic full-mode budget. Bumped to 80 iter so that R2
+    # (per-regime PPO vs VI) clears its 0.85-ratio threshold with
+    # headroom rather than landing on the razor edge — at 40 iter, even
+    # the medium-difficulty env only just cleared. R3 and R4 are
+    # bottlenecked by inference / envelope size, not PPO budget, so the
+    # extra iterations are essentially free for them. num_seeds=5
+    # tightens the bootstrap CI on R3's gap-to-ci ratio enough that
+    # narrow-envelope cells clear the 3.0 threshold reliably.
+    return dict(iterations=80, parallel_envs=256, rollout_length=128, num_seeds=5)
 
 
 def _run_short_ppo(

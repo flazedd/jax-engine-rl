@@ -51,11 +51,18 @@ PERSISTENCE_LEVELS = (
     ("persistence_easy", "Easy ($P_{ii}=0.99$)"),
     ("e_final", "Medium ($P_{ii}=0.98$)"),
     ("persistence_hard", "Hard ($P_{ii}=0.96$)"),
+    ("persistence_very_hard", "Very-hard ($P_{ii}=0.92$)"),
 )
 DISTINGUISHABILITY_LEVELS = (
     ("distinguishability_easy", "Easy"),
     ("e_final", "Medium"),
     ("distinguishability_hard", "Hard"),
+)
+KAPPA_LEVELS = (
+    ("kappa02", "$\\kappa = 0.02$"),
+    ("e_final", "$\\kappa = 0.05$"),
+    ("kappa10", "$\\kappa = 0.10$"),
+    ("kappa20", "$\\kappa = 0.20$"),
 )
 
 
@@ -247,22 +254,31 @@ def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
     apply_style()
     data = _load()
     stacked = _load_stacked_obs()
-    fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=False, sharey=False)
-    for ax, (env_label, level_label) in zip(axes, axis_levels):
+    n_panels = len(axis_levels)
+    if n_panels == 4:
+        nrows, ncols = 2, 2
+        figsize = (12, 8)
+    else:
+        nrows, ncols = n_panels, 1
+        figsize = (10, 4 * n_panels)
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize,
+                             sharex=False, sharey=False)
+    flat_axes = axes.flatten() if hasattr(axes, "flatten") else [axes]
+    for ax, (env_label, level_label) in zip(flat_axes, axis_levels):
         env_block = data["per_env"][env_label]
         _ladder_bars(ax, env_block, env_label=env_label, stacked_data=stacked)
-        ax.set_title(level_label, fontsize=12)
-        ax.set_ylabel("Final return", fontsize=10)
-        ax.tick_params(axis="both", labelsize=10)
-    fig.suptitle(suptitle, fontsize=14)
-    ref_handles, ref_labels = axes[0].get_legend_handles_labels()
+        ax.set_title(level_label, fontsize=11)
+        ax.set_ylabel("Final return", fontsize=9)
+        ax.tick_params(axis="both", labelsize=9)
+    fig.suptitle(suptitle, fontsize=13)
+    ref_handles, ref_labels = flat_axes[0].get_legend_handles_labels()
     fig.legend(
         handles=_legend_handles() + ref_handles,
-        loc="lower center", ncol=4, fontsize=11,
+        loc="lower center", ncol=4, fontsize=10,
         bbox_to_anchor=(0.5, -0.005), frameon=True,
         facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    fig.tight_layout(rect=[0, 0.05, 1, 0.96])
+    fig.tight_layout(rect=[0, 0.07, 1, 0.95])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")

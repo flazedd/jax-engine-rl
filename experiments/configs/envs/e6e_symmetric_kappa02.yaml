@@ -1,0 +1,24 @@
+# E6e variant — symmetric fills with κ=0.02 inventory penalty. Used for the
+# kappa-sensitivity sweep that tests whether the integration-mechanism
+# ordering survives changes in the inventory penalty. All other regime
+# parameters match e6e_symmetric_kappa05 (the main paper's E_final).
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.02
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.30, 0.80, 0.50]
+    regime_p_wide_bid:  [0.65, 0.05, 0.02]
+    regime_p_tight_ask: [0.30, 0.80, 0.50]
+    regime_p_wide_ask:  [0.65, 0.05, 0.02]
+    initial_distribution: [0.333, 0.333, 0.334]

@@ -183,10 +183,14 @@ def _train_cell(
     cfg = _build_cell_cfg(method, base_yaml, axis, level, mode)
     if skip_existing:
         existing = _read_metrics(cfg.experiment_name)
-        if existing and existing.get("iterations", 0) >= cfg.iterations:
+        if (
+            existing
+            and existing.get("iterations", 0) >= cfg.iterations
+            and existing.get("num_seeds", 0) >= cfg.num_seeds
+        ):
             print(
                 f"[cp_sweep] skip {cfg.experiment_name}: existing metrics with "
-                f"iters>={existing.get('iterations')}",
+                f"iters>={existing.get('iterations')}, seeds>={existing.get('num_seeds')}",
                 flush=True,
             )
             m = existing

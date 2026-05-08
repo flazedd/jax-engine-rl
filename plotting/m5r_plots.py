@@ -404,10 +404,21 @@ def plot_m5r_probe_per_t(out_path: Path, env_label: str = "e_final") -> None:
     smoothing_window = 9
 
     def _smooth(arr, w):
+        """Centered moving average that averages only the available samples
+        at the boundaries. Avoids the edge-attenuation artifact of
+        np.convolve(..., mode='same') which zero-pads the edges and pulls
+        them spuriously toward zero."""
         if w <= 1:
             return arr
-        kernel = np.ones(w) / w
-        return np.convolve(arr, kernel, mode="same")
+        arr = np.asarray(arr, dtype=float)
+        out = np.empty_like(arr)
+        half = w // 2
+        n = len(arr)
+        for i in range(n):
+            lo = max(0, i - half)
+            hi = min(n, i + half + 1)
+            out[i] = arr[lo:hi].mean()
+        return out
 
     analytical_drawn = False
     for cell in CELLS:

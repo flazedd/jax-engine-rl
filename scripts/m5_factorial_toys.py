@@ -40,6 +40,41 @@ VARIANTS = [
     ("hypernet", "hypernet_nobonus"),
 ]
 
+# Matched-compute architecture knobs at ~5k parameters per cell, matching
+# the m5r_locked configurations used on MarketMakingV1. Injected into the
+# m4_<method>_<env>.yaml template before training.
+MATCHED_COMPUTE_KNOBS = {
+    ("rl2", "concat"): {
+        "hidden_dim": 27,
+        "policy_trunk_layers": 0,
+        "policy_trunk_hidden": 0,
+    },
+    ("rl2", "hypernet"): {
+        "hidden_dim": 24,
+        "hypernet_target_hidden": 4,
+        "hypernet_hidden": 8,
+        "hypernet_init_scale": 0.01,
+        "policy_trunk_layers": 0,
+        "policy_trunk_hidden": 0,
+    },
+    ("varibad", "concat"): {
+        "hidden_dim": 20,
+        "latent_dim": 2,
+        "policy_trunk_layers": 2,
+        "policy_trunk_hidden": 20,
+    },
+    ("varibad", "hypernet"): {
+        "hidden_dim": 18,
+        "latent_dim": 2,
+        "hypernet_target_hidden": 4,
+        "hypernet_hidden": 8,
+        "hypernet_init_scale": 0.01,
+        "policy_trunk_layers": 2,
+        "policy_trunk_hidden": 18,
+    },
+}
+TOYS_NUM_SEEDS = 8
+
 
 def _bootstrap_ci(values: list[float], n_boot: int = 10_000) -> tuple[float, float]:
     arr = np.asarray(values, dtype=float)
@@ -52,13 +87,19 @@ def _bootstrap_ci(values: list[float], n_boot: int = 10_000) -> tuple[float, flo
 
 
 def _build_factorial_config(method: str, env: str, integration: str):
-    """Load m4_<method>_<env>.yaml as template, override integration."""
+    """Load m4_<method>_<env>.yaml as template, override integration and
+    matched-compute architecture knobs."""
     template_path = CONFIG_ROOT / f"m4_{method}_{env}.yaml"
     cfg = load_config(template_path)
     apply_run_mode(cfg, "full")
     cfg.experiment_name = f"m5_factorial_{method}_{env}_{integration}_nobonus"
     cfg.agent.params = copy.deepcopy(cfg.agent.params)
     cfg.agent.params["integration"] = integration
+    # Inject matched-compute architecture knobs.
+    knobs = MATCHED_COMPUTE_KNOBS.get((method, integration), {})
+    for k, v in knobs.items():
+        cfg.agent.params[k] = v
+    cfg.num_seeds = TOYS_NUM_SEEDS
     return cfg
 
 

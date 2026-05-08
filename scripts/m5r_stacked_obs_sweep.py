@@ -49,7 +49,7 @@ def _materialise(env_label: str, env_yaml: str) -> Path:
         "iterations": 200,
         "parallel_envs": 512,
         "rollout_length": 128,
-        "num_seeds": 8,
+        "num_seeds": 12,
         "seed_base": 0,
         "env": {
             "name": "market_making_v1_stacked",

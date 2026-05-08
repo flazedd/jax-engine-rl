@@ -1,7 +1,8 @@
 # Second-POMDP external-validity probe — RL² with concat integration on
-# CartPoleRegimeV1. Mirrors `m5_step4_rl2_concat.yaml` exactly except for
-# the env so the cross-env comparison is cleanly attributable to "different
-# env" rather than "different hyperparameters".
+# CartPoleRegimeV1. Matched-compute (~5k params) and seed protocol mirror
+# the main paper's M5R locked configs (m5r_locked/rl2_concat.yaml) so the
+# cross-env comparison is cleanly attributable to "different env" rather
+# than "different hyperparameters".
 extends:
   - base/base_rl2.yaml
   - envs/e_cartpole_v1.yaml
@@ -9,8 +10,15 @@ experiment_name: m_cartpole_rl2_concat
 iterations: 200
 parallel_envs: 512
 rollout_length: 128
-num_seeds: 8
+num_seeds: 12
 seed_base: 0
 agent:
   params:
     integration: concat
+    hidden_dim: 27
+    policy_trunk_layers: 0
+    policy_trunk_hidden: 0
+    learning_rate: 3.0e-4
+    ent_coef: 0.01
+    max_grad_norm: 0.5
+    belief_layernorm: false

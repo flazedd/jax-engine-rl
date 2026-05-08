@@ -1,0 +1,25 @@
+# M6 — persistence sweep, very-hard level. Pushes the diagonal from 0.96
+# (the hard cell) to 0.92, mean regime duration ~12.5 steps versus hard's
+# ~25 and medium's ~50. Tests whether the inference cost continues to
+# grow toward the compromise-policy cost beyond persistence-hard, and
+# maps the inference-dominated frontier flagged in the discussion.
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.92, 0.04, 0.04,
+      0.04, 0.92, 0.04,
+      0.04, 0.04, 0.92,
+    ]
+    regime_p_tight_bid: [0.30, 0.80, 0.50]
+    regime_p_wide_bid:  [0.65, 0.05, 0.02]
+    regime_p_tight_ask: [0.30, 0.80, 0.50]
+    regime_p_wide_ask:  [0.65, 0.05, 0.02]
+    initial_distribution: [0.333, 0.333, 0.334]

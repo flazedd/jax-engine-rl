@@ -279,11 +279,11 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
     row = cartpole (inversion). Left column = logistic, right = MLP.
     The four panels share x and y conventions so the cross-env contrast
     is visible at a glance."""
-    M6 = REPO_ROOT / "results" / "milestones" / "M6"
+    M5R = REPO_ROOT / "results" / "M5R" / "final"
     CP = RESULTS_ROOT / "milestones" / "cartpole"
     paths = {
-        ("MM", "logistic"): M6 / "stats_M6_posterior_vs_performance.json",
-        ("MM", "mlp"): M6 / "stats_M6_posterior_vs_performance_mlp.json",
+        ("MM", "logistic"): M5R / "m5r_posterior_vs_performance.json",
+        ("MM", "mlp"): M5R / "m5r_posterior_vs_performance_mlp.json",
         ("Cartpole", "logistic"): CP / "stats_cartpole_posterior_vs_performance.json",
         ("Cartpole", "mlp"): CP / "stats_cartpole_posterior_vs_performance_mlp.json",
     }
@@ -338,14 +338,17 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
 
     axes[0, 1].legend(**LEGEND_OUTSIDE_RIGHT)
     fig.suptitle(
-        "Posterior decoding vs task performance — across two envs and two probe types\n"
-        "MM (top): decoupling under both probes  ·  Cartpole (bottom): inversion under both probes",
+        "Posterior decoding vs task performance, across two envs and two probe types\n"
+        "Within each method, concat decodes more accurately yet performs worse",
         y=1.0,
         fontsize=12,
     )
     budget_annotation(
         fig,
-        extra="MM n=192 (24 cells × 8 seeds)  ·  Cartpole n=32 (4 cells × 8 seeds)  ·  n_rollouts=200",
+        extra=(
+            "MM n=240 (20 cells x 12 seeds)  ·  "
+            "Cartpole n=48 (4 cells x 12 seeds)  ·  matched-compute protocol"
+        ),
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)

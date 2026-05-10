@@ -34,8 +34,12 @@ SWEEP_ENVS = [
     ("e_final",                 "envs/e_final.yaml"),
     ("persistence_easy",        "envs/m6_persistence_easy.yaml"),
     ("persistence_hard",        "envs/m6_persistence_hard.yaml"),
+    ("persistence_very_hard",   "envs/m6_persistence_very_hard.yaml"),
     ("distinguishability_easy", "envs/m6_distinguishability_easy.yaml"),
     ("distinguishability_hard", "envs/m6_distinguishability_hard.yaml"),
+    ("kappa02",                 "envs/e6e_symmetric_kappa02.yaml"),
+    ("kappa10",                 "envs/e6e_symmetric_kappa10.yaml"),
+    ("kappa20",                 "envs/e6e_symmetric_kappa20.yaml"),
 ]
 
 

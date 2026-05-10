@@ -284,12 +284,20 @@ def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
     print(f"[m5r_plots] wrote {out_path}")
 
 
-def plot_posterior_vs_performance(out_path: Path) -> None:
-    """Scatter of probe accuracy vs gap-closed for the logistic probe."""
+def plot_posterior_vs_performance(
+    out_path: Path, classifier: str = "logistic"
+) -> None:
+    """Scatter of probe accuracy vs gap-closed.
+
+    `classifier="logistic"` plots the linear probe; `classifier="mlp"` plots
+    the two-layer MLP probe. The two figures share axes ranges and styling
+    so they can be displayed side by side.
+    """
     apply_style()
-    probe = _load_probe("logistic")
+    probe = _load_probe(classifier)
     if probe is None:
-        print("[m5r_plots] skip posterior_vs_performance: probe data missing")
+        print(f"[m5r_plots] skip posterior_vs_performance ({classifier}): "
+              "probe data missing")
         return
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
     methods = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
@@ -306,12 +314,17 @@ def plot_posterior_vs_performance(out_path: Path) -> None:
             xs, ys, color=COLORS[m], s=22, alpha=0.7,
             edgecolor="black", linewidth=0.3, label=CELL_LABEL[m],
         )
-    ax.set_xlabel("Linear-probe regime-decoding accuracy")
+    probe_label = "Linear-probe" if classifier == "logistic" else "MLP-probe"
+    ax.set_xlabel(f"{probe_label} regime-decoding accuracy")
     ax.set_ylabel("Gap-closed vs.\\ Oracle")
     ax.set_title(
-        "Posterior accuracy vs.\\ final return\n"
+        f"Posterior accuracy vs.\\ final return, {probe_label.lower()}\n"
         "MarketMakingV1, all five difficulty levels pooled"
     )
+    # Shared x-range across the linear and MLP variants so the two figures
+    # are directly comparable when shown side by side. Data range is
+    # roughly [0.42, 0.92] across both probes; pad to [0.40, 0.95].
+    ax.set_xlim(0.40, 0.95)
     ax.axhspan(-0.30, 0.30, color="#eeeeee", alpha=0.0)
     ax.axhline(0.0, color="black", linewidth=0.5, alpha=0.5)
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8,
@@ -508,6 +521,12 @@ def main() -> int:
             "MarketMakingV1, persistence-axis difficulty sweep",
             target,
         )
+    for target in _both_targets("m5r_kappa_sweep.png"):
+        plot_sweep(
+            KAPPA_LEVELS,
+            "MarketMakingV1, inventory-penalty $\\kappa$ sweep",
+            target,
+        )
     for target in _both_targets("m5r_distinguishability_sweep.png"):
         plot_sweep(
             DISTINGUISHABILITY_LEVELS,
@@ -515,7 +534,9 @@ def main() -> int:
             target,
         )
     for target in _both_targets("m5r_posterior_vs_performance.png"):
-        plot_posterior_vs_performance(target)
+        plot_posterior_vs_performance(target, classifier="logistic")
+    for target in _both_targets("m5r_posterior_vs_performance_mlp.png"):
+        plot_posterior_vs_performance(target, classifier="mlp")
     for target in _both_targets("m5r_learning_curves.png"):
         plot_m5r_learning_curves(target)
     for target in _both_targets("m5r_probe_per_t.png"):

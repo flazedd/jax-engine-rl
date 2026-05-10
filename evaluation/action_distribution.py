@@ -24,6 +24,22 @@ import jax.numpy as jnp
 import numpy as np
 
 
+def _extract_inventory(state: Any) -> Any:
+    """Walk through wrapper-nested env state to recover the underlying
+    MarketMakingV1 inventory `q`. Returns None if no `q` key is found.
+
+    Handles raw envs ({"q", "t", "regime"}) as well as the rl2_obs and
+    stack_obs wrappers that nest the inner state under an "inner" key.
+    """
+    if not isinstance(state, dict):
+        return None
+    if "q" in state:
+        return state["q"]
+    if "inner" in state:
+        return _extract_inventory(state["inner"])
+    return None
+
+
 def collect_action_regime_rollouts(
     env: Any,
     agent: Any,
@@ -59,6 +75,7 @@ def collect_action_regime_rollouts(
 
     out_action = []
     out_regime = []
+    out_inventory = []
     out_reward = []
     out_done = []
 
@@ -87,6 +104,13 @@ def collect_action_regime_rollouts(
             action, _extras, _ = act_step(agent_state, obses, step_key)
             new_carry = None
 
+        # Pre-action inventory: the inventory state the agent observed when
+        # selecting `action`. Recorded before stepping so it pairs with the
+        # action that was just chosen rather than the post-fill inventory.
+        # Wrappers may nest the underlying env state one or more levels deep
+        # under an "inner" key (rl2_obs, stack_obs); walk down to find "q".
+        q_pre = _extract_inventory(env_states)
+
         step_keys = jax.random.split(key, n_rollouts + 1)
         env_keys, key = step_keys[:n_rollouts], step_keys[-1]
         env_states, obses_next, rewards, dones, info = step_v(
@@ -95,6 +119,8 @@ def collect_action_regime_rollouts(
 
         out_action.append(np.asarray(action))
         out_regime.append(np.asarray(info["regime"]))
+        if q_pre is not None:
+            out_inventory.append(np.asarray(q_pre))
         out_reward.append(np.asarray(rewards))
         out_done.append(np.asarray(dones))
 
@@ -104,12 +130,15 @@ def collect_action_regime_rollouts(
             carry = mask * zeros + (1.0 - mask) * new_carry
         obses = obses_next
 
-    return {
+    out = {
         "action": np.stack(out_action).astype(np.int32),
         "regime": np.stack(out_regime).astype(np.int32),
         "reward": np.stack(out_reward),
         "done": np.stack(out_done).astype(np.int32),
     }
+    if out_inventory:
+        out["inventory"] = np.stack(out_inventory).astype(np.int32)
+    return out
 
 
 def compute_action_given_regime(
@@ -139,3 +168,37 @@ def compute_action_given_regime(
     row_sums = counts.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1.0  # avoid divide-by-zero on empty regimes
     return counts / row_sums
+
+
+def compute_action_given_regime_inventory(
+    actions: np.ndarray,    # [T, N] int
+    regimes: np.ndarray,    # [T, N] int
+    inventories: np.ndarray,  # [T, N] int, signed pre-action inventory
+    n_actions: int,
+    n_regimes: int,
+    inv_max: int,
+) -> np.ndarray:
+    """Compute P(action | regime, inventory) -> [n_regimes, 2*inv_max+1, n_actions].
+
+    Inventories are signed integers in [-inv_max, +inv_max] and are mapped to
+    bins 0..2*inv_max via `bin = q + inv_max`. Each (regime, inventory) row
+    sums to 1 over actions; rows with zero observed steps are kept as zeros.
+    """
+    a_flat = actions.reshape(-1)
+    r_flat = regimes.reshape(-1)
+    q_flat = inventories.reshape(-1)
+    n_inv = 2 * inv_max + 1
+    bin_q = q_flat + inv_max
+    mask = (
+        (r_flat >= 0) & (r_flat < n_regimes)
+        & (bin_q >= 0) & (bin_q < n_inv)
+    )
+    a_flat = a_flat[mask]
+    r_flat = r_flat[mask]
+    bin_q = bin_q[mask]
+    counts = np.zeros((n_regimes, n_inv, n_actions), dtype=np.float64)
+    flat_idx = (r_flat * n_inv + bin_q) * n_actions + a_flat
+    np.add.at(counts.reshape(-1), flat_idx, 1.0)
+    row_sums = counts.sum(axis=2, keepdims=True)
+    safe = np.where(row_sums == 0, 1.0, row_sums)
+    return counts / safe

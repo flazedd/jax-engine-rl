@@ -1,0 +1,16 @@
+extends:
+- base/base_ppo.yaml
+- envs/e6e_symmetric_kappa20.yaml
+experiment_name: m5r_stacked_obs_kappa20
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 12
+seed_base: 0
+env:
+  name: market_making_v1_stacked
+  params:
+    stack_k: 4
+agent:
+  params:
+    hidden_dim: 50

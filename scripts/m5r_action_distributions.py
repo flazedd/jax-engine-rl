@@ -20,7 +20,9 @@ import jax
 import numpy as np
 
 from evaluation.action_distribution import (
-    collect_action_regime_rollouts, compute_action_given_regime,
+    collect_action_regime_rollouts,
+    compute_action_given_regime,
+    compute_action_given_regime_inventory,
 )
 from evaluation.posterior_probe import load_experiment
 from utils.script_output import ScriptRun
@@ -41,6 +43,7 @@ METHODS: list[tuple[str, str]] = [
 
 N_ACTIONS = 3
 N_REGIMES = 3
+INV_MAX = 5  # MarketMakingV1 default; inventory ∈ [-INV_MAX, +INV_MAX]
 
 
 def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> dict[str, Any]:
@@ -52,6 +55,7 @@ def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> di
     if not seeds:
         raise FileNotFoundError(f"no checkpoints in {exp_dir}")
     per_seed_dist = []
+    per_seed_dist_inv = []
     per_seed_returns = []
     for seed in seeds:
         bundle = load_experiment(exp_dir, seed)
@@ -64,9 +68,15 @@ def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> di
             data["action"], data["regime"], N_ACTIONS, N_REGIMES,
         )
         per_seed_dist.append(dist)
+        if "inventory" in data:
+            dist_inv = compute_action_given_regime_inventory(
+                data["action"], data["regime"], data["inventory"],
+                N_ACTIONS, N_REGIMES, INV_MAX,
+            )
+            per_seed_dist_inv.append(dist_inv)
         per_seed_returns.append(float(data["reward"].sum(axis=0).mean()))
     arr = np.stack(per_seed_dist)
-    return {
+    out = {
         "experiment_name": experiment_name,
         "seeds": seeds,
         "per_seed_action_given_regime": arr.tolist(),
@@ -75,6 +85,14 @@ def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> di
             else np.zeros_like(arr[0]).tolist(),
         "per_seed_episode_return": per_seed_returns,
     }
+    if per_seed_dist_inv:
+        arr_inv = np.stack(per_seed_dist_inv)
+        out["mean_action_given_regime_inventory"] = arr_inv.mean(axis=0).tolist()
+        out["std_action_given_regime_inventory"] = (
+            arr_inv.std(axis=0, ddof=1).tolist() if len(seeds) > 1
+            else np.zeros_like(arr_inv[0]).tolist()
+        )
+    return out
 
 
 def main() -> int:
@@ -120,6 +138,7 @@ def main() -> int:
         "rollout_length": args.rollout_length,
         "action_names": ["sym", "favor_ask", "favor_bid"],
         "n_regimes": N_REGIMES,
+        "inv_max": INV_MAX,
         "by_method": by_method,
     }
     with open(stats_path, "w") as f:

@@ -1,0 +1,37 @@
+# E8 — Directional regimes with ZERO-DRIFT optima (experimental probe).
+#
+# Same bull/bear/noise action structure as E7 (sym / favor_bid / favor_ask),
+# but the asymmetric fills are chosen so the OPTIMAL action in each regime
+# has zero expected inventory drift:
+#   bull  favor_bid drift = bid_tight - ask_wide = 0.30 - 0.30 = 0
+#   bear  favor_ask drift = bid_wide  - ask_tight = 0.30 - 0.30 = 0
+#   noise sym        drift = 0 (symmetric)
+# Goal: keep the directional optimal-action story but stop inventory from
+# encoding the regime, so the regime stays inferable only from the FILL
+# pattern (R4) and the compromise gap (R3) does not collapse the way E7 did.
+# All sides keep p_tight > p_wide.
+#
+# Capture at q~0 (sym / favor_bid / favor_ask):
+#   R0 noise: 1.20 / 1.05 / 1.05 -> sym
+#   R1 bull : 0.90 / 1.20 / 0.90 -> favor_bid
+#   R2 bear : 0.90 / 0.90 / 1.20 -> favor_ask
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.60, 0.30, 0.60]
+    regime_p_wide_bid:  [0.15, 0.10, 0.30]
+    regime_p_tight_ask: [0.60, 0.60, 0.30]
+    regime_p_wide_ask:  [0.15, 0.30, 0.10]
+    initial_distribution: [0.333, 0.333, 0.334]

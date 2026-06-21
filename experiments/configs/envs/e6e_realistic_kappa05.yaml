@@ -1,0 +1,30 @@
+# E6e-realistic — E6e with the regime-0 fill ordering made realistic.
+#
+# Identical to e6e_symmetric_kappa05 EXCEPT regime 0's fills are changed
+# from (p_tight=0.30, p_wide=0.65) to (0.75, 0.50) so that p_tight > p_wide
+# holds on every side of every regime. The optimal action class is
+# unchanged (regime 0 -> favor_*, regimes 1,2 -> sym) and the per-regime
+# optimal returns are preserved (2.25 / 1.60 / 1.00), because favor is
+# optimal in regime 0 via 3*p_wide > p_tight (1.50 > 0.75), not via an
+# inverted fill ordering. Within-regime fills stay symmetric (bid == ask)
+# so inventory does not leak the regime.
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.75, 0.80, 0.50]
+    regime_p_wide_bid:  [0.50, 0.05, 0.02]
+    regime_p_tight_ask: [0.75, 0.80, 0.50]
+    regime_p_wide_ask:  [0.50, 0.05, 0.02]
+    initial_distribution: [0.333, 0.333, 0.334]

@@ -13,8 +13,8 @@
 # after a run begins constitutes a new experiment, not a continuation.
 #
 # Matched-compute design: hidden_dim, latent_dim, and policy_trunk_* are
-# pinned in the m5r_base configs so total parameter count sits within
-# ±1% of 180k for every cell. They are not searched here; only the
+# pinned in the m5r_base configs so total parameter count sits at roughly
+# 5k (the 4,932-5,380 band) for every cell. They are not searched here; only the
 # optimisation knobs (LR, ent_coef, max_grad_norm, kl_coef, layernorm,
 # init_scale) are.
 

@@ -87,6 +87,10 @@ def recurrent_rollout(
             "done": dones,
             "carry_in": agent_carry,
         }
+        # Capture the true regime only when the agent uses an auxiliary
+        # regime-decoding loss (keeps the trajectory unchanged otherwise).
+        if getattr(agent, "aux_decode_coef", 0.0) > 0.0:
+            out["regime"] = _info["regime"]
         out.update({k: v for k, v in extras.items()})
         return (new_states, next_obs, new_agent_carry, key), out
 

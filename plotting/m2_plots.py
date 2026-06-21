@@ -66,10 +66,6 @@ def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) ->
     ax.set_xticks(range(n_inv))
     ax.set_xticklabels(inv_levels)
     ax.set_xlabel("Inventory q")
-    ax.set_title(
-        "MarketMakingV1 — analytical (VI) optimal action per (regime, inventory)\n"
-        "Rows = regime"
-    )
     # Replace the colorbar with a proper legend so the chart self-documents
     # the action encoding (per the every-element-in-legend convention).
     legend_handles = [
@@ -151,10 +147,11 @@ def plot_per_regime_ppo(
         iters = np.arange(curve.size)
         ax.plot(iters, curve, color=color, label="PPO (mean over seeds)")
         if per_seed.shape[0] > 1:
+            n_seeds = per_seed.shape[0]
             lo = np.percentile(per_seed, 2.5, axis=0)
             hi = np.percentile(per_seed, 97.5, axis=0)
             ax.fill_between(iters, lo, hi, color=color, alpha=0.2,
-                            label="PPO seed 95% range")
+                            label=f"Per-seed spread: 2.5–97.5th percentile (n={n_seeds})")
         ax.axhline(
             vi_per_regime_returns[r],
             color="black", linestyle="--", linewidth=1.2,
@@ -171,10 +168,6 @@ def plot_per_regime_ppo(
         ax.grid(axis="y", alpha=0.3, linestyle=":")
     axes[-1].set_xlabel("Iteration", fontsize=12)
 
-    fig.suptitle(
-        "MarketMakingV1 per-regime PPO learning curves vs VI optimum",
-        fontsize=14, y=0.995,
-    )
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
         handles, labels,
@@ -182,7 +175,7 @@ def plot_per_regime_ppo(
         bbox_to_anchor=(0.5, -0.005), frameon=True,
         facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    fig.tight_layout(rect=[0, 0.04, 1, 0.97])
+    fig.tight_layout(rect=[0, 0.04, 1, 0.99])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
@@ -206,11 +199,6 @@ def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
     ax.set_xlabel("Timestep within episode", fontsize=12)
     ax.set_ylabel("Posterior entropy (nats)", fontsize=12)
     ax.tick_params(axis="both", labelsize=11)
-    ax.set_title(
-        "MarketMakingV1 analytical posterior entropy over time "
-        "(random-policy rollouts)",
-        fontsize=14,
-    )
     ax.grid(axis="y", alpha=0.3, linestyle=":")
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(
@@ -261,10 +249,6 @@ def plot_belief_ppo_gap(
                     ha="center", va="top", fontsize=9, color="black")
     ax.set_xticks(xs)
     ax.set_xticklabels(display_labels, rotation=15, ha="right")
-    ax.set_title(
-        "MarketMakingV1 — Regime-agnostic PPO vs Belief-PPO vs Oracle-PPO\n"
-        "Episode return"
-    )
     legend_handles = [
         Patch(facecolor=c, edgecolor="black", linewidth=0.4, label=lbl)
         for c, lbl in zip(colors, display_labels)

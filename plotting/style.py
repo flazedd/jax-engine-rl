@@ -86,26 +86,13 @@ def budget_annotation(
     extra: str = "",
     y: float = 0.005,
 ) -> None:
-    """Italic compute-budget caption at the bottom of the figure.
+    """Compute-budget annotation.
 
-    Lets the reader tell smoke runs from full-budget runs at a glance.
-    Every thesis figure should include one — call this after `tight_layout`.
+    Intentionally a no-op: the compute budget is now reported in the thesis
+    figure captions rather than rendered onto the figure. Kept as a stub so the
+    existing call sites remain valid.
     """
-    parts: list[str] = []
-    if iterations is not None:
-        parts.append(f"{iterations} iter")
-    if parallel_envs is not None:
-        parts.append(f"{parallel_envs} envs")
-    if rollout_length is not None:
-        parts.append(f"rollout {rollout_length}")
-    if num_seeds is not None:
-        parts.append(f"n={num_seeds} seeds")
-    if extra:
-        parts.append(extra)
-    if not parts:
-        return
-    text = "Compute: " + " × ".join(parts)
-    fig.text(0.5, y, text, ha="center", fontsize=7, style="italic", color="#555555")
+    return
 
 
 def draw_reference_lines(

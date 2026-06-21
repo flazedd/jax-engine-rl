@@ -114,13 +114,7 @@ def main() -> int:
     for col in range(n_cols):
         axes[-1, col].set_xlabel("Inventory $q$", fontsize=9)
 
-    fig.suptitle(
-        "Action distribution conditional on regime and inventory, "
-        "MarketMakingV1, medium difficulty",
-        fontsize=12, y=0.995,
-    )
-
-    fig.tight_layout(rect=(0, 0.02, 0.95, 0.985))
+    fig.tight_layout(rect=(0, 0.02, 0.95, 0.99))
     cbar_ax = fig.add_axes([0.96, 0.18, 0.012, 0.66])
     cb = fig.colorbar(im, cax=cbar_ax)
     cb.set_label("P(action | regime, inventory)", fontsize=9)

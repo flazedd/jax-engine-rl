@@ -37,6 +37,11 @@ class GRUActorCritic(nn.Module):
     n_actions: int
     obs_size: int
     hidden_dim: int = 64
+    # When True, the policy and value heads read a stop-gradient copy of the GRU
+    # belief, so their gradients do not shape the encoder. Combined with an
+    # auxiliary regime-decode loss, the encoder is then trained purely for
+    # decodability while a hypernet policy exploits it (single-stage decoupling).
+    detach_belief_for_policy: bool = False
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
@@ -65,7 +70,13 @@ class GRUActorCritic(nn.Module):
         x = nn.tanh(x)
         new_carry, _ = nn.GRUCell(features=self.hidden_dim)(carry, x)
 
-        trunk_out = new_carry
+        # The heads optionally read a detached belief so their gradients do not
+        # flow back into the encoder; the raw new_carry is still returned for the
+        # recurrence and for the auxiliary decoder.
+        belief = (jax.lax.stop_gradient(new_carry)
+                  if self.detach_belief_for_policy else new_carry)
+
+        trunk_out = belief
         for _ in range(self.policy_trunk_layers):
             trunk_out = nn.Dense(
                 self.policy_trunk_hidden,
@@ -94,7 +105,7 @@ class GRUActorCritic(nn.Module):
 
         value = nn.Dense(
             1, kernel_init=nn.initializers.orthogonal(1.0)
-        )(new_carry).squeeze(-1)
+        )(belief).squeeze(-1)
         return new_carry, logits, value
 
 
@@ -134,6 +145,18 @@ class RL2Agent:
     # the agent's internal belief representation.
     belief_key: str = "carry_in"
 
+    # Single-stage "best of both" knob: an auxiliary regime-decoding loss on
+    # the GRU belief, added to the PPO loss with this coefficient (0 = off, no
+    # aux params, behaviour identical to before). Pressures the encoder to keep
+    # the regime linearly decodable while the policy uses any integration
+    # mechanism (e.g. hypernet), aiming for concat-quality belief + hypernet
+    # usage in one training run.
+    aux_decode_coef: float = 0.0
+    n_regimes: int = 3
+    # Detach the belief into the policy/value heads (single-stage decoupling);
+    # only meaningful together with `aux_decode_coef > 0`.
+    detach_belief_for_policy: bool = False
+
     # ---- model factory --------------------------------------------------
 
     def _model(self) -> GRUActorCritic:
@@ -148,6 +171,7 @@ class RL2Agent:
             hypernet_init_scale=self.hypernet_init_scale,
             policy_trunk_layers=self.policy_trunk_layers,
             policy_trunk_hidden=self.policy_trunk_hidden,
+            detach_belief_for_policy=self.detach_belief_for_policy,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:
@@ -160,9 +184,20 @@ class RL2Agent:
 
     def init(self, key: chex.PRNGKey) -> chex.ArrayTree:
         model = self._model()
+        k_model, k_aux = jax.random.split(key)
         dummy_carry = jnp.zeros((self.hidden_dim,), dtype=jnp.float32)
         dummy_obs = jnp.zeros((self.obs_size,), dtype=jnp.float32)
-        params = model.init(key, dummy_carry, dummy_obs)
+        params = model.init(k_model, dummy_carry, dummy_obs)
+        if self.aux_decode_coef > 0.0:
+            # Linear regime decoder over the GRU belief; trained jointly, lives
+            # as a sibling collection so the model (which only reads "params")
+            # is untouched while the optimizer still updates it.
+            params = dict(params)
+            params["aux"] = {
+                "W": nn.initializers.orthogonal(1.0)(
+                    k_aux, (self.hidden_dim, self.n_regimes)),
+                "b": jnp.zeros((self.n_regimes,), dtype=jnp.float32),
+            }
         opt_state = self._optimizer().init(params)
         return {
             "params": params,
@@ -180,7 +215,8 @@ class RL2Agent:
         obs: chex.Array,
         key: chex.PRNGKey,
     ) -> tuple[chex.Array, dict[str, chex.Array], chex.Array]:
-        new_carry, logits, value = self._model().apply(state["params"], carry, obs)
+        new_carry, logits, value = self._model().apply(
+            {"params": state["params"]["params"]}, carry, obs)
         action = jax.random.categorical(key, logits)
         log_prob = jax.nn.log_softmax(logits)[action]
         extras = {"log_prob": log_prob, "value": value}
@@ -192,26 +228,31 @@ class RL2Agent:
         """Replay the recurrent forward pass for one env's trajectory.
 
         init_carry: [hidden_dim]. obs_seq: [T, obs_size]. done_seq: [T] bool.
-        Returns logits[T, n_actions], values[T].
+        Returns logits[T, n_actions], values[T], carries[T, hidden_dim] (the
+        per-step post-update belief the policy reads; used by the aux decoder).
         """
         model = self._model()
+        mvars = {"params": params["params"]}
 
         def step(carry, inputs):
             obs_t, done_t = inputs
-            new_carry, logits_t, value_t = model.apply(params, carry, obs_t)
+            new_carry, logits_t, value_t = model.apply(mvars, carry, obs_t)
             # If this step ended an episode, reset carry for next step.
             zeros = jnp.zeros_like(new_carry)
             mask = done_t.astype(new_carry.dtype)
             next_carry = mask * zeros + (1.0 - mask) * new_carry
-            return next_carry, (logits_t, value_t)
+            return next_carry, (logits_t, value_t, new_carry)
 
-        _, (logits, values) = jax.lax.scan(step, init_carry, (obs_seq, done_seq))
-        return logits, values
+        _, (logits, values, carries) = jax.lax.scan(
+            step, init_carry, (obs_seq, done_seq))
+        return logits, values, carries
 
     def _bootstrap_value(self, params, final_obs, final_carry):
         """Compute V(final_obs | final_carry) per env for GAE bootstrap."""
+        mvars = {"params": params["params"]}
+
         def f(carry_i, obs_i):
-            _, _, v = self._model().apply(params, carry_i, obs_i)
+            _, _, v = self._model().apply(mvars, carry_i, obs_i)
             return v
         return jax.vmap(f)(final_carry, final_obs)
 
@@ -249,7 +290,8 @@ class RL2Agent:
                 lambda c, o, d: self._replay_forward(params, c, o, d),
                 in_axes=(0, 1, 1), out_axes=1,
             )
-            logits, values = replay(batch["init_carry"], batch["obs"], batch["done"])
+            logits, values, carries = replay(
+                batch["init_carry"], batch["obs"], batch["done"])
             log_probs_all = jax.nn.log_softmax(logits)
             lp_new = jnp.take_along_axis(
                 log_probs_all, batch["action"][..., None], axis=-1
@@ -267,12 +309,30 @@ class RL2Agent:
             entropy = -jnp.sum(probs * log_probs_all, axis=-1).mean()
             loss = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
 
+            aux_loss = jnp.array(0.0)
+            aux_acc = jnp.array(0.0)
+            if self.aux_decode_coef > 0.0:
+                # Linear regime decode over the differentiable belief; gradient
+                # flows into the GRU encoder, pressuring it to keep the regime
+                # decodable while the policy uses its own integration.
+                aux_logits = (
+                    jnp.einsum("tnh,hr->tnr", carries, params["aux"]["W"])
+                    + params["aux"]["b"]
+                )
+                aux_loss = optax.softmax_cross_entropy_with_integer_labels(
+                    aux_logits, batch["regime"]
+                ).mean()
+                aux_acc = (aux_logits.argmax(-1) == batch["regime"]).mean()
+                loss = loss + self.aux_decode_coef * aux_loss
+
             approx_kl = (batch["log_prob"] - lp_new).mean()
             clipped_frac = (jnp.abs(ratio - 1.0) > self.clip_eps).astype(jnp.float32).mean()
             metrics = {
                 "ppo/policy_loss": policy_loss,
                 "ppo/value_loss": value_loss,
                 "ppo/entropy": entropy,
+                "aux/decode_loss": aux_loss,
+                "aux/decode_acc": aux_acc,
                 "ppo/approx_kl": approx_kl,
                 "ppo/clipped_frac": clipped_frac,
                 "ppo/total_loss": loss,
@@ -294,7 +354,7 @@ class RL2Agent:
             perm = jax.random.permutation(epoch_key, N)[:n_envs_used]
 
             def gather_envs(idx):
-                return {
+                g = {
                     "obs": trajectory["obs"][:, idx],
                     "action": trajectory["action"][:, idx],
                     "log_prob": trajectory["log_prob"][:, idx],
@@ -303,6 +363,9 @@ class RL2Agent:
                     "done": trajectory["done"][:, idx],
                     "init_carry": init_carry[idx],
                 }
+                if self.aux_decode_coef > 0.0:
+                    g["regime"] = trajectory["regime"][:, idx]
+                return g
 
             shuffled = gather_envs(perm)
             # Custom split because init_carry has a different shape ([N, h])

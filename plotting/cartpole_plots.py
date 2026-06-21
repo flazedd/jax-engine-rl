@@ -86,10 +86,6 @@ def plot_method_ladder(out_path: Path) -> None:
     ax.set_xticks(xs)
     ax.set_xticklabels([labels[m] for m in metas], rotation=10)
     ax.set_ylabel("Mean episode return")
-    ax.set_title(
-        "CartPoleRegimeV1 — second-POMDP external-validity probe\n"
-        "Hypernet ≫ concat decoupling reproduces (Family A: 2/2 Holm-supported, LOO-robust)"
-    )
 
     # Legend with reference dashes only — bars carry their own xtick labels.
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
@@ -337,12 +333,6 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
                 ax.set_ylabel("Gap closed (0 = floor, 1 = oracle)")
 
     axes[0, 1].legend(**LEGEND_OUTSIDE_RIGHT)
-    fig.suptitle(
-        "Posterior decoding vs task performance, across two envs and two probe types\n"
-        "Within each method, concat decodes more accurately yet performs worse",
-        y=1.0,
-        fontsize=12,
-    )
     budget_annotation(
         fig,
         extra=(

@@ -42,21 +42,9 @@ def _budget_annotation(
     extra: str = "",
     y: float = 0.005,
 ) -> None:
-    parts: list[str] = []
-    if iterations is not None:
-        parts.append(f"{iterations} iter")
-    if parallel_envs is not None:
-        parts.append(f"{parallel_envs} envs")
-    if rollout_length is not None:
-        parts.append(f"rollout {rollout_length}")
-    if num_seeds is not None:
-        parts.append(f"n={num_seeds} seeds")
-    if extra:
-        parts.append(extra)
-    if not parts:
-        return
-    text = "Compute: " + " × ".join(parts)
-    fig.text(0.5, y, text, ha="center", fontsize=7, style="italic", color="#555555")
+    # No-op: compute budget is now reported in the thesis figure captions
+    # rather than rendered onto the figure. Kept as a stub for call sites.
+    return
 
 
 _TOY_ENVS = ["bandit", "gridworld", "regime_bandit"]
@@ -177,17 +165,13 @@ def plot_factorial_toys(out_path: Path) -> bool:
         ax.set_title(_TOY_ENV_LABELS[env], fontsize=13)
         ax.grid(axis="y", alpha=0.3, linestyle=":")
 
-    fig.suptitle(
-        "Implementation validation: meta-RL on standard benchmarks",
-        fontsize=14, y=0.998,
-    )
     fig.legend(
         handles=legend_handles,
         loc="lower center", ncol=3, fontsize=12,
         bbox_to_anchor=(0.5, -0.005), frameon=True,
         facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    fig.tight_layout(rect=[0, 0.05, 1, 0.97])
+    fig.tight_layout(rect=[0, 0.05, 1, 0.99])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

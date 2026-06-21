@@ -1,0 +1,37 @@
+# E7 — Directional regimes (experimental probe, NOT validated).
+#
+# Tests the bull/bear/noise mapping: optimal action at q~0 is
+#   regime 0 (noise) -> sym        (symmetric fills)
+#   regime 1 (bull)  -> favor_bid  (asymmetric: ask-wide fills well)
+#   regime 2 (bear)  -> favor_ask  (mirror of bull)
+#
+# All sides keep p_tight > p_wide (realistic ordering). Because the
+# optimal action is now DIRECTIONAL, bull drifts inventory up (+0.2/step)
+# and bear drifts it down (-0.2/step). This re-introduces the inventory
+# -> regime leak that E3/E6c failed R3 on; kappa=0.05 fights the drift.
+# Whether R3's compromise gap survives is exactly what M2 measures here.
+#
+# Capture at q~0 (sym / favor_bid / favor_ask):
+#   R0: 1.20 / 1.05 / 1.05  -> sym
+#   R1: 1.50 / 2.20 / 1.40  -> favor_bid
+#   R2: 1.50 / 1.40 / 2.20  -> favor_ask
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+
+    n_regimes: 3
+    transition_matrix: [
+      0.98, 0.01, 0.01,
+      0.01, 0.98, 0.01,
+      0.01, 0.01, 0.98,
+    ]
+    regime_p_tight_bid: [0.60, 0.70, 0.80]
+    regime_p_wide_bid:  [0.15, 0.20, 0.50]
+    regime_p_tight_ask: [0.60, 0.80, 0.70]
+    regime_p_wide_ask:  [0.15, 0.50, 0.20]
+    initial_distribution: [0.333, 0.333, 0.334]

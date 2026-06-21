@@ -43,17 +43,18 @@ SWEEP_ENVS = [
 ]
 
 
-def _materialise(env_label: str, env_yaml: str) -> Path:
+def _materialise(env_label: str, env_yaml: str,
+                 iterations: int = 200, num_seeds: int = 12) -> Path:
     out_dir = CONFIG_ROOT / "m5r_stacked"
     out_dir.mkdir(parents=True, exist_ok=True)
     yaml_path = out_dir / f"{env_label}.yaml"
     doc: dict[str, Any] = {
         "extends": ["base/base_ppo.yaml", env_yaml],
         "experiment_name": f"m5r_stacked_obs_{env_label}",
-        "iterations": 200,
+        "iterations": iterations,
         "parallel_envs": 512,
         "rollout_length": 128,
-        "num_seeds": 12,
+        "num_seeds": num_seeds,
         "seed_base": 0,
         "env": {
             "name": "market_making_v1_stacked",
@@ -88,23 +89,35 @@ def _bootstrap_ci(values: list[float], n_boot: int = 10_000) -> tuple[float, flo
 
 
 def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser(prog="scripts.m5r_stacked_obs_sweep")
+    ap.add_argument("--env", type=str, default=None, help="run only this env_label")
+    ap.add_argument("--iterations", type=int, default=200)
+    ap.add_argument("--num-seeds", type=int, default=12)
+    args = ap.parse_args()
+
     out_dir = RESULTS_ROOT / "M5R" / "final"
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_path = out_dir / "m5r_stacked_obs_sweep_run.json"
     stats_path = out_dir / "m5r_stacked_obs_sweep.json"
 
+    sweep = [(el, ey) for el, ey in SWEEP_ENVS if (args.env is None or el == args.env)]
     run = ScriptRun(script="m5r_stacked_obs_sweep", run_mode="full")
-    print(f"[m5r_stacked] start: {len(SWEEP_ENVS)} sweep envs", flush=True)
+    print(f"[m5r_stacked] start: {len(sweep)} sweep envs", flush=True)
     t_start = time.perf_counter()
 
     by_env: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
-    for i, (env_label, env_yaml) in enumerate(SWEEP_ENVS, start=1):
-        yaml_path = _materialise(env_label, env_yaml)
+    for i, (env_label, env_yaml) in enumerate(sweep, start=1):
+        yaml_path = _materialise(env_label, env_yaml, args.iterations, args.num_seeds)
         cfg = load_config(yaml_path)
         apply_run_mode(cfg, "full")
         existing = _read_metrics(cfg.experiment_name)
-        skipped = existing is not None
+        skipped = (
+            existing is not None
+            and int(existing.get("num_seeds", 0)) == cfg.num_seeds
+            and int(existing.get("iterations", 0)) == cfg.iterations
+        )
         if skipped:
             metrics = existing
         else:

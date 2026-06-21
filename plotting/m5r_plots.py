@@ -235,7 +235,6 @@ def plot_method_ladder(out_path: Path) -> None:
     env_block = data["per_env"]["e_final"]
     fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
     _ladder_bars(ax, env_block, env_label="e_final", stacked_data=stacked)
-    ax.set_title("Method ladder on MarketMakingV1, medium difficulty")
     ax.set_ylabel("Final-episode return")
     ref_handles, ref_labels = ax.get_legend_handles_labels()
     ax.legend(
@@ -270,7 +269,6 @@ def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
         ax.set_title(level_label, fontsize=11)
         ax.set_ylabel("Final return", fontsize=9)
         ax.tick_params(axis="both", labelsize=9)
-    fig.suptitle(suptitle, fontsize=13)
     ref_handles, ref_labels = flat_axes[0].get_legend_handles_labels()
     fig.legend(
         handles=_legend_handles() + ref_handles,
@@ -278,7 +276,7 @@ def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
         bbox_to_anchor=(0.5, -0.005), frameon=True,
         facecolor="white", edgecolor="#cccccc", framealpha=1.0,
     )
-    fig.tight_layout(rect=[0, 0.07, 1, 0.95])
+    fig.tight_layout(rect=[0, 0.07, 1, 0.98])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
@@ -317,10 +315,6 @@ def plot_posterior_vs_performance(
     probe_label = "Linear-probe" if classifier == "logistic" else "MLP-probe"
     ax.set_xlabel(f"{probe_label} regime-decoding accuracy")
     ax.set_ylabel("Gap-closed vs.\\ Oracle")
-    ax.set_title(
-        f"Posterior accuracy vs.\\ final return, {probe_label.lower()}\n"
-        "MarketMakingV1, all five difficulty levels pooled"
-    )
     # Shared x-range across the linear and MLP variants so the two figures
     # are directly comparable when shown side by side. Data range is
     # roughly [0.42, 0.92] across both probes; pad to [0.40, 0.95].
@@ -395,11 +389,6 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     ax.set_xlabel("Iteration", fontsize=12)
     ax.set_ylabel("Mean return across seeds", fontsize=12)
     ax.tick_params(axis="both", labelsize=11)
-    ax.set_title(
-        "MarketMakingV1 — meta-RL learning curves at matched compute "
-        "($\\sim 5$k parameters)",
-        fontsize=14,
-    )
     ax.grid(axis="y", alpha=0.3, linestyle=":")
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(
@@ -414,12 +403,24 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     print(f"[m5r_plots] wrote {out_path}")
 
 
-def plot_m5r_probe_per_t(out_path: Path, env_label: str = "e_final") -> None:
-    """Linear-probe regime-decoding accuracy as a function of within-episode
-    timestep on the medium-difficulty environment, drawn from the matched-compute
-    posterior probe."""
+def plot_m5r_probe_per_t(
+    out_path: Path, env_label: str = "e_final", classifier: str = "logistic",
+) -> None:
+    """Regime-decoding accuracy as a function of within-episode timestep on the
+    medium-difficulty environment, drawn from the matched-compute posterior probe.
+    `classifier` selects the linear (logistic) or non-linear (mlp) probe."""
     apply_style()
-    probe = _load_probe("logistic")
+    # Prefer the high-rollout medium-env probe if present: the per-timestep
+    # curve needs many test trajectories per step to be stable. The canonical
+    # 500-rollout file still backs the scatter and the headline correlations.
+    suffix = "" if classifier == "logistic" else f"_{classifier}"
+    hires = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}_hires.json"
+    if hires.exists():
+        with open(hires) as f:
+            probe = json.load(f)
+        print(f"[m5r_plots] probe_per_t ({classifier}) using high-rollout file ({hires.name})")
+    else:
+        probe = _load_probe(classifier)
     if probe is None:
         print("[m5r_plots] skip probe_per_t: no logistic probe data")
         return
@@ -477,7 +478,19 @@ def plot_m5r_probe_per_t(out_path: Path, env_label: str = "e_final") -> None:
         ax.fill_between(ts, lo_s, hi_s, color=color, alpha=0.15)
         if not analytical_drawn:
             ana = np.asarray(m["analytical_per_t_test_acc_mean"])
-            ax.plot(ts, _smooth(ana, smoothing_window),
+            # Align the analytical curve to the same information horizon as the
+            # method curves. A method's belief at timestep t is the pre-step
+            # belief, reflecting evidence through t-1, whereas the stored
+            # analytical accuracy at t is the post-fill posterior, reflecting
+            # evidence through t. Shift the analytical right by one step and
+            # anchor t=0 at chance, so every curve starts at the random-guess
+            # baseline with zero observations and is compared on equal evidence.
+            ana_aligned = np.concatenate(([1.0 / 3.0], ana[:-1]))
+            # Plotted without the moving-average smoothing applied to the method
+            # curves: the analytical mean over 500 rollouts is already clean, and
+            # smoothing would smear its genuine one-step jump from chance to its
+            # post-first-fill value back across the t=0 boundary.
+            ax.plot(ts, ana_aligned,
                     color=COLORS.get("analytical", "#9467bd"),
                     linestyle="--", linewidth=1.4,
                     label="Analytical posterior")
@@ -490,11 +503,6 @@ def plot_m5r_probe_per_t(out_path: Path, env_label: str = "e_final") -> None:
     ax.set_xlabel("Timestep within episode", fontsize=12)
     ax.set_ylabel("Probe test accuracy", fontsize=12)
     ax.tick_params(axis="both", labelsize=11)
-    ax.set_title(
-        "Linear-probe regime decoding per timestep on the medium-difficulty "
-        "environment ($\\sim 5$k parameters)",
-        fontsize=14,
-    )
     ax.set_ylim(0.20, 1.05)
     ax.grid(axis="y", alpha=0.3, linestyle=":")
     handles, labels = ax.get_legend_handles_labels()
@@ -540,7 +548,9 @@ def main() -> int:
     for target in _both_targets("m5r_learning_curves.png"):
         plot_m5r_learning_curves(target)
     for target in _both_targets("m5r_probe_per_t.png"):
-        plot_m5r_probe_per_t(target)
+        plot_m5r_probe_per_t(target, classifier="logistic")
+    for target in _both_targets("m5r_probe_per_t_mlp.png"):
+        plot_m5r_probe_per_t(target, classifier="mlp")
     return 0
 
 

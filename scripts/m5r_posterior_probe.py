@@ -128,13 +128,23 @@ def main() -> int:
     parser.add_argument(
         "--classifier", choices=["logistic", "mlp"], default="logistic",
     )
+    parser.add_argument(
+        "--env-filter", default=None,
+        help="if set, probe only this env_label (e.g. e_final)",
+    )
+    parser.add_argument(
+        "--tag", default="",
+        help="suffix appended to the output filename so a targeted run does "
+             "not overwrite the canonical probe output",
+    )
     args = parser.parse_args()
 
     out_dir = RESULTS_ROOT / "M5R" / "final"
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = "" if args.classifier == "logistic" else f"_{args.classifier}"
-    stats_path = out_dir / f"m5r_posterior_vs_performance{suffix}.json"
-    summary_path = out_dir / f"m5r_posterior_vs_performance{suffix}_run.json"
+    tag = f"_{args.tag}" if args.tag else ""
+    stats_path = out_dir / f"m5r_posterior_vs_performance{suffix}{tag}.json"
+    summary_path = out_dir / f"m5r_posterior_vs_performance{suffix}{tag}_run.json"
 
     run = ScriptRun(script="m5r_posterior_probe")
     if not PER_CELL_ENV_PATH.exists():
@@ -152,6 +162,8 @@ def main() -> int:
     failed: list[str] = []
     n_total = 0
     for env_label, env_block in per_cell_env.get("per_env", {}).items():
+        if args.env_filter and env_label != args.env_filter:
+            continue
         refs = env_block.get("refs", {})
         floor = refs.get("regime_agnostic_ppo")
         oracle = refs.get("oracle_ppo")

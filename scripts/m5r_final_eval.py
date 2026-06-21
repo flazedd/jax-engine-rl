@@ -1,10 +1,10 @@
 """M5R Stage C — final evaluation on the 5 thesis evaluation environments.
 
 For each of the four locked meta-RL configs (RL² × {concat, hypernet},
-VariBAD × {concat, hypernet}), train at full budget × n=8 seeds on each of:
+VariBAD × {concat, hypernet}), train at full budget × n=12 seeds on each of:
   - E_final (= persistence-medium = distinguishability-medium)
   - persistence_easy   (P_ii = 0.99)
-  - persistence_hard   (P_ii = 0.95)
+  - persistence_hard   (P_ii = 0.96)
   - distinguishability_easy
   - distinguishability_hard
 
@@ -168,13 +168,27 @@ def _gap_closed(
     return (cell_mean - floor) / (ceiling - floor)
 
 
+_ITER_OVERRIDE: int | None = None
+_SEED_OVERRIDE: int | None = None
+
+
 def _run_one(cell: str, env_label: str, env_yaml: str) -> dict[str, Any]:
     yaml_path = _materialise_final_config(cell, env_label, env_yaml)
     cfg = load_config(yaml_path)
     apply_run_mode(cfg, "full")
+    if _ITER_OVERRIDE is not None:
+        cfg.iterations = _ITER_OVERRIDE
+    if _SEED_OVERRIDE is not None:
+        cfg.num_seeds = _SEED_OVERRIDE
 
     existing = _read_metrics(cfg.experiment_name)
-    skipped = existing is not None
+    # Budget-aware skip: only resume a cell already trained at the *target*
+    # budget, so an older lower-budget metrics.json is correctly retrained.
+    skipped = (
+        existing is not None
+        and int(existing.get("num_seeds", 0)) == cfg.num_seeds
+        and int(existing.get("iterations", 0)) == cfg.iterations
+    )
     if skipped:
         metrics = existing
         elapsed = float("nan")
@@ -254,7 +268,14 @@ def main() -> int:
                         help="run only this cell (default: all 4)")
     parser.add_argument("--env", type=str, default=None,
                         help="run only this env_label (default: all 5)")
+    parser.add_argument("--iterations", type=int, default=None,
+                        help="override training iterations for every cell")
+    parser.add_argument("--num-seeds", type=int, default=None,
+                        help="override number of seeds for every cell")
     args = parser.parse_args()
+    global _ITER_OVERRIDE, _SEED_OVERRIDE
+    _ITER_OVERRIDE = args.iterations
+    _SEED_OVERRIDE = args.num_seeds
 
     if args.cell and args.cell not in CELLS:
         raise SystemExit(f"unknown cell: {args.cell!r}; valid: {CELLS}")

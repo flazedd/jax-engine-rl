@@ -36,6 +36,44 @@ FIGSIZE_STANDARD = (6.0, 4.0)
 FIGSIZE_WIDE = (8.0, 3.5)
 
 
+# Polished thesis palette (the "hero ladder" look). Winners get a vivid teal
+# accent, baselines a muted slate, references neutral greys. Use these in place
+# of the legacy per-cell rainbow in COLORS for any restyled figure.
+PALETTE = {
+    "hyper":      "#2a9d8f",  # vivid teal — hypernet / the winners
+    "concat":     "#b4bcc2",  # muted slate — concat / falls short
+    "stacked":    "#8a949c",  # neutral baseline
+    "floor":      "#8a949c",  # regime-agnostic floor (neutral grey)
+    "belief":     "#2a9d8f",  # belief ceiling (teal = realistic target)
+    "oracle":     "#264653",  # oracle ceiling (deep slate-teal)
+    "analytical": "#e09f3e",  # analytical-posterior reference (amber)
+    "accent":     "#2a9d8f",
+    "accent2":    "#e07a5f",  # secondary accent (warm) when two series needed
+    "ref":        "#555555",  # generic reference line
+}
+
+
+def polish(ax, grid_axis: str = "y") -> None:
+    """Apply the shared figure look to an axis: drop the top/right spines and
+    tick marks, and use a soft dotted grid on one axis only."""
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    ax.tick_params(length=0)
+    ax.grid(False)
+    if grid_axis:
+        ax.grid(axis=grid_axis, alpha=0.25, linestyle=":", zorder=0)
+
+
+def ref_line(ax, y, label=None, *, x=None, color="#555555", linestyle="--") -> None:
+    """A neutral horizontal reference line with an optional inline label given a
+    white backing, so it reads cleanly without crowding the legend."""
+    ax.axhline(y, color=color, linewidth=1.1, linestyle=linestyle, zorder=2)
+    if x is not None and label:
+        ax.text(x, y, f" {label}", va="center", ha="left", fontsize=8.5,
+                color="#444444", zorder=5,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0))
+
+
 # Shared kwargs for an outside-the-axes legend with an opaque white
 # background — every thesis figure uses these. `loc="upper left"` +
 # bbox_to_anchor=(1.02, 1.0) places it to the right of the axes; flip to
@@ -69,11 +107,21 @@ def apply_style() -> None:
         "font.size": 10,
         "axes.titlesize": 11,
         "axes.labelsize": 10,
+        # Shared "hero" look applied to every figure: soft dotted y-grid,
+        # no top/right spines, no tick marks.
         "axes.grid": True,
-        "grid.alpha": 0.3,
+        "axes.grid.axis": "y",
+        "axes.axisbelow": True,
+        "grid.alpha": 0.25,
+        "grid.linestyle": ":",
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.edgecolor": "#666666",
+        "xtick.major.size": 0,
+        "ytick.major.size": 0,
         "legend.fontsize": 9,
         "legend.frameon": False,
-        "lines.linewidth": 1.6,
+        "lines.linewidth": 1.8,
     })
 
 

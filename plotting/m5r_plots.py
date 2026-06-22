@@ -22,7 +22,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
 
-from plotting.style import COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, apply_style
+from plotting.style import (
+    COLORS, FIGSIZE_STANDARD, FIGSIZE_WIDE, PALETTE, apply_style, polish, ref_line,
+)
 
 # Stacked-obs PPO is not in the COLORS dict; pick a distinct gray.
 STACKED_OBS_COLOR = "#7f7f7f"
@@ -229,23 +231,78 @@ def _legend_handles(include_stacked: bool = True) -> list[Patch]:
 
 
 def plot_method_ladder(out_path: Path) -> None:
+    """Hero ladder figure: spotlights the hypernet 'winners' in a vivid accent
+    against muted baselines, with the floor-to-ceiling gap shaded as the
+    recoverable region so the story reads at a glance."""
     apply_style()
     data = _load()
     stacked = _load_stacked_obs()
     env_block = data["per_env"]["e_final"]
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
-    _ladder_bars(ax, env_block, env_label="e_final", stacked_data=stacked)
-    ax.set_ylabel("Final-episode return")
-    ref_handles, ref_labels = ax.get_legend_handles_labels()
-    ax.legend(
-        handles=_legend_handles() + ref_handles,
-        loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=7,
-        frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-    )
+    cells = env_block["cells"]
+    refs = env_block["refs"]
+    floor = refs["regime_agnostic_ppo"]
+    belief = refs["belief_ppo"]
+    oracle = refs["oracle_ppo"]
+
+    C_HYPER = "#2a9d8f"   # vivid teal — the heroes
+    C_CONCAT = "#b4bcc2"  # muted slate — falls short
+    C_STACK = "#8a949c"   # neutral baseline
+
+    fig, ax = plt.subplots(figsize=(9.2, 5.8))
+
+    # Shaded reference zones: the recoverable gap (floor -> belief) and the
+    # smaller irreducible inference remainder (belief -> oracle).
+    ax.axhspan(floor, belief, color=C_HYPER, alpha=0.09, zorder=0)
+    ax.axhspan(belief, oracle, color=C_HYPER, alpha=0.04, zorder=0)
+
+    bw = 0.34
+
+    def _bar(x, cell, color):
+        m = cell["final_return_mean"]
+        lo, hi = cell["final_return_ci95"]
+        ax.bar(x, m, bw, yerr=[[m - lo], [hi - m]], capsize=4, color=color,
+               edgecolor="white", linewidth=1.2, zorder=3,
+               error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.2})
+        ax.annotate(f"{m:.1f}", xy=(x, hi), xytext=(0, 6),
+                    textcoords="offset points", ha="center", va="bottom",
+                    fontsize=8.5, fontweight="bold", color="#333333")
+
+    _bar(0.0, stacked["by_env"]["e_final"], C_STACK)
+    for i_m, method in enumerate(["rl2", "varibad"]):
+        xc = i_m + 1
+        _bar(xc - bw * 0.62, cells[f"{method}_concat"], C_CONCAT)
+        _bar(xc + bw * 0.62, cells[f"{method}_hypernet"], C_HYPER)
+
+    # Reference lines with inline labels at the right edge (no legend clutter).
+    xr = 2.62
+    for v, lab, ls in [(oracle, "Oracle-PPO", (0, (6, 2))),
+                       (belief, "Belief-PPO ceiling", (0, (1, 1.5))),
+                       (floor, "Regime-agnostic floor", "solid")]:
+        ax.axhline(v, color="#555555", linewidth=1.1, linestyle=ls, zorder=2)
+        ax.text(xr, v, f" {lab}", va="center", ha="left", fontsize=8.5,
+                color="#444444", zorder=4,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0))
+
+    ax.set_xticks([0, 1, 2])
+    ax.set_xticklabels(["Stacked-obs", "RL²", "VariBAD"], fontsize=11)
+    ax.set_ylabel("Final-episode return", fontsize=11)
+    ax.set_ylim(floor - 36, oracle + 7)
+    ax.set_xlim(-0.55, 3.7)
+    ax.grid(axis="y", alpha=0.25, linestyle=":")
+    ax.grid(axis="x", visible=False)
+    ax.tick_params(length=0)
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+
+    handles = [Patch(facecolor=C_HYPER, edgecolor="white", label="Hypernet integration"),
+               Patch(facecolor=C_CONCAT, edgecolor="white", label="Concat integration"),
+               Patch(facecolor=C_STACK, edgecolor="white", label="Stacked-obs PPO")]
+    ax.legend(handles=handles, loc="upper left", fontsize=9, frameon=True,
+              facecolor="white", edgecolor="#dddddd", framealpha=0.95)
     fig.tight_layout()
-    fig.subplots_adjust(right=0.65)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path); plt.close(fig)
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
 
 
@@ -344,16 +401,26 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     belief = refs["belief_ppo"]
     oracle = refs["oracle_ppo"]
 
+    # Colour by integration (concat = muted slate, hypernet = teal), method by
+    # linestyle (RL² solid, VariBAD dashed), so "hypernet climbs, concat stays
+    # low" reads at a glance.
+    cell_style = {
+        "rl2_concat":       (PALETTE["concat"], "-",  "RL² Concat"),
+        "rl2_hypernet":     (PALETTE["hyper"],  "-",  "RL² Hypernet"),
+        "varibad_concat":   (PALETTE["concat"], "--", "VariBAD Concat"),
+        "varibad_hypernet": (PALETTE["hyper"],  "--", "VariBAD Hypernet"),
+    }
     cell_specs = [
-        (cell, CELL_LABEL[cell], COLORS.get(cell, "#666666"),
+        (cell, label, color, ls,
          RESULTS_ROOT / f"m5r_final_{cell}_e_final" / "metrics.json")
-        for cell in CELLS
+        for cell, (color, ls, label) in cell_style.items()
     ]
     cell_specs.append((
-        "stacked_obs", "Stacked-obs PPO", STACKED_OBS_COLOR,
+        "stacked_obs", "Stacked-obs PPO", PALETTE["stacked"], ":",
         RESULTS_ROOT / "m5r_stacked_obs_e_final" / "metrics.json",
     ))
-    for cell_key, label, color, m_path in cell_specs:
+    last_iter = 0
+    for cell_key, label, color, ls, m_path in cell_specs:
         if not m_path.exists():
             continue
         with open(m_path) as f:
@@ -373,83 +440,70 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
         else:
             lo, hi = mean.copy(), mean.copy()
         iters = np.arange(len(mean))
-        ax.plot(iters, mean, color=color, label=label, linewidth=1.6)
-        ax.fill_between(iters, lo, hi, color=color, alpha=0.15)
+        last_iter = max(last_iter, len(mean) - 1)
+        ax.plot(iters, mean, color=color, label=label, linewidth=2.2, linestyle=ls)
+        ax.fill_between(iters, lo, hi, color=color, alpha=0.13)
 
-    ax.axhline(floor,  color=COLORS["ppo"],         linestyle="--",
-               linewidth=1.2, alpha=0.7,
-               label=f"Regime-agnostic floor = {floor:.1f}")
-    ax.axhline(belief, color=COLORS["belief_ppo"],  linestyle="--",
-               linewidth=1.2, alpha=0.7,
-               label=f"Belief-PPO ceiling = {belief:.1f}")
-    ax.axhline(oracle, color=COLORS["oracle_ppo"],  linestyle="--",
-               linewidth=1.2, alpha=0.7,
-               label=f"Oracle-PPO ceiling = {oracle:.1f}")
+    ax.axhspan(floor, belief, color=PALETTE["hyper"], alpha=0.06, zorder=0)
+    xr = last_iter * 1.005
+    ref_line(ax, floor, "Regime-agnostic floor", x=xr, linestyle="-")
+    ref_line(ax, belief, "Belief-PPO ceiling", x=xr, linestyle=(0, (1, 1.5)))
+    ref_line(ax, oracle, "Oracle-PPO", x=xr, linestyle=(0, (6, 2)))
 
     ax.set_xlabel("Iteration", fontsize=12)
     ax.set_ylabel("Mean return across seeds", fontsize=12)
+    ax.set_xlim(0, last_iter * 1.16)
     ax.tick_params(axis="both", labelsize=11)
-    ax.grid(axis="y", alpha=0.3, linestyle=":")
+    polish(ax)
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(
-        handles, labels,
-        loc="lower center", ncol=4, fontsize=12,
-        bbox_to_anchor=(0.5, -0.005), frameon=True,
-        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-    )
-    fig.tight_layout(rect=[0, 0.08, 1, 0.97])
+    fig.legend(handles, labels, loc="lower center", ncol=5, fontsize=10,
+               bbox_to_anchor=(0.5, -0.005), frameon=True,
+               facecolor="white", edgecolor="#dddddd", framealpha=1.0)
+    fig.tight_layout(rect=[0, 0.06, 1, 0.98])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
 
 
-def plot_m5r_probe_per_t(
-    out_path: Path, env_label: str = "e_final", classifier: str = "logistic",
-) -> None:
-    """Regime-decoding accuracy as a function of within-episode timestep on the
-    medium-difficulty environment, drawn from the matched-compute posterior probe.
-    `classifier` selects the linear (logistic) or non-linear (mlp) probe."""
-    apply_style()
-    # Prefer the high-rollout medium-env probe if present: the per-timestep
-    # curve needs many test trajectories per step to be stable. The canonical
-    # 500-rollout file still backs the scatter and the headline correlations.
+def _smooth_curve(arr, w):
+    """Centered moving average over available samples (no edge zero-padding)."""
+    if w <= 1:
+        return arr
+    arr = np.asarray(arr, dtype=float)
+    out = np.empty_like(arr)
+    half = w // 2
+    n = len(arr)
+    for i in range(n):
+        lo = max(0, i - half)
+        hi = min(n, i + half + 1)
+        out[i] = arr[lo:hi].mean()
+    return out
+
+
+def _draw_probe_per_t(ax, classifier: str, env_label: str = "e_final") -> bool:
+    """Draw the per-timestep regime-decoding curves for one probe class onto
+    `ax` (4 cells + analytical posterior + random-guess line). Returns False if
+    the data is missing. Prefers the high-rollout file for stable curves."""
     suffix = "" if classifier == "logistic" else f"_{classifier}"
     hires = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}_hires.json"
     if hires.exists():
         with open(hires) as f:
             probe = json.load(f)
-        print(f"[m5r_plots] probe_per_t ({classifier}) using high-rollout file ({hires.name})")
     else:
         probe = _load_probe(classifier)
     if probe is None:
-        print("[m5r_plots] skip probe_per_t: no logistic probe data")
-        return
-    per_method_per_env = probe.get("per_method_per_env", {})
-    env_block = per_method_per_env.get(env_label, {})
+        return False
+    env_block = probe.get("per_method_per_env", {}).get(env_label, {})
     if not env_block:
-        print(f"[m5r_plots] skip probe_per_t: no env data for {env_label}")
-        return
+        return False
 
-    fig, ax = plt.subplots(figsize=(11.0, 6.5))
     smoothing_window = 9
-
-    def _smooth(arr, w):
-        """Centered moving average that averages only the available samples
-        at the boundaries. Avoids the edge-attenuation artifact of
-        np.convolve(..., mode='same') which zero-pads the edges and pulls
-        them spuriously toward zero."""
-        if w <= 1:
-            return arr
-        arr = np.asarray(arr, dtype=float)
-        out = np.empty_like(arr)
-        half = w // 2
-        n = len(arr)
-        for i in range(n):
-            lo = max(0, i - half)
-            hi = min(n, i + half + 1)
-            out[i] = arr[lo:hi].mean()
-        return out
-
+    cell_style = {
+        "rl2_concat":       (PALETTE["concat"], "-"),
+        "rl2_hypernet":     (PALETTE["hyper"],  "-"),
+        "varibad_concat":   (PALETTE["concat"], "--"),
+        "varibad_hypernet": (PALETTE["hyper"],  "--"),
+    }
     analytical_drawn = False
     for cell in CELLS:
         m = env_block.get(cell)
@@ -469,50 +523,79 @@ def plot_m5r_probe_per_t(
                 hi[t] = np.percentile(vals, 97.5)
         else:
             lo, hi = per_t.copy(), per_t.copy()
-        per_t_s = _smooth(per_t, smoothing_window)
-        lo_s = _smooth(lo, smoothing_window)
-        hi_s = _smooth(hi, smoothing_window)
+        per_t_s = _smooth_curve(per_t, smoothing_window)
+        lo_s = _smooth_curve(lo, smoothing_window)
+        hi_s = _smooth_curve(hi, smoothing_window)
         ts = np.arange(per_t.shape[0])
-        color = COLORS.get(cell, "#666666")
-        ax.plot(ts, per_t_s, color=color, label=CELL_LABEL[cell], linewidth=1.6)
-        ax.fill_between(ts, lo_s, hi_s, color=color, alpha=0.15)
+        color, ls = cell_style.get(cell, ("#666666", "-"))
+        ax.plot(ts, per_t_s, color=color, label=CELL_LABEL[cell],
+                linewidth=2.2, linestyle=ls)
+        ax.fill_between(ts, lo_s, hi_s, color=color, alpha=0.12)
         if not analytical_drawn:
             ana = np.asarray(m["analytical_per_t_test_acc_mean"])
-            # Align the analytical curve to the same information horizon as the
-            # method curves. A method's belief at timestep t is the pre-step
-            # belief, reflecting evidence through t-1, whereas the stored
-            # analytical accuracy at t is the post-fill posterior, reflecting
-            # evidence through t. Shift the analytical right by one step and
-            # anchor t=0 at chance, so every curve starts at the random-guess
-            # baseline with zero observations and is compared on equal evidence.
+            # Align analytical to the same information horizon as the method
+            # curves: shift right one step and anchor t=0 at chance so every
+            # curve starts at the random-guess baseline with zero observations.
             ana_aligned = np.concatenate(([1.0 / 3.0], ana[:-1]))
-            # Plotted without the moving-average smoothing applied to the method
-            # curves: the analytical mean over 500 rollouts is already clean, and
-            # smoothing would smear its genuine one-step jump from chance to its
-            # post-first-fill value back across the t=0 boundary.
-            ax.plot(ts, ana_aligned,
-                    color=COLORS.get("analytical", "#9467bd"),
-                    linestyle="--", linewidth=1.4,
-                    label="Analytical posterior")
+            ax.plot(ts, ana_aligned, color=PALETTE["analytical"],
+                    linestyle="-", linewidth=2.8, label="Analytical posterior")
             analytical_drawn = True
 
-    n_classes = 3
-    ax.axhline(1.0 / n_classes, color="#999999", linestyle=":", linewidth=1.0,
-               label=f"Random guess ({100.0 / n_classes:.1f}\\%)")
-
+    ax.axhline(1.0 / 3, color="#999999", linestyle=":", linewidth=1.0,
+               label="Random guess (33.3%)")
     ax.set_xlabel("Timestep within episode", fontsize=12)
-    ax.set_ylabel("Probe test accuracy", fontsize=12)
     ax.tick_params(axis="both", labelsize=11)
     ax.set_ylim(0.20, 1.05)
-    ax.grid(axis="y", alpha=0.3, linestyle=":")
+    polish(ax)
+    return True
+
+
+def plot_m5r_probe_per_t(
+    out_path: Path, env_label: str = "e_final", classifier: str = "logistic",
+) -> None:
+    """Single-panel per-timestep regime-decoding curves for one probe class."""
+    apply_style()
+    fig, ax = plt.subplots(figsize=(11.0, 6.5))
+    if not _draw_probe_per_t(ax, classifier, env_label):
+        print("[m5r_plots] skip probe_per_t: no probe data")
+        plt.close(fig)
+        return
+    ax.set_ylabel("Probe test accuracy", fontsize=12)
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(
-        handles, labels,
-        loc="lower center", ncol=3, fontsize=12,
+        handles, labels, loc="lower center", ncol=3, fontsize=10,
         bbox_to_anchor=(0.5, -0.005), frameon=True,
-        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
+        facecolor="white", edgecolor="#dddddd", framealpha=1.0,
     )
     fig.tight_layout(rect=[0, 0.08, 1, 0.97])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def plot_m5r_probe_per_t_combined(out_path: Path, env_label: str = "e_final") -> None:
+    """Linear and MLP probe per-timestep curves side by side, shared y-axis and a
+    single shared legend below."""
+    apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(14.0, 6.2), sharey=True)
+    drew_any = False
+    for ax, (clf, title) in zip(axes, [("logistic", "Linear probe"),
+                                       ("mlp", "MLP probe")]):
+        if _draw_probe_per_t(ax, clf, env_label):
+            drew_any = True
+        ax.set_title(title, fontsize=13, loc="left")
+    if not drew_any:
+        print("[m5r_plots] skip probe_per_t_combined: no probe data")
+        plt.close(fig)
+        return
+    axes[0].set_ylabel("Probe test accuracy", fontsize=12)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels, loc="lower center", ncol=6, fontsize=10,
+        bbox_to_anchor=(0.5, -0.005), frameon=True,
+        facecolor="white", edgecolor="#dddddd", framealpha=1.0,
+    )
+    fig.tight_layout(rect=[0, 0.07, 1, 0.97])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")

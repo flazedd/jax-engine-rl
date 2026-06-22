@@ -1,0 +1,33 @@
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+    n_regimes: 3
+    transition_matrix:
+    - 0.98
+    - 0.01
+    - 0.01
+    - 0.01
+    - 0.98
+    - 0.01
+    - 0.01
+    - 0.01
+    - 0.98
+    regime_p_tight_bid: &id001
+    - 0.347
+    - 0.747
+    - 0.507
+    regime_p_wide_bid: &id002
+    - 0.568
+    - 0.088
+    - 0.064
+    regime_p_tight_ask: *id001
+    regime_p_wide_ask: *id002
+    initial_distribution:
+    - 0.333
+    - 0.333
+    - 0.334

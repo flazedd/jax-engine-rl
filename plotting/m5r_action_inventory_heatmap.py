@@ -75,7 +75,11 @@ def main() -> int:
 
     inv_ticks = np.arange(n_inv)
     inv_labels = [str(q) for q in range(-inv_max, inv_max + 1)]
-    cmap = "viridis"
+    # Brand-teal sequential map (near-white at p=0 to deep teal at p=1) so the
+    # probability heatmap matches the thesis palette.
+    from matplotlib.colors import LinearSegmentedColormap
+    cmap = LinearSegmentedColormap.from_list(
+        "brand_teal", ["#f4f9f8", "#9bd0c8", "#2a9d8f", "#1d6e63", "#143f39"])
 
     for row, (key, method_label) in enumerate(method_order):
         m_data = stats["by_method"][key]
@@ -95,6 +99,8 @@ def main() -> int:
             ax.set_yticklabels(action_names, fontsize=8)
             ax.tick_params(axis="both", which="both", length=0)
             ax.grid(False)
+            for sp in ax.spines.values():
+                sp.set_visible(False)
             if row == 0:
                 ax.set_title(f"Regime {col}", fontsize=10)
             if col == 0:
@@ -102,14 +108,17 @@ def main() -> int:
                               labelpad=8)
             for a_idx in range(n_actions):
                 for q_idx in range(n_inv):
-                    val = panel[a_idx, q_idx]
-                    if val >= 0.005:
-                        ax.text(
-                            q_idx, a_idx, f"{val:.2f}",
-                            ha="center", va="center",
-                            fontsize=6,
-                            color="white" if val < 0.55 else "black",
-                        )
+                    val = float(panel[a_idx, q_idx])
+                    # Label every cell, including near-zero ones. Pick black/white
+                    # text from the cell's actual luminance (vmin=0, vmax=1) so
+                    # the number stays legible on any shade.
+                    r, g, b = cmap(val)[:3]
+                    lum = 0.299 * r + 0.587 * g + 0.114 * b
+                    ax.text(
+                        q_idx, a_idx, f"{val:.2f}",
+                        ha="center", va="center", fontsize=6,
+                        color="white" if lum < 0.55 else "black",
+                    )
 
     for col in range(n_cols):
         axes[-1, col].set_xlabel("Inventory $q$", fontsize=9)

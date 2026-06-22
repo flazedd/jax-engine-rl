@@ -25,8 +25,10 @@ from plotting.style import (
     FIGSIZE_STANDARD,
     FIGSIZE_WIDE,
     LEGEND_OUTSIDE_RIGHT,
+    PALETTE,
     apply_style,
     budget_annotation,
+    polish,
 )
 
 
@@ -52,24 +54,44 @@ def _budget_from_metrics(metrics: dict) -> dict:
 
 def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) -> None:
     """Heatmap of VI-optimal action per (regime, inventory) state."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
     apply_style()
     policy = vi.policy  # [n_inv, n_reg]
     n_inv, n_reg = policy.shape
     inv_levels = np.arange(-env.inventory_max, env.inventory_max + 1)
+    grid = policy.T  # rows = regimes, cols = inventory.
+
+    # Semantic palette: the symmetric quote is neutral, while the two
+    # directional quotes get a warm/cool pair so the bid/ask lean reads at a
+    # glance. Muted tones (slate / amber / steel-blue), colourblind-safe.
+    # Brand palette as three distinct categorical action colours: neutral slate
+    # for the symmetric quote, the warm/cool brand pair for the two directional
+    # quotes (amber = favor ask, teal = favor bid).
+    action_colors = [PALETTE["concat"], PALETTE["analytical"], PALETTE["hyper"]]
+    cmap = ListedColormap(action_colors)
+    norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], cmap.N)
 
     fig, ax = plt.subplots(figsize=FIGSIZE_WIDE)
-    grid = policy.T  # rows = regimes, cols = inventory.
-    cmap = plt.get_cmap("Set1", 3)
-    ax.imshow(grid, aspect="auto", cmap=cmap, vmin=0, vmax=2)
+    xedges = np.arange(n_inv + 1) - 0.5
+    yedges = np.arange(n_reg + 1) - 0.5
+    ax.pcolormesh(xedges, yedges, grid, cmap=cmap, norm=norm,
+                  edgecolors="white", linewidth=1.5)
+    ax.invert_yaxis()  # regime 0 (noise) on top, matching the row order
     ax.set_yticks(range(n_reg))
     ax.set_yticklabels([_regime_label(r) for r in range(n_reg)])
     ax.set_xticks(range(n_inv))
     ax.set_xticklabels(inv_levels)
-    ax.set_xlabel("Inventory q")
+    ax.set_xlabel("Inventory $q$")
+    ax.set_aspect("auto")
+    ax.tick_params(length=0)
+    ax.grid(False)  # white cell borders carry the structure; drop the style grid
+    for spine in ax.spines.values():
+        spine.set_visible(False)
     # Replace the colorbar with a proper legend so the chart self-documents
     # the action encoding (per the every-element-in-legend convention).
     legend_handles = [
-        Patch(facecolor=cmap(i), edgecolor="black", linewidth=0.4,
+        Patch(facecolor=action_colors[i], edgecolor="#888888", linewidth=0.5,
               label=_ACTION_LABELS[i])
         for i in range(3)
     ]
@@ -140,32 +162,33 @@ def plot_per_regime_ppo(
     fig, axes = plt.subplots(n_reg, 1, figsize=(11.0, 3.5 * n_reg), sharex=True)
     if n_reg == 1:
         axes = [axes]
-    color = COLORS.get("per_regime_ppo", "#17becf")
+    color = PALETTE["accent"]
     for r, (ax, m) in enumerate(zip(axes, metrics)):
         curve = np.asarray(m["mean_return_per_iter"])
         per_seed = np.asarray(m["per_seed_mean_return_per_iter"])  # [seeds, T]
         iters = np.arange(curve.size)
-        ax.plot(iters, curve, color=color, label="PPO (mean over seeds)")
+        ax.plot(iters, curve, color=color, linewidth=2.0, label="PPO (mean over seeds)")
         if per_seed.shape[0] > 1:
             n_seeds = per_seed.shape[0]
             lo = np.percentile(per_seed, 2.5, axis=0)
             hi = np.percentile(per_seed, 97.5, axis=0)
-            ax.fill_between(iters, lo, hi, color=color, alpha=0.2,
+            ax.fill_between(iters, lo, hi, color=color, alpha=0.18,
                             label=f"Per-seed spread: 2.5–97.5th percentile (n={n_seeds})")
         ax.axhline(
             vi_per_regime_returns[r],
-            color="black", linestyle="--", linewidth=1.2,
+            color="#555555", linestyle="--", linewidth=1.2,
         )
         ax.text(
             0.99, vi_per_regime_returns[r],
             f"  VI optimum = {vi_per_regime_returns[r]:.1f}",
             transform=ax.get_yaxis_transform(),
-            ha="left", va="center", fontsize=11, color="black",
+            ha="left", va="center", fontsize=11, color="#444444",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0),
         )
         ax.set_title(f"Regime {r} ({_regime_label(r)})", fontsize=13, loc="left")
         ax.set_ylabel("Episode return", fontsize=11)
         ax.tick_params(axis="both", labelsize=11)
-        ax.grid(axis="y", alpha=0.3, linestyle=":")
+        polish(ax)
     axes[-1].set_xlabel("Iteration", fontsize=12)
 
     handles, labels = axes[0].get_legend_handles_labels()
@@ -190,16 +213,16 @@ def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
     # by construction — a recording artifact, not a real re-entropification.
     curve = ent_curve[:-1] if ent_curve.size > 1 else ent_curve
     t = np.arange(curve.size)
-    ax.plot(t, curve, color=COLORS.get("belief_ppo", "#9467bd"),
-            linewidth=2.0, label="Mean posterior entropy")
+    ax.plot(t, curve, color=PALETTE["accent"],
+            linewidth=2.2, label="Mean posterior entropy")
     ax.axhline(
-        np.log(3), color="gray", linestyle="--", linewidth=1.2,
+        np.log(3), color="#555555", linestyle="--", linewidth=1.2,
         label="log(3) = 1.099 (flat prior)",
     )
     ax.set_xlabel("Timestep within episode", fontsize=12)
     ax.set_ylabel("Posterior entropy (nats)", fontsize=12)
     ax.tick_params(axis="both", labelsize=11)
-    ax.grid(axis="y", alpha=0.3, linestyle=":")
+    polish(ax)
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(
         handles, labels,
@@ -225,9 +248,9 @@ def plot_belief_ppo_gap(
     errs_lo = [m - ci[0] for m, ci in zip(means, cis)]
     errs_hi = [ci[1] - m for m, ci in zip(means, cis)]
     palette = {
-        "regime_agnostic": COLORS.get("ppo", "#1f77b4"),
-        "belief": COLORS.get("belief_ppo", "#9467bd"),
-        "oracle": COLORS.get("oracle_ppo", "#8c564b"),
+        "regime_agnostic": PALETTE["floor"],
+        "belief": PALETTE["belief"],
+        "oracle": PALETTE["oracle"],
     }
     label_map = {
         "regime_agnostic": "Regime-agnostic PPO",
@@ -236,24 +259,22 @@ def plot_belief_ppo_gap(
     }
     colors = [palette.get(n, "#888") for n in names]
     display_labels = [label_map.get(n, n) for n in names]
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
+    fig, ax = plt.subplots(figsize=(8.0, 5.2))
     xs = np.arange(len(names))
     ax.bar(
-        xs, means, yerr=[errs_lo, errs_hi], capsize=5,
-        color=colors, edgecolor="black",
+        xs, means, yerr=[errs_lo, errs_hi], capsize=4,
+        color=colors, edgecolor="white", linewidth=1.2, zorder=3,
+        error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.2},
     )
-    # Value labels below the lower CI cap (inside the bar, never overlap).
+    # Bold value labels above the upper CI cap.
     for x, mean, ci in zip(xs, means, cis):
-        ax.annotate(f"{mean:.1f}", xy=(x, ci[0]),
-                    xytext=(0, -3), textcoords="offset points",
-                    ha="center", va="top", fontsize=9, color="black")
+        ax.annotate(f"{mean:.1f}", xy=(x, ci[1]),
+                    xytext=(0, 6), textcoords="offset points",
+                    ha="center", va="bottom", fontsize=8.5,
+                    fontweight="bold", color="#333333")
     ax.set_xticks(xs)
-    ax.set_xticklabels(display_labels, rotation=15, ha="right")
-    legend_handles = [
-        Patch(facecolor=c, edgecolor="black", linewidth=0.4, label=lbl)
-        for c, lbl in zip(colors, display_labels)
-    ]
-    ax.legend(handles=legend_handles, **LEGEND_OUTSIDE_RIGHT)
+    ax.set_xticklabels(display_labels)
+    polish(ax)
     if budget:
         budget_annotation(fig, **budget)
     fig.tight_layout()

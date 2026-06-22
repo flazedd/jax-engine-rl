@@ -81,10 +81,21 @@ def main() -> int:
     orc = np.asarray(levels["oracle_ppo"]["seed_returns"])
     n = min(ag.size, be.size, orc.size)
     total, comp, inf = orc[:n] - ag[:n], be[:n] - ag[:n], orc[:n] - be[:n]
+    total_abs = float(total.mean())
+
+    def _gap_entry(diffs):
+        diffs = list(map(float, diffs))
+        absv = float(np.mean(diffs))
+        lo, hi = _ci(diffs)
+        return {"absolute": absv, "per_seed_diff": diffs, "ci": [lo, hi],
+                "ci_width": float(hi - lo),
+                "fraction_of_total": absv / total_abs if total_abs else 0.0}
+
     gap = {
-        "total": {"mean": float(total.mean()), "ci": _ci(total)},
-        "compromise": {"mean": float(comp.mean()), "ci": _ci(comp)},
-        "inference": {"mean": float(inf.mean()), "ci": _ci(inf)},
+        "inference_cost": _gap_entry(inf),
+        "compromise_policy_cost": _gap_entry(comp),
+        "total_gap": total_abs,
+        "total_gap_ci": _ci(total),
     }
 
     out = {

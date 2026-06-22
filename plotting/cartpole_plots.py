@@ -19,8 +19,16 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 from plotting.style import (
-    COLORS, LEGEND_OUTSIDE_RIGHT, apply_style, budget_annotation,
+    COLORS, LEGEND_OUTSIDE_RIGHT, PALETTE, apply_style, budget_annotation, polish,
 )
+
+# Brand cell colours: concat in the slate family, hypernet in the teal family.
+_CELL_COLORS = {
+    "rl2_concat":       "#b4bcc2",
+    "varibad_concat":   "#8a949c",
+    "rl2_hypernet":     "#2a9d8f",
+    "varibad_hypernet": "#73b8ad",
+}
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
@@ -47,20 +55,10 @@ def plot_method_ladder(out_path: Path) -> None:
     meta_data = {m: _load(m) for m in metas}
 
     apply_style()
-    fig, ax = plt.subplots(figsize=(8.0, 4.5))
-
-    # Reference horizontal dashed lines.
     floor_mean = float(ref_data["regime_agnostic"].mean())
     belief_mean = float(ref_data["belief"].mean())
     oracle_mean = float(ref_data["oracle"].mean())
-    ax.axhline(floor_mean, color=COLORS["ppo"], linestyle="--", linewidth=1.0,
-               alpha=0.7, label=f"Regime-agnostic PPO (floor) = {floor_mean:.2f}")
-    ax.axhline(belief_mean, color=COLORS["belief_ppo"], linestyle="--", linewidth=1.0,
-               alpha=0.7, label=f"Belief-PPO = {belief_mean:.2f}")
-    ax.axhline(oracle_mean, color=COLORS["oracle_ppo"], linestyle="--", linewidth=1.0,
-               alpha=0.7, label=f"Oracle-PPO (ceiling) = {oracle_mean:.2f}")
 
-    # Bars for the 4 meta-RL cells.
     labels = {
         "rl2_concat": "RL² Concat",
         "rl2_hypernet": "RL² Hypernet",
@@ -73,28 +71,37 @@ def plot_method_ladder(out_path: Path) -> None:
     err_low = means - cis[:, 0]
     err_high = cis[:, 1] - means
 
-    bar_colors = [COLORS[m] for m in metas]
-    ax.bar(xs, means, color=bar_colors, alpha=0.85, edgecolor="black",
-           linewidth=0.7, yerr=[err_low, err_high], capsize=4,
-           error_kw=dict(ecolor="black", lw=1.0))
+    fig, ax = plt.subplots(figsize=(9.2, 5.6))
+    # Shaded gap zones: recoverable (floor->belief) + inference remainder.
+    ax.axhspan(floor_mean, belief_mean, color=PALETTE["hyper"], alpha=0.09, zorder=0)
+    ax.axhspan(belief_mean, oracle_mean, color=PALETTE["hyper"], alpha=0.04, zorder=0)
 
-    # In-bar labels with the mean.
-    for x, m, mu in zip(xs, metas, means):
-        ax.text(x, mu - 1.5, f"{mu:.1f}", ha="center", va="top",
-                color="white", fontsize=9, weight="bold")
+    bar_colors = [_CELL_COLORS[m] for m in metas]
+    ax.bar(xs, means, width=0.62, color=bar_colors, edgecolor="white", linewidth=1.2,
+           yerr=[err_low, err_high], capsize=4, zorder=3,
+           error_kw=dict(ecolor="#3a3a3a", elinewidth=1.2))
+    for x, mu, hi in zip(xs, means, err_high):
+        ax.annotate(f"{mu:.1f}", xy=(x, mu + hi), xytext=(0, 6),
+                    textcoords="offset points", ha="center", va="bottom",
+                    fontsize=9, fontweight="bold", color="#333333")
+
+    # Reference lines with inline white-backed labels at the right edge.
+    xr = len(metas) - 0.55
+    for v, lab, ls in [(oracle_mean, "Oracle-PPO", (0, (6, 2))),
+                       (belief_mean, "Belief-PPO ceiling", (0, (1, 1.5))),
+                       (floor_mean, "Regime-agnostic floor", "solid")]:
+        ax.axhline(v, color="#555555", linewidth=1.1, linestyle=ls, zorder=2)
+        ax.text(xr, v, f"  {lab}", va="center", ha="left", fontsize=8.5,
+                color="#444444", zorder=5,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0))
 
     ax.set_xticks(xs)
-    ax.set_xticklabels([labels[m] for m in metas], rotation=10)
-    ax.set_ylabel("Mean episode return")
-
-    # Legend with reference dashes only — bars carry their own xtick labels.
-    ax.legend(**LEGEND_OUTSIDE_RIGHT)
-
-    budget_annotation(
-        fig,
-        iterations=200, parallel_envs=512, rollout_length=128, num_seeds=8,
-        extra="| 7 methods × 1 cell | references at n=5",
-    )
+    ax.set_xticklabels([labels[m] for m in metas], fontsize=10)
+    ax.set_ylabel("Mean episode return", fontsize=11)
+    ax.set_ylim(0, oracle_mean + 9)
+    ax.set_xlim(-0.6, len(metas) - 0.55 + 2.2)
+    polish(ax)
+    fig.tight_layout()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
@@ -310,12 +317,12 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
                     continue
                 xs, ys = zip(*pts)
                 ax.scatter(
-                    xs, ys, color=COLORS.get(method, "#666666"),
+                    xs, ys, color=_CELL_COLORS.get(method, "#666666"),
                     label=_METHOD_LABELS.get(method, method) if (row == 0 and col == 1) else None,
-                    s=24, edgecolor="black", linewidth=0.3, alpha=0.75,
+                    s=26, edgecolor="white", linewidth=0.4, alpha=0.85,
                 )
-            ax.axhline(0.0, color=COLORS["ppo"], linestyle="--", linewidth=0.8, alpha=0.5)
-            ax.axhline(1.0, color=COLORS["oracle_ppo"], linestyle="--", linewidth=0.8, alpha=0.5)
+            ax.axhline(0.0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+            ax.axhline(1.0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
             r = s["correlation_overall"]
             ci = s.get("correlation_overall_ci95", None)
             n = s["n_scatter_points"]

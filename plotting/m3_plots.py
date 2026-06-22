@@ -19,8 +19,10 @@ from plotting.style import (
     FIGSIZE_STANDARD,
     FIGSIZE_WIDE,
     LEGEND_OUTSIDE_RIGHT,
+    PALETTE,
     apply_style,
     budget_annotation,
+    polish,
 )
 
 
@@ -31,14 +33,14 @@ _METHOD_LABELS = {
     "oracle_ppo": "Oracle-PPO",
 }
 _METHOD_COLORS = {
-    "regime_agnostic_ppo": COLORS.get("ppo", "#1f77b4"),
-    "belief_ppo": COLORS.get("belief_ppo", "#9467bd"),
-    "oracle_ppo": COLORS.get("oracle_ppo", "#8c564b"),
+    "regime_agnostic_ppo": PALETTE["floor"],
+    "belief_ppo": PALETTE["belief"],
+    "oracle_ppo": PALETTE["oracle"],
 }
 
 _GAP_COLORS = {
-    "inference_cost": "#8c564b",
-    "compromise_policy_cost": "#1f77b4",
+    "inference_cost": PALETTE["analytical"],
+    "compromise_policy_cost": PALETTE["belief"],
 }
 _GAP_LABELS = {
     "inference_cost": "Inference cost",
@@ -81,21 +83,22 @@ def plot_rq1_ceilings_bar(
     colors = [_METHOD_COLORS[n] for n in names]
     display_labels = [_METHOD_LABELS[n] for n in names]
 
-    fig, ax = plt.subplots(figsize=(11.0, 6.0))
+    fig, ax = plt.subplots(figsize=(9.0, 5.6))
     xs = np.arange(len(names))
     ax.bar(
-        xs, means, yerr=[errs_lo, errs_hi], capsize=5, width=0.6,
-        color=colors, edgecolor="black",
+        xs, means, yerr=[errs_lo, errs_hi], capsize=5, width=0.62,
+        color=colors, edgecolor="white", linewidth=1.2, zorder=3,
+        error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.2},
     )
     for x, mean, ci in zip(xs, means, cis):
-        ax.annotate(f"{mean:.1f}", xy=(x, ci[0]),
-                    xytext=(0, -4), textcoords="offset points",
-                    ha="center", va="top", fontsize=12, color="black")
+        ax.annotate(f"{mean:.1f}", xy=(x, ci[1]),
+                    xytext=(0, 6), textcoords="offset points",
+                    ha="center", va="bottom", fontsize=10, fontweight="bold",
+                    color="#333333")
     ax.set_xticks(xs)
-    ax.set_xticklabels(display_labels, fontsize=12)
-    ax.tick_params(axis="y", labelsize=11)
-    ax.set_ylabel("Final-episode return", fontsize=12)
-    ax.grid(axis="y", alpha=0.3, linestyle=":")
+    ax.set_xticklabels(display_labels, fontsize=11)
+    ax.set_ylabel("Final-episode return", fontsize=11)
+    polish(ax)
 
     # Brackets labeling the two gap components between consecutive bars.
     bracket_pairs = [
@@ -104,13 +107,15 @@ def plot_rq1_ceilings_bar(
     ]
     top = max(ci[1] for ci in cis)
     span = top - min(m - e for m, e in zip(means, errs_lo))
-    bracket_y = top + 0.05 * span
-    step = 0.09 * span
+    # Clear the tall oracle bar's value label (sits ~6pt above its CI cap), so
+    # the bracket over belief-oracle doesn't strike through it.
+    bracket_y = top + 0.13 * span
+    step = 0.10 * span
     for i, (a, b, name) in enumerate(bracket_pairs):
         y = bracket_y + i * step
         ax.plot([xs[a], xs[a], xs[b], xs[b]],
                 [y - 0.012 * span, y, y, y - 0.012 * span],
-                color="black", linewidth=1.1)
+                color="#555555", linewidth=1.1)
         gap = gap_components.get(name, {})
         absolute = gap.get("absolute", means[b] - means[a])
         frac = gap.get("fraction_of_total")
@@ -123,17 +128,8 @@ def plot_rq1_ceilings_bar(
         )
     ax.set_ylim(top=bracket_y + (len(bracket_pairs) + 2) * step)
 
-    legend_handles = [
-        Patch(facecolor=c, edgecolor="black", linewidth=0.4, label=lbl)
-        for c, lbl in zip(colors, display_labels)
-    ]
-    fig.legend(
-        handles=legend_handles,
-        loc="lower center", ncol=3, fontsize=12,
-        bbox_to_anchor=(0.5, -0.005), frameon=True,
-        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-    )
-    fig.tight_layout(rect=[0, 0.07, 1, 0.97])
+    # No legend: the x-axis labels already name each bar.
+    fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)
@@ -152,7 +148,7 @@ def plot_rq1_learning_curves(
     }}
     """
     apply_style()
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
+    fig, ax = plt.subplots(figsize=(8.5, 4.8))
     sample_metrics: dict | None = None
     for name in _METHOD_ORDER:
         m = per_method_curves.get(name)
@@ -163,12 +159,15 @@ def plot_rq1_learning_curves(
         per_seed = np.asarray(m.get("per_seed_mean_return_per_iter", []), dtype=float)
         iters = np.arange(mean.size)
         color = _METHOD_COLORS[name]
-        ax.plot(iters, mean, color=color, label=_METHOD_LABELS[name])
+        ax.plot(iters, mean, color=color, linewidth=2.2, label=_METHOD_LABELS[name],
+                zorder=3)
         if per_seed.ndim == 2 and per_seed.shape[0] > 1:
             lo = np.percentile(per_seed, 2.5, axis=0)
             hi = np.percentile(per_seed, 97.5, axis=0)
-            ax.fill_between(iters, lo, hi, color=color, alpha=0.15)
+            ax.fill_between(iters, lo, hi, color=color, alpha=0.15, zorder=2)
     ax.set_xlabel("Iteration")
+    ax.set_ylabel("Final-episode return")
+    polish(ax)
     ax.legend(**LEGEND_OUTSIDE_RIGHT)
     if sample_metrics is not None:
         budget_annotation(fig, **_budget_from_metrics(sample_metrics))
@@ -189,38 +188,27 @@ def plot_rq1_gap_fractions(
     fractions = [max(0.0, float(gap_components[n]["fraction_of_total"])) for n in order]
     absolutes = [float(gap_components[n]["absolute"]) for n in order]
 
-    fig, ax = plt.subplots(figsize=(11.0, 5.0))
+    fig, ax = plt.subplots(figsize=(7.0, 5.4))
     bottom = 0.0
-    legend_handles = []
     for name, frac, absolute in zip(order, fractions, absolutes):
-        label = f"{_GAP_LABELS[name]} ({frac*100:.0f}%, Δ = {absolute:.2f})"
         ax.bar(
-            [0], [frac], bottom=bottom, width=0.6,
-            color=_GAP_COLORS[name], edgecolor="black",
+            [0], [frac], bottom=bottom, width=0.5,
+            color=_GAP_COLORS[name], edgecolor="white", linewidth=1.5, zorder=3,
         )
+        # Name the segment inside the bar, so no legend is needed.
         ax.text(
             0, bottom + frac / 2,
-            f"{frac*100:.0f}%\nΔ = {absolute:.2f}",
-            ha="center", va="center", fontsize=14, color="white",
+            f"{_GAP_LABELS[name]}\n{frac*100:.0f}%,  Δ = {absolute:.2f}",
+            ha="center", va="center", fontsize=13, color="white",
             fontweight="bold",
-        )
-        legend_handles.append(
-            Patch(facecolor=_GAP_COLORS[name], edgecolor="black",
-                  linewidth=0.4, label=label)
         )
         bottom += frac
     ax.set_xlim(-0.6, 0.6)
     ax.set_xticks([])
     ax.set_ylim(0.0, 1.05)
-    ax.set_ylabel("Fraction of total gap", fontsize=12)
-    ax.tick_params(axis="y", labelsize=11)
-    fig.legend(
-        handles=legend_handles,
-        loc="lower center", ncol=2, fontsize=12,
-        bbox_to_anchor=(0.5, -0.005), frameon=True,
-        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-    )
-    fig.tight_layout(rect=[0, 0.08, 1, 0.97])
+    ax.set_ylabel("Fraction of total gap", fontsize=11)
+    polish(ax)
+    fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path)
     plt.close(fig)

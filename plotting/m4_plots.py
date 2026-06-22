@@ -26,7 +26,16 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
-from plotting.style import COLORS, apply_style
+from plotting.style import COLORS, PALETTE, apply_style, polish
+
+# Cell colours: concat in the slate family, hypernet in the teal family, with
+# RL² vs VariBAD distinguished by shade (matches the hero-ladder aesthetic).
+_CELL_COLORS = {
+    "rl2_concat":       "#b4bcc2",  # light slate
+    "varibad_concat":   "#8a949c",  # dark slate
+    "rl2_hypernet":     "#2a9d8f",  # vivid teal
+    "varibad_hypernet": "#73b8ad",  # light teal
+}
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
@@ -102,7 +111,7 @@ def plot_factorial_toys(out_path: Path) -> bool:
 
     def _cell_color(method: str, variant: str) -> str:
         integ = "hypernet" if "hypernet" in variant else "concat"
-        return COLORS[f"{method}_{integ}"]
+        return _CELL_COLORS[f"{method}_{integ}"]
 
     floor_label_template = "PPO floor"
     floor_drawn = False
@@ -112,11 +121,11 @@ def plot_factorial_toys(out_path: Path) -> bool:
     for m in methods:
         for v in _VARIANT_ORDER:
             legend_handles.append(_Patch(
-                facecolor=_cell_color(m, v), edgecolor="black", linewidth=0.4,
+                facecolor=_cell_color(m, v), edgecolor="white", linewidth=0.8,
                 label=f"{method_labels[m]} {_VARIANT_LABELS[v]}",
             ))
     legend_handles.append(_Line2D(
-        [0], [0], color=COLORS["ppo"], linestyle="--", linewidth=1.2, alpha=0.6,
+        [0], [0], color="#555555", linestyle="--", linewidth=1.2,
         label=floor_label_template,
     ))
 
@@ -143,18 +152,19 @@ def plot_factorial_toys(out_path: Path) -> bool:
             colors = [_cell_color(method, v) for v in _VARIANT_ORDER]
             ax.bar(
                 x, means, bar_w, yerr=yerr, color=colors,
-                edgecolor="black", linewidth=0.4, capsize=3,
+                edgecolor="white", linewidth=1.2, capsize=4, zorder=3,
+                error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.1},
             )
         floor_val = floors.get(env)
         if floor_val is not None:
             ax.axhline(
-                floor_val, color=COLORS["ppo"],
-                linestyle="--", linewidth=1.2, alpha=0.6,
+                floor_val, color="#555555", linestyle="--", linewidth=1.2, zorder=2,
             )
             ax.text(
                 0.99, floor_val, f"  PPO floor = {floor_val:.1f}",
                 transform=ax.get_yaxis_transform(),
-                ha="left", va="center", fontsize=10, color=COLORS["ppo"],
+                ha="left", va="center", fontsize=10, color="#444444", zorder=5,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0),
             )
         ax.set_xticks(np.arange(n_v))
         ax.set_xticklabels(
@@ -162,8 +172,8 @@ def plot_factorial_toys(out_path: Path) -> bool:
         )
         ax.tick_params(axis="y", labelsize=11)
         ax.set_ylabel("Final return", fontsize=11)
-        ax.set_title(_TOY_ENV_LABELS[env], fontsize=13)
-        ax.grid(axis="y", alpha=0.3, linestyle=":")
+        ax.set_title(_TOY_ENV_LABELS[env], fontsize=13, loc="left")
+        polish(ax)
 
     fig.legend(
         handles=legend_handles,

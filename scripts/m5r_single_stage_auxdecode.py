@@ -34,7 +34,17 @@ from evaluation.posterior_probe import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 FINAL = RESULTS_ROOT / "M5R" / "final"
-ENC_EXP = "m5r_final_rl2_concat_e_final"  # source of env + config only
+# Source of env + config + base (concat) agent, per method.
+ENC_EXP = {
+    "rl2": "m5r_final_rl2_concat_e_final",
+    "varibad": "m5r_final_varibad_concat_e_final",
+}
+# Reference levels for the summary print, per method (deployed pure cells +
+# Belief-PPO ceiling), from the medium-environment results.
+REFS = {
+    "rl2": "deployed-concat 118.7 | deployed-hypernet 163.1 | belief 168.8",
+    "varibad": "deployed-concat 108.9 | deployed-hypernet 163.5 | belief 168.8",
+}
 
 
 def _probe_acc(agent, agent_state, env, seed, n_rollouts=400):
@@ -52,6 +62,7 @@ def _probe_acc(agent, agent_state, env, seed, n_rollouts=400):
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="scripts.m5r_single_stage_auxdecode")
+    ap.add_argument("--method", default="rl2", choices=["rl2", "varibad"])
     ap.add_argument("--aux-coefs", type=float, nargs="+", default=[0.0, 0.3, 1.0])
     ap.add_argument("--detach", action="store_true",
                     help="detach belief into policy/value heads so the encoder is "
@@ -63,7 +74,7 @@ def main() -> int:
     ap.add_argument("--rollout-length", type=int, default=128)
     args = ap.parse_args()
 
-    bundle = load_experiment(RESULTS_ROOT / ENC_EXP, 0)
+    bundle = load_experiment(RESULTS_ROOT / ENC_EXP[args.method], 0)
     env = bundle.env
     base = bundle.agent  # concat agent with correct obs_size/n_actions/hidden_dim
 
@@ -103,8 +114,7 @@ def main() -> int:
     json.dump({"iterations": args.iterations, "seeds": args.seeds, "detach": args.detach,
                "by_coef": out},
               open(FINAL / f"m5r_single_stage_auxdecode{tag}.json", "w"), indent=2)
-    print("\n[single-stage] === summary (refs: deployed-concat ret 108.6 probe 0.70 | "
-          "deployed-hypernet ret 158.9 probe 0.56 | belief ceiling 169.9) ===", flush=True)
+    print(f"\n[single-stage] === summary (refs: {REFS[args.method]}) ===", flush=True)
     for coef, d in out.items():
         print(f"  aux_coef={coef:>4}: return {d['return_mean']:.1f}±{d['return_std']:.1f}  "
               f"belief-probe {d['probe_acc_mean']:.3f}±{d['probe_acc_std']:.3f}", flush=True)

@@ -123,6 +123,11 @@ class RL2Agent:
     lam: float = 0.95
     epochs: int = 4
     minibatch_envs: int = 32
+    # Policy objective: "ppo" (clipped surrogate, default) or "a2c" (vanilla
+    # advantage actor-critic, no importance ratio and no clipping). Used to
+    # test whether the integration finding is specific to PPO; A2C should be
+    # run with epochs=1 to stay on-policy.
+    policy_objective: str = "ppo"
     # Integration mechanism: "concat" = Dense(hidden)→logits;
     # "hypernet" = GRU hidden generates target-MLP weights, target maps obs→logits.
     integration: str = "concat"
@@ -301,9 +306,15 @@ class RL2Agent:
             adv = batch["advantage"]
             adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
-            unclipped = ratio * adv
-            clipped = jnp.clip(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv
-            policy_loss = -jnp.minimum(unclipped, clipped).mean()
+            if self.policy_objective == "a2c":
+                # Vanilla advantage actor-critic: plain policy-gradient, no
+                # importance ratio and no clipping (run with epochs=1 to keep
+                # the update on-policy).
+                policy_loss = -(lp_new * adv).mean()
+            else:
+                unclipped = ratio * adv
+                clipped = jnp.clip(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv
+                policy_loss = -jnp.minimum(unclipped, clipped).mean()
             value_loss = 0.5 * jnp.mean((values - batch["return"]) ** 2)
             probs = jnp.exp(log_probs_all)
             entropy = -jnp.sum(probs * log_probs_all, axis=-1).mean()

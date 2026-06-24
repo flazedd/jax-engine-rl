@@ -88,7 +88,7 @@ def plot_method_ladder(out_path: Path) -> None:
     # Reference lines with inline white-backed labels at the right edge.
     xr = len(metas) - 0.55
     for v, lab, ls in [(oracle_mean, "Oracle-PPO", (0, (6, 2))),
-                       (belief_mean, "Belief-PPO ceiling", (0, (1, 1.5))),
+                       (belief_mean, "Belief-PPO", (0, (1, 1.5))),
                        (floor_mean, "Regime-agnostic floor", "solid")]:
         ax.axhline(v, color="#555555", linewidth=1.1, linestyle=ls, zorder=2)
         ax.text(xr, v, f"  {lab}", va="center", ha="left", fontsize=8.5,

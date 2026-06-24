@@ -97,6 +97,11 @@ class VariBADPolicy(nn.Module):
     obs_size: int
     latent_dim: int
     hidden_dim: int = 64
+    # When True, the policy and value heads read a stop-gradient copy of the
+    # belief (μ, σ), so their gradients do not shape the encoder. With an
+    # auxiliary regime-decode loss, the encoder is then shaped only by the
+    # VAE + decode objective while a hypernet policy exploits it.
+    detach_belief_for_policy: bool = False
     integration: str = "concat"
     hypernet_target_hidden: int = 16
     hypernet_hidden: int = 64
@@ -119,6 +124,9 @@ class VariBADPolicy(nn.Module):
     def __call__(
         self, obs: chex.Array, mu: chex.Array, log_var: chex.Array
     ) -> tuple[chex.Array, chex.Array]:
+        if self.detach_belief_for_policy:
+            mu = jax.lax.stop_gradient(mu)
+            log_var = jax.lax.stop_gradient(log_var)
         sigma = jnp.exp(0.5 * log_var)
         belief = jnp.concatenate([mu, sigma], axis=-1)
         if self.belief_layernorm and self.integration == "concat":
@@ -171,6 +179,11 @@ class VariBADAgent:
     lam: float = 0.95
     epochs: int = 4
     minibatch_envs: int = 32
+    # Policy objective: "ppo" (clipped surrogate, default) or "a2c" (vanilla
+    # advantage actor-critic, no importance ratio and no clipping). Used to
+    # test whether the integration finding is specific to PPO; A2C should be
+    # run with epochs=1 to stay on-policy.
+    policy_objective: str = "ppo"
     reward_decoder: str = "bernoulli"  # {"bernoulli", "gaussian"}
     # Integration mechanism: "concat" = MLP([obs,μ,σ])→logits;
     # "hypernet" = belief=[μ,σ] generates target-MLP weights, target maps obs→logits.
@@ -185,6 +198,16 @@ class VariBADAgent:
     # at `hidden_dim` width.
     policy_trunk_layers: int = 2
     policy_trunk_hidden: int = 0  # 0 = fall back to hidden_dim
+
+    # Single-stage "best of both" knob: an auxiliary regime-decode loss on the
+    # latent mean μ, added to the loss with this coefficient (0 = off, no aux
+    # params, behaviour identical to before). Pressures the encoder to keep the
+    # regime linearly decodable from μ while a hypernet policy uses the belief.
+    aux_decode_coef: float = 0.0
+    n_regimes: int = 3
+    # Detach the belief (μ, σ) into the policy/value heads (single-stage
+    # decoupling); only meaningful together with aux_decode_coef > 0.
+    detach_belief_for_policy: bool = False
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -216,6 +239,7 @@ class VariBADAgent:
             hypernet_init_scale=self.hypernet_init_scale,
             policy_trunk_layers=self.policy_trunk_layers,
             policy_trunk_hidden=self.policy_trunk_hidden,
+            detach_belief_for_policy=self.detach_belief_for_policy,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:
@@ -246,6 +270,16 @@ class VariBADAgent:
             "decoder": decoder_params,
             "policy": policy_params,
         }
+        if self.aux_decode_coef > 0.0:
+            # Linear regime decoder over the latent mean μ; trained jointly as a
+            # sibling collection so the sub-modules (which read their own keys)
+            # are untouched while the optimizer still updates it.
+            k_aux = jax.random.fold_in(key, 99)
+            params["aux"] = {
+                "W": nn.initializers.orthogonal(1.0)(
+                    k_aux, (self.latent_dim, self.n_regimes)),
+                "b": jnp.zeros((self.n_regimes,), dtype=jnp.float32),
+            }
         opt_state = self._optimizer().init(params)
         return {
             "params": params,
@@ -367,9 +401,14 @@ class VariBADAgent:
             ratio = jnp.exp(lp_new - batch["log_prob"])
             adv = batch["advantage"]
             adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-            unclipped = ratio * adv
-            clipped = jnp.clip(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv
-            policy_loss = -jnp.minimum(unclipped, clipped).mean()
+            if self.policy_objective == "a2c":
+                # Vanilla advantage actor-critic: plain policy-gradient, no
+                # importance ratio and no clipping (run with epochs=1).
+                policy_loss = -(lp_new * adv).mean()
+            else:
+                unclipped = ratio * adv
+                clipped = jnp.clip(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv
+                policy_loss = -jnp.minimum(unclipped, clipped).mean()
             value_loss = 0.5 * jnp.mean((values - batch["return"]) ** 2)
             probs = jnp.exp(log_probs_all)
             entropy = -jnp.sum(probs * log_probs_all, axis=-1).mean()
@@ -415,6 +454,22 @@ class VariBADAgent:
 
             total_loss = ppo_loss + self.vae_coef * vae_loss
 
+            # Single-stage auxiliary regime-decode on the differentiable latent
+            # mean μ: gradient flows into the encoder, pressuring it to keep the
+            # regime decodable while the policy uses the (detached) belief.
+            aux_loss = jnp.array(0.0)
+            aux_acc = jnp.array(0.0)
+            if self.aux_decode_coef > 0.0:
+                aux_logits = (
+                    jnp.einsum("tnl,lr->tnr", mus, params["aux"]["W"])
+                    + params["aux"]["b"]
+                )
+                aux_loss = optax.softmax_cross_entropy_with_integer_labels(
+                    aux_logits, batch["regime"]
+                ).mean()
+                aux_acc = (aux_logits.argmax(-1) == batch["regime"]).mean()
+                total_loss = total_loss + self.aux_decode_coef * aux_loss
+
             approx_kl = (batch["log_prob"] - lp_new).mean()
             clipped_frac = (jnp.abs(ratio - 1.0) > self.clip_eps).astype(
                 jnp.float32
@@ -429,6 +484,8 @@ class VariBADAgent:
                 "vae/recon_loss": recon_loss,
                 "vae/kl": kl,
                 "vae/total": vae_loss,
+                "aux/decode_loss": aux_loss,
+                "aux/decode_acc": aux_acc,
                 "total_loss": total_loss,
                 "posterior/mu_norm": jnp.linalg.norm(mus, axis=-1).mean(),
                 "posterior/sigma_mean": jnp.exp(0.5 * log_vars).mean(),
@@ -444,7 +501,7 @@ class VariBADAgent:
             perm = jax.random.permutation(shuf_key, N)[:n_envs_used]
 
             def gather(idx):
-                return {
+                g = {
                     "obs": trajectory["obs"][:, idx],
                     "action": trajectory["action"][:, idx],
                     "reward": trajectory["reward"][:, idx],
@@ -454,6 +511,9 @@ class VariBADAgent:
                     "done": trajectory["done"][:, idx],
                     "init_carry": init_carry[idx],
                 }
+                if self.aux_decode_coef > 0.0:
+                    g["regime"] = trajectory["regime"][:, idx]
+                return g
 
             shuffled = gather(perm)
             mb_init_carry = shuffled["init_carry"].reshape(

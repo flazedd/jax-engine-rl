@@ -38,9 +38,9 @@ def _load(prefix, head):
     return d["final_return_mean"], d["final_return_std"]
 
 
-def _load_single_stage():
-    """RL² stop-gradient single-stage combined policy (one training run)."""
-    p = FINAL / "m5r_single_stage_auxdecode_detach_n20.json"
+def _load_single_stage(fname="m5r_single_stage_auxdecode_detach_n20.json"):
+    """Stop-gradient single-stage combined policy (one training run)."""
+    p = FINAL / fname
     if not p.exists():
         return None, None
     d = json.load(open(p))["by_coef"]["1.0"]
@@ -77,6 +77,7 @@ def main() -> int:
     vb_cm, vb_cs = _load("m5r_transplant_vb", "concat")
     vb_hm, vb_hs = _load("m5r_transplant_vb", "hypernet")
     ss_m, ss_s = _load_single_stage()
+    vb_ss_m, vb_ss_s = _load_single_stage("m5r_single_stage_auxdecode_vb_detach_n20.json")
 
     centers = [0.0, 1.0]
     # RL²: deployed concat, transplant concat, deployed hypernet, transplant hypernet, single-stage.
@@ -88,12 +89,13 @@ def main() -> int:
     _group(centers[1], [
         (DEPLOYED["vb"][0], None, C_DEP_C), (vb_cm, vb_cs, C_TR_C),
         (DEPLOYED["vb"][1], None, C_DEP_H), (vb_hm, vb_hs, C_TR_H),
+        (vb_ss_m, vb_ss_s, C_SS),
     ])
 
     xr = centers[-1] + 2.2 * bw
     ref_line(ax, FLOOR, "Regime-agnostic floor", x=xr, linestyle="-")
-    ref_line(ax, BELIEF, "Belief-PPO ceiling", x=xr, linestyle=(0, (1, 1.5)))
-    ref_line(ax, ORACLE, "Oracle-PPO ceiling", x=xr, linestyle=(0, (6, 2)))
+    ref_line(ax, BELIEF, "Belief-PPO", x=xr, linestyle=(0, (1, 1.5)))
+    ref_line(ax, ORACLE, "Oracle-PPO", x=xr, linestyle=(0, (6, 2)))
 
     ax.set_xticks(centers)
     ax.set_xticklabels(["RL²", "VariBAD"])
@@ -108,7 +110,7 @@ def main() -> int:
         Patch(facecolor=C_TR_C, edgecolor="white", label="Transplant: frozen belief + concat head"),
         Patch(facecolor=C_DEP_H, edgecolor="white", label="Deployed hypernet"),
         Patch(facecolor=C_TR_H, edgecolor="white", label="Transplant: frozen belief + hypernet head"),
-        Patch(facecolor=C_SS, edgecolor="white", label="Single-stage combined (one run, RL²)"),
+        Patch(facecolor=C_SS, edgecolor="white", label="Single-stage combined (one run)"),
     ]
     ax.legend(handles=handles,
               loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9, frameon=True,

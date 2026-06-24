@@ -27,7 +27,14 @@ from plotting.style import (
 )
 
 # Stacked-obs PPO is not in the COLORS dict; pick a distinct gray.
-STACKED_OBS_COLOR = "#7f7f7f"
+STACKED_OBS_COLOR = "#8a949c"
+
+# Brand cell colours for the sweep ladders: concat in the slate family,
+# hypernet in the teal family (matching the rest of the thesis figures).
+_CELL_BRAND = {
+    "rl2_concat": "#b4bcc2", "varibad_concat": "#8a949c",
+    "rl2_hypernet": "#2a9d8f", "varibad_hypernet": "#73b8ad",
+}
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
@@ -91,31 +98,44 @@ def _load_stacked_obs() -> dict | None:
         return json.load(f)
 
 
-def _draw_refs(ax, refs: dict, label_each: bool = True) -> None:
-    """Add horizontal reference lines for floor / belief / oracle."""
+def _draw_refs(ax, refs: dict, label_x: float | None = None) -> None:
+    """Add horizontal reference lines for floor / belief / oracle. If `label_x`
+    is given (a data x-coordinate to the right of the bars), inline labels are
+    placed there, left-aligned, as in the method-ladder figure."""
+    # Shaded zones: floor -> belief (recoverable gap) and belief -> oracle (inference
+    # remainder), matching the ladder and transplant figures.
+    _fl, _be, _or = (refs.get("regime_agnostic_ppo"), refs.get("belief_ppo"),
+                     refs.get("oracle_ppo"))
+    if _fl is not None and _be is not None:
+        ax.axhspan(_fl, _be, color=PALETTE["hyper"], alpha=0.08, zorder=0)
+    if _be is not None and _or is not None:
+        ax.axhspan(_be, _or, color=PALETTE["hyper"], alpha=0.04, zorder=0)
     label_map = {
-        "regime_agnostic_ppo": "Floor",
+        "regime_agnostic_ppo": "Regime-agnostic floor",
         "belief_ppo": "Belief-PPO",
         "oracle_ppo": "Oracle-PPO",
     }
+    # Brand convention: reference lines in neutral grey, distinguished by linestyle.
     color_map = {
-        "regime_agnostic_ppo": COLORS["ppo"],
-        "belief_ppo": COLORS["belief_ppo"],
-        "oracle_ppo": COLORS["oracle_ppo"],
+        "regime_agnostic_ppo": "#555555",
+        "belief_ppo": "#555555",
+        "oracle_ppo": "#555555",
     }
     style_map = {
-        "regime_agnostic_ppo": "--",
-        "belief_ppo": ":",
-        "oracle_ppo": "-.",
+        "regime_agnostic_ppo": "-",
+        "belief_ppo": (0, (1, 1.5)),
+        "oracle_ppo": (0, (6, 2)),
     }
     for key, label in label_map.items():
         v = refs.get(key)
         if v is None:
             continue
-        ax.axhline(
-            v, linestyle=style_map[key], color=color_map[key], linewidth=1.2,
-            label=label if label_each else None,
-        )
+        ax.axhline(v, linestyle=style_map[key], color=color_map[key], linewidth=1.2,
+                   zorder=2)
+        if label_x is not None:
+            ax.text(label_x, v, f" {label}", va="center", ha="left", fontsize=7.5,
+                    color="#444444", zorder=5, clip_on=False,
+                    bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0))
 
 
 def _ladder_bars(
@@ -176,10 +196,10 @@ def _ladder_bars(
         x = method_x + offset
         bars = ax.bar(
             x, means, bar_w, yerr=[lo_err, hi_err], capsize=3,
-            edgecolor="black", linewidth=0.4,
+            edgecolor="white", linewidth=1.0,
         )
         for bar, method in zip(bars, methods):
-            bar.set_facecolor(COLORS[f"{method}_{integ}"])
+            bar.set_facecolor(_CELL_BRAND[f"{method}_{integ}"])
         for xi, m, he in zip(x, means, hi_err):
             if not np.isnan(m):
                 # Label sits above the upper CI cap, not the bar top.
@@ -195,7 +215,11 @@ def _ladder_bars(
     else:
         ax.set_xticks(method_x)
         ax.set_xticklabels(["RL²", "VariBAD"])
-    _draw_refs(ax, refs)
+    # Place reference-line labels in a right-hand margin, clear of the bars
+    # (matching the method-ladder figure).
+    label_x = method_x[-1] + 0.5
+    ax.set_xlim(-0.55, label_x + 1.15)
+    _draw_refs(ax, refs, label_x=label_x)
     if with_ylim_floor:
         floor = refs.get("regime_agnostic_ppo", float("nan"))
         oracle = refs.get("oracle_ppo", float("nan"))
@@ -224,7 +248,7 @@ def _legend_handles(include_stacked: bool = True) -> list[Patch]:
     for m in methods:
         for i in integrations:
             handles.append(Patch(
-                facecolor=COLORS[f"{m}_{i}"], edgecolor="black", linewidth=0.4,
+                facecolor=_CELL_BRAND[f"{m}_{i}"], edgecolor="white", linewidth=1.0,
                 label=f"{method_full[m]} {integ_pretty[i]}",
             ))
     return handles
@@ -276,7 +300,7 @@ def plot_method_ladder(out_path: Path) -> None:
     # Reference lines with inline labels at the right edge (no legend clutter).
     xr = 2.62
     for v, lab, ls in [(oracle, "Oracle-PPO", (0, (6, 2))),
-                       (belief, "Belief-PPO ceiling", (0, (1, 1.5))),
+                       (belief, "Belief-PPO", (0, (1, 1.5))),
                        (floor, "Regime-agnostic floor", "solid")]:
         ax.axhline(v, color="#555555", linewidth=1.1, linestyle=ls, zorder=2)
         ax.text(xr, v, f" {lab}", va="center", ha="left", fontsize=8.5,
@@ -447,7 +471,7 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     ax.axhspan(floor, belief, color=PALETTE["hyper"], alpha=0.06, zorder=0)
     xr = last_iter * 1.005
     ref_line(ax, floor, "Regime-agnostic floor", x=xr, linestyle="-")
-    ref_line(ax, belief, "Belief-PPO ceiling", x=xr, linestyle=(0, (1, 1.5)))
+    ref_line(ax, belief, "Belief-PPO", x=xr, linestyle=(0, (1, 1.5)))
     ref_line(ax, oracle, "Oracle-PPO", x=xr, linestyle=(0, (6, 2)))
 
     ax.set_xlabel("Iteration", fontsize=12)

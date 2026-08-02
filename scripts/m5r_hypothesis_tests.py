@@ -2,21 +2,25 @@
 
 Three families, mapped to the three research questions:
 
-Family A (5 cells): the gap decomposition is non-degenerate at every
+Family A (4 environments): the gap decomposition is non-degenerate at every
   evaluated environment. We require regime-agnostic < Belief-PPO <= Oracle-PPO
-  with non-overlapping bootstrap CIs on regime-agnostic and Oracle-PPO. This
-  is checked by inspection on the M3/M6 reference levels (which are reused
-  unchanged by M5R).
+  with non-overlapping bootstrap CIs on regime-agnostic and Oracle-PPO.
 
-Family B (10 cells): hypernet > concat at every (env, method) cell.
-  Paired Wilcoxon (one-sided, alternative="greater") on n=8 seeds per cell.
-  Holm-Bonferroni correction across all 10 tests. Each test must clear two
-  bars: Holm-corrected p < 0.05 AND bootstrap CI on the paired difference
-  excludes zero.
+Family B (8 variants): hypernet > concat at every (env, method) variant.
+  Paired Wilcoxon (one-sided, alternative="greater") on the n seeds the
+  configs declare. Holm-Bonferroni correction across all 8 tests. Each test
+  must clear two bars: Holm-corrected p < 0.05 AND bootstrap CI on the paired
+  difference excludes zero.
+
+  ENVS must name exactly the env labels `scripts.sweep_redesign_n20` writes
+  into per_cell_env.json, plus the medium env `e_final`. A label listed here
+  but absent from the data still counts toward the Holm family size, so a
+  stale entry inflates every corrected p-value; a label present in the data
+  but missing here goes untested.
 
 Family C (1 confidence interval): pooled Pearson correlation between
   linear-probe regime-decoding accuracy (in posterior_error form) and
-  gap_closed_vs_oracle, across all 160 (cell, env, seed) probe points.
+  gap_closed_vs_oracle, across all (variant, env, seed) probe points.
   Decoupling supported iff the 95% bootstrap CI is contained in
   (-0.30, +0.30). Re-run with the MLP probe as a robustness check.
 
@@ -50,12 +54,14 @@ ALPHA = 0.05
 N_BOOT = 10_000
 DECOUPLING_THRESHOLD = 0.30
 
+# The medium env plus the three levels `scripts.sweep_redesign_n20` produces.
+# Keep in sync with that script's ENVS; see the Family B note in the module
+# docstring for why a mismatch silently corrupts the corrected p-values.
 ENVS = (
     "e_final",
-    "persistence_easy",
-    "persistence_hard",
     "distinguishability_easy",
     "distinguishability_hard",
+    "coupled_fast",
 )
 METHODS = ("rl2", "varibad")
 FAMILY_B: list[tuple[str, str, str, str]] = []

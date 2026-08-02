@@ -1,0 +1,19 @@
+# Regime-agnostic PPO on the matched per-step tuple u_t.
+# Receives the same inputs as every other method; what distinguishes it is that
+# it is memoryless and retains nothing, not that it is denied the evidence.
+extends:
+- base/base_ppo.yaml
+- envs/e_final.yaml
+experiment_name: m5r_matched_regime_agnostic
+iterations: 300
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: market_making_v1_augmented
+agent:
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 61

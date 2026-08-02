@@ -28,9 +28,32 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss as _sk_log_loss
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+
+
+def _brier(regime: np.ndarray, proba: np.ndarray, n_classes: int) -> float:
+    """Mean multiclass Brier score: E[ sum_c (q_c - 1{z=c})^2 ]. Range [0, 2]."""
+    onehot = np.eye(n_classes)[regime]
+    return float(((proba - onehot) ** 2).sum(axis=1).mean())
+
+
+def _kl_omega_q(omega: np.ndarray, q: np.ndarray, eps: float = 1e-8) -> float:
+    """Mean forward KL(omega || q) per sample.
+
+    omega, q: [M, C] rows are distributions over the C regimes. omega is the
+    analytical (Bayes-optimal) belief, q the probe's recovered belief. Forward
+    KL is finite here because q comes from a softmax (strictly > 0); where
+    omega_c = 0 the term is taken as 0 (0 * log 0 = 0).
+    """
+    q = np.clip(q, eps, 1.0)
+    omega = np.clip(omega, 0.0, 1.0)
+    omega = omega / np.clip(omega.sum(axis=1, keepdims=True), eps, None)
+    log_omega = np.log(np.clip(omega, eps, 1.0))
+    term = np.where(omega > 0.0, omega * (log_omega - np.log(q)), 0.0)
+    return float(term.sum(axis=1).mean())
 
 
 @contextmanager
@@ -83,8 +106,14 @@ def collect_probe_rollouts(
     n_rollouts: int,
     rollout_length: int,
     key: chex.PRNGKey,
+    extra_keys: tuple[str, ...] = (),
 ) -> dict[str, np.ndarray]:
     """Run `n_rollouts` parallel evaluation rollouts.
+
+    `extra_keys` names additional entries of the agent's `act` extras to record
+    alongside the belief, each stacked to `[T, N, ...]` under the same name.
+    The belief-swap diagnostic uses it to capture VariBAD's `log_var`, which
+    travels with `mu` into the policy and cannot be substituted without it.
 
     Records per-timestep arrays shaped `[T, N, ...]`:
       - obs: agent observation
@@ -132,6 +161,7 @@ def collect_probe_rollouts(
     out_done = []
     out_analytical = []
     out_q = []
+    out_extra: dict[str, list] = {k: [] for k in extra_keys}
 
     # Inventory at the start of each step — needed for the HMM likelihood,
     # which uses the inventory *before* the fills resolved.
@@ -196,6 +226,14 @@ def collect_probe_rollouts(
                 )
             belief_t = extras[belief_key]
 
+        for k in extra_keys:
+            if k not in extras:
+                raise KeyError(
+                    f"extra key {k!r} not in agent.act extras "
+                    f"(have: {list(extras.keys())})"
+                )
+            out_extra[k].append(np.asarray(extras[k]))
+
         # Step env
         step_keys = jax.random.split(key, n_rollouts + 1)
         env_keys, key = step_keys[:n_rollouts], step_keys[-1]
@@ -230,7 +268,7 @@ def collect_probe_rollouts(
         carry = mask * zeros + (1.0 - mask) * new_carry
         obses = obses_next
 
-    return {
+    out = {
         "obs": np.stack(out_obs),  # [T, N, obs_dim]
         "belief": np.stack(out_belief),  # [T, N, belief_dim]
         "regime": np.stack(out_regime).astype(np.int32),  # [T, N]
@@ -240,6 +278,9 @@ def collect_probe_rollouts(
         "analytical_belief": np.stack(out_analytical),  # [T, N, n_regimes]
         "q": np.stack(out_q),  # [T, N]
     }
+    for k in extra_keys:
+        out[k] = np.stack(out_extra[k])  # [T, N, ...]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -254,14 +295,23 @@ def train_probe(
     test_rollout_idx: np.ndarray,  # [N_test]
     classifier: str = "logistic",
     seed: int = 0,
+    omega_TND: np.ndarray | None = None,  # [T, N, C] analytical belief, for KL
 ) -> dict[str, Any]:
-    """Fit a regime classifier from belief→regime, return train/test accuracies.
+    """Fit a regime classifier from belief→regime, return belief-quality metrics.
 
     Uses *all* timesteps from training rollouts as flat dataset, but a
-    rollout-level train/test split (so test rollouts are unseen).
+    rollout-level train/test split (so test rollouts are unseen). The fitted
+    probe's softmax over the test set is scored as a *distribution*, not just
+    by its argmax, so overconfident-but-wrong beliefs are penalised.
 
     Returns dict with:
-      - train_acc, test_acc: scalar accuracies (over all timesteps in split)
+      - train_acc, test_acc: scalar argmax accuracies (mode-match rate)
+      - test_log_loss: mean cross-entropy of the probe softmax vs the true
+        regime label (proper scoring rule; lower is better)
+      - test_brier: mean multiclass Brier score (proper, bounded [0, 2])
+      - test_kl_to_omega (only if `omega_TND` given): mean forward
+        KL(omega || q) of the analytical belief from the probe softmax, i.e.
+        distance of the recovered belief from the Bayes-optimal ceiling belief
       - per_t_test_acc: [T] per-timestep accuracy on test rollouts
       - n_classes: number of regime classes seen in training
     """
@@ -299,6 +349,27 @@ def train_probe(
         train_acc = float(clf.score(train_belief, train_regime))
         test_acc = float(clf.score(test_belief, test_regime))
 
+        # Probe softmax over the test set, scattered into full regime columns
+        # (a class absent from training gets probability 0).
+        classes = clf.classes_.astype(int)
+        n_cols = int(max(int(regime_TN.max()) + 1, int(classes.max()) + 1))
+        raw_proba = clf.predict_proba(test_belief)  # [M, len(classes)]
+        test_proba = np.zeros((raw_proba.shape[0], n_cols), dtype=float)
+        test_proba[:, classes] = raw_proba
+        labels = list(range(n_cols))
+        test_log_loss = float(_sk_log_loss(test_regime, test_proba, labels=labels))
+        test_brier = _brier(test_regime, test_proba, n_cols)
+
+        kl_to_omega: float | None = None
+        if omega_TND is not None:
+            omega_test = omega_TND[:, test_rollout_idx, :].reshape(
+                -1, omega_TND.shape[-1]
+            )
+            if omega_test.shape[1] < n_cols:
+                pad = np.zeros((omega_test.shape[0], n_cols - omega_test.shape[1]))
+                omega_test = np.concatenate([omega_test, pad], axis=1)
+            kl_to_omega = _kl_omega_q(omega_test, test_proba)
+
         # Per-timestep accuracy on test rollouts.
         test_belief_TND = belief_TND[:, test_rollout_idx, :]  # [T, N_test, D]
         test_regime_TN = regime_TN[:, test_rollout_idx]  # [T, N_test]
@@ -307,12 +378,17 @@ def train_probe(
             preds = clf.predict(test_belief_TND[t])
             per_t[t] = float((preds == test_regime_TN[t]).mean())
 
-    return {
+    out = {
         "train_acc": train_acc,
         "test_acc": test_acc,
+        "test_log_loss": test_log_loss,
+        "test_brier": test_brier,
         "per_t_test_acc": per_t.tolist(),
         "n_classes": int(clf.classes_.size),
     }
+    if kl_to_omega is not None:
+        out["test_kl_to_omega"] = kl_to_omega
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -329,11 +405,20 @@ class ProbeBundle:
     seed: int
 
 
-def load_experiment(exp_dir: Path | str, seed: int) -> ProbeBundle:
+def load_experiment(
+    exp_dir: Path | str,
+    seed: int,
+    env_overrides: dict | None = None,
+) -> ProbeBundle:
     """Load env, agent, and trained agent_state for a given experiment+seed.
 
     Reuses `training.train._build_env`, `_build_agent`, `_maybe_wrap_env_for_agent`
     so the env/agent are reconstructed exactly as during training.
+
+    `env_overrides` patches the saved env params before the env is built. The
+    agent is unaffected, so the trained policy is evaluated unchanged on a
+    modified environment. Used to set `lock_regime` for the action-distribution
+    diagnostic, which needs the regime held fixed rather than switching.
     """
     from training.config import ExperimentConfig, EnvConfig, AgentConfig
     from training.train import _build_env, _build_agent, _maybe_wrap_env_for_agent
@@ -342,10 +427,14 @@ def load_experiment(exp_dir: Path | str, seed: int) -> ProbeBundle:
     with open(exp_dir / "config.json") as f:
         cfg_raw = json.load(f)
 
+    env_params = dict(cfg_raw["env"]["params"])
+    if env_overrides:
+        env_params.update(env_overrides)
+
     # Reconstruct ExperimentConfig from the saved dict.
     cfg = ExperimentConfig(
         experiment_name=cfg_raw["experiment_name"],
-        env=EnvConfig(name=cfg_raw["env"]["name"], params=dict(cfg_raw["env"]["params"])),
+        env=EnvConfig(name=cfg_raw["env"]["name"], params=env_params),
         agent=AgentConfig(name=cfg_raw["agent"]["name"], params=dict(cfg_raw["agent"]["params"])),
         iterations=int(cfg_raw["iterations"]),
         parallel_envs=int(cfg_raw["parallel_envs"]),
@@ -398,13 +487,19 @@ def probe_one_seed(
     test_idx = perm[:n_test]
     train_idx = perm[n_test:]
 
+    # The analytical belief (HMM posterior) is the reference the method's
+    # recovered belief is scored against via KL. It is passed as omega to the
+    # method probe; for the analytical probe it doubles as a self-consistency
+    # check (KL of omega from a probe re-fit on omega, expected near zero).
     method_probe = train_probe(
         data["belief"], data["regime"], train_idx, test_idx,
         classifier=classifier, seed=rng_key,
+        omega_TND=data["analytical_belief"],
     )
     analytical_probe = train_probe(
         data["analytical_belief"], data["regime"], train_idx, test_idx,
         classifier=classifier, seed=rng_key,
+        omega_TND=data["analytical_belief"],
     )
 
     return {

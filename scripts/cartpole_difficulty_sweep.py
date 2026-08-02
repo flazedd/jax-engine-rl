@@ -30,6 +30,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from scripts.cartpole_names import cartpole_experiment_name
 from training.config import apply_run_mode, load_config
 from training.train import train_or_sweep
 from utils.script_output import ScriptRun
@@ -38,17 +39,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 CONFIG_ROOT = REPO_ROOT / "experiments" / "configs"
 
-# Same 7-method ladder as the medium-cell Phase-4 run: 3 references at
-# n=5, 4 meta-RL at n=8. Configs reused verbatim — only the env params
-# get overridden per level.
+# The 7-method ladder from the matched-fairness configs: every method reads
+# the same per-step tuple, runs the same optimiser settings and budget, and
+# sits at the same parameter budget, with the encoder shared across each
+# conditioning pair. `scripts.config_fairness_audit` enforces that. Only the
+# env params get overridden per level.
 METHODS: list[tuple[str, str]] = [
-    ("regime_agnostic", "m_cartpole_regime_agnostic.yaml"),
-    ("belief",          "m_cartpole_belief.yaml"),
-    ("oracle",          "m_cartpole_oracle.yaml"),
-    ("rl2_concat",      "m_cartpole_rl2_concat.yaml"),
-    ("rl2_hypernet",    "m_cartpole_rl2_hypernet.yaml"),
-    ("varibad_concat",  "m_cartpole_varibad_concat.yaml"),
-    ("varibad_hypernet","m_cartpole_varibad_hypernet.yaml"),
+    ("regime_agnostic", "m_cartpole_matched/regime_agnostic.yaml"),
+    ("belief",          "m_cartpole_matched/belief_ppo.yaml"),
+    ("oracle",          "m_cartpole_matched/oracle_ppo.yaml"),
+    ("rl2_concat",      "m_cartpole_matched/rl2_concat.yaml"),
+    ("rl2_hypernet",    "m_cartpole_matched/rl2_hypernet.yaml"),
+    ("varibad_concat",  "m_cartpole_matched/varibad_concat.yaml"),
+    ("varibad_hypernet","m_cartpole_matched/varibad_hypernet.yaml"),
 ]
 REFERENCE_METHODS = {"regime_agnostic", "belief", "oracle"}
 LEVELS = ("easy", "medium", "hard")
@@ -77,26 +80,15 @@ def _load_env_params(axis: str, level: str) -> dict[str, Any]:
 
 
 def _experiment_name(method: str, axis: str, level: str) -> str:
-    """Medium cells reuse the historical `m_cartpole_<method>` paths
-    (shared across axes — the env at medium is identical for both).
-
-    Asymmetry easy/hard reuse the legacy `m_cartpole_<method>_<level>`
-    naming from the original asymmetry sweep so we do not retrain.
-
-    Persistence easy/hard get axis-prefixed names so they coexist with
-    the asymmetry runs in `results/`.
-    """
-    if level == "medium":
-        return f"m_cartpole_{method}"
-    if axis == "asymmetry":
-        return f"m_cartpole_{method}_{level}"
-    return f"m_cartpole_{method}_{axis}_{level}"
+    return cartpole_experiment_name(method, axis, level)
 
 
 def _build_cell_cfg(method: str, base_yaml: str, axis: str, level: str, mode: str):
     cfg = load_config(CONFIG_ROOT / base_yaml)
     apply_run_mode(cfg, mode)
-    cfg.env.params = copy.deepcopy(_load_env_params(axis, level))
+    # Merge rather than replace, so wrapper settings carried by the method
+    # config survive the per-level env override.
+    cfg.env.params = {**cfg.env.params, **copy.deepcopy(_load_env_params(axis, level))}
     cfg.experiment_name = _experiment_name(method, axis, level)
     return cfg
 

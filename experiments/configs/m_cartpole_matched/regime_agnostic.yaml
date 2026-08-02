@@ -1,0 +1,20 @@
+# Regime-agnostic PPO on the matched per-step tuple u_t.
+# Receives the same inputs as every other method in the cartpole ladder; what
+# distinguishes it is that it is memoryless and retains nothing, not that it is
+# denied the evidence. Widths from scripts.matched_budget_search.
+extends:
+- base/base_ppo.yaml
+- envs/e_cartpole_v1.yaml
+experiment_name: m_cartpole_matched_regime_agnostic
+iterations: 300
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: cartpole_regime_v1_augmented
+agent:
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 64

@@ -122,6 +122,7 @@ def run_ppo_epochs(
     clip_eps: float,
     ent_coef: float,
     vf_coef: float,
+    shuffle_block: int = 0,
 ) -> tuple[dict, dict, dict[str, chex.Array]]:
     """Run `epochs` passes of PPO updates, each with fresh minibatch shuffling.
 
@@ -135,7 +136,17 @@ def run_ppo_epochs(
 
     def epoch_body(carry, epoch_key):
         params, opt_state = carry
-        perm = jax.random.permutation(epoch_key, n_samples)
+        if shuffle_block > 0:
+            # Permute whole blocks so rows that belong together, one
+            # environment's trajectory, stay together across epochs.
+            n_blocks = n_samples // shuffle_block
+            block_perm = jax.random.permutation(epoch_key, n_blocks)
+            perm = (
+                block_perm[:, None] * shuffle_block
+                + jnp.arange(shuffle_block)[None, :]
+            ).reshape(-1)
+        else:
+            perm = jax.random.permutation(epoch_key, n_samples)
         # Reshape so each row is a minibatch.
         shuffled = jax.tree_util.tree_map(lambda x: x[perm].reshape((n_minibatches, minibatch_size) + x.shape[1:]), batch)
 

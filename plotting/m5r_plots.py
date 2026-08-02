@@ -439,9 +439,11 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
          RESULTS_ROOT / f"m5r_final_{cell}_e_final" / "metrics.json")
         for cell, (color, ls, label) in cell_style.items()
     ]
+    # Matched-family stacked-obs run, so its curve sits on the same per-step
+    # tuple, optimiser settings, budget and capacity as the variant curves.
     cell_specs.append((
         "stacked_obs", "Stacked-obs PPO", PALETTE["stacked"], ":",
-        RESULTS_ROOT / "m5r_stacked_obs_e_final" / "metrics.json",
+        RESULTS_ROOT / "m5r_matched_stacked_obs" / "metrics.json",
     ))
     last_iter = 0
     for cell_key, label, color, ls, m_path in cell_specs:

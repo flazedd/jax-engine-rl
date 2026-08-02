@@ -1,0 +1,18 @@
+# Belief-PPO: matched tuple plus the analytical HMM posterior.
+extends:
+- base/base_ppo.yaml
+- envs/e_cartpole_v1.yaml
+experiment_name: m_cartpole_matched_belief
+iterations: 300
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: cartpole_regime_v1_belief_augmented
+agent:
+  name: ppo_belief
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 63

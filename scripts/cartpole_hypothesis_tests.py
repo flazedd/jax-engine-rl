@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 from scipy import stats
 
+from scripts.cartpole_names import cartpole_experiment_name
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -24,16 +25,7 @@ RESULTS_ROOT = REPO_ROOT / "results"
 
 
 def _load_seeds(method: str, level: str = "medium", axis: str = "asymmetry") -> np.ndarray:
-    """Medium reuses the historical m_cartpole_<method> dirs (shared
-    across axes). Asymmetry easy / hard use the legacy
-    m_cartpole_<method>_<level> names; persistence easy / hard use
-    m_cartpole_<method>_persistence_<level>."""
-    if level == "medium":
-        name = f"m_cartpole_{method}"
-    elif axis == "asymmetry":
-        name = f"m_cartpole_{method}_{level}"
-    else:
-        name = f"m_cartpole_{method}_{axis}_{level}"
+    name = cartpole_experiment_name(method, axis, level)
     p = RESULTS_ROOT / name / "metrics.json"
     with open(p) as f:
         m = json.load(f)

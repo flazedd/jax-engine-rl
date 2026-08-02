@@ -1,8 +1,17 @@
 """M5R — per-(method, regime) action-distribution analysis on E_final.
 
-Re-runs the M5 action-distribution probe on the four matched-tuning meta-RL
-cells, plus the three references reused from M3. Writes per-method
-P(action | true_regime) tables that supersede the M5 numbers in the thesis.
+Runs the action-distribution probe on the four matched meta-RL variants and
+on the references, and writes per-method P(action | true_regime) tables.
+
+Every method read here comes from the matched-fairness family, so the
+reference rows and the variant rows sit on the same per-step tuple, optimiser
+settings, budget and capacity. The pre-matched `m3_*` runs must not be
+substituted: they train on the unaugmented observation and would put a
+different input on the reference rows of the same table.
+
+Rollouts are collected with the env's regime locked, one batch per regime,
+so the tables measure what a policy does while a regime holds rather than
+mixing in the post-switch steps where the belief still trails the regime.
 
 Outputs:
   - results/M5R/final/m5r_action_distributions.json
@@ -31,10 +40,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 
 METHODS: list[tuple[str, str]] = [
-    ("regime_agnostic_ppo", "m3_regime_agnostic"),
-    ("belief_ppo",          "m3_belief"),
-    ("oracle_ppo",          "m3_oracle"),
-    ("stacked_obs_ppo",     "m5r_stacked_obs_e_final"),
+    ("regime_agnostic_ppo", "m5r_matched_regime_agnostic"),
+    ("belief_ppo",          "m5r_matched_belief"),
+    ("oracle_ppo",          "m5r_matched_oracle"),
+    ("stacked_obs_ppo",     "m5r_matched_stacked_obs"),
     ("rl2_concat",          "m5r_final_rl2_concat_e_final"),
     ("rl2_hypernet",        "m5r_final_rl2_hypernet_e_final"),
     ("varibad_concat",      "m5r_final_varibad_concat_e_final"),
@@ -56,25 +65,50 @@ def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> di
         raise FileNotFoundError(f"no checkpoints in {exp_dir}")
     per_seed_dist = []
     per_seed_dist_inv = []
+    per_seed_counts_inv = []
     per_seed_returns = []
     for seed in seeds:
-        bundle = load_experiment(exp_dir, seed)
-        key = jax.random.PRNGKey(seed)
-        data = collect_action_regime_rollouts(
-            bundle.env, bundle.agent, bundle.agent_state,
-            n_rollouts=n_rollouts, rollout_length=rollout_length, key=key,
-        )
-        dist = compute_action_given_regime(
-            data["action"], data["regime"], N_ACTIONS, N_REGIMES,
-        )
-        per_seed_dist.append(dist)
-        if "inventory" in data:
-            dist_inv = compute_action_given_regime_inventory(
-                data["action"], data["regime"], data["inventory"],
-                N_ACTIONS, N_REGIMES, INV_MAX,
+        # One rollout batch per regime, with the env's regime locked for the
+        # whole episode. The diagnostic asks what a policy does *in* a regime;
+        # under free switching the steps just after a switch are attributed to
+        # the new regime while the belief still reflects the old one, which
+        # attenuates the measurement for any method that infers slowly.
+        dist = np.zeros((N_REGIMES, N_ACTIONS), dtype=np.float64)
+        dist_inv = np.zeros((N_REGIMES, 2 * INV_MAX + 1, N_ACTIONS), dtype=np.float64)
+        counts_inv = np.zeros((N_REGIMES, 2 * INV_MAX + 1), dtype=np.int64)
+        returns = []
+        for regime in range(N_REGIMES):
+            bundle = load_experiment(
+                exp_dir, seed, env_overrides={"lock_regime": regime},
             )
-            per_seed_dist_inv.append(dist_inv)
-        per_seed_returns.append(float(data["reward"].sum(axis=0).mean()))
+            key = jax.random.PRNGKey(seed * N_REGIMES + regime)
+            data = collect_action_regime_rollouts(
+                bundle.env, bundle.agent, bundle.agent_state,
+                n_rollouts=n_rollouts, rollout_length=rollout_length, key=key,
+            )
+            observed = np.asarray(data["regime"])
+            if not (observed == regime).all():
+                raise RuntimeError(
+                    f"lock_regime={regime} did not hold for {experiment_name} "
+                    f"seed {seed}: saw regimes {sorted(set(observed.reshape(-1).tolist()))}"
+                )
+            dist[regime] = compute_action_given_regime(
+                data["action"], observed, N_ACTIONS, N_REGIMES,
+            )[regime]
+            if "inventory" in data:
+                inv = np.asarray(data["inventory"])
+                dist_inv[regime] = compute_action_given_regime_inventory(
+                    data["action"], observed, inv,
+                    N_ACTIONS, N_REGIMES, INV_MAX,
+                )[regime]
+                counts_inv[regime] = np.bincount(
+                    (inv.reshape(-1) + INV_MAX), minlength=2 * INV_MAX + 1,
+                )
+            returns.append(float(data["reward"].sum(axis=0).mean()))
+        per_seed_dist.append(dist)
+        per_seed_dist_inv.append(dist_inv)
+        per_seed_counts_inv.append(counts_inv)
+        per_seed_returns.append(float(np.mean(returns)))
     arr = np.stack(per_seed_dist)
     out = {
         "experiment_name": experiment_name,
@@ -87,11 +121,18 @@ def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> di
     }
     if per_seed_dist_inv:
         arr_inv = np.stack(per_seed_dist_inv)
+        out["per_seed_action_given_regime_inventory"] = arr_inv.tolist()
         out["mean_action_given_regime_inventory"] = arr_inv.mean(axis=0).tolist()
         out["std_action_given_regime_inventory"] = (
             arr_inv.std(axis=0, ddof=1).tolist() if len(seeds) > 1
             else np.zeros_like(arr_inv[0]).tolist()
         )
+        # Per-(regime, inventory) visitation, so downstream summaries can weight
+        # inventory levels by how often the policy actually occupies them
+        # instead of treating every level alike.
+        counts = np.stack(per_seed_counts_inv)
+        out["per_seed_inventory_counts"] = counts.tolist()
+        out["inventory_counts"] = counts.sum(axis=0).tolist()
     return out
 
 
@@ -134,6 +175,7 @@ def main() -> int:
         return 1
     payload = {
         "env": "market_making_v1 (E_final), matched-tuning",
+        "regime_locked": True,
         "n_rollouts": args.n_rollouts,
         "rollout_length": args.rollout_length,
         "action_names": ["sym", "favor_ask", "favor_bid"],

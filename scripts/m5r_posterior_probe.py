@@ -67,6 +67,10 @@ def _probe_cell(
 
     method_accs: list[float] = []
     analytical_accs: list[float] = []
+    method_kls: list[float] = []
+    analytical_kls: list[float] = []
+    method_lls: list[float] = []
+    method_briers: list[float] = []
     method_per_t: list[list[float]] = []
     analytical_per_t: list[list[float]] = []
     for seed in seeds:
@@ -77,6 +81,10 @@ def _probe_cell(
         )
         method_accs.append(float(result["method"]["test_acc"]))
         analytical_accs.append(float(result["analytical"]["test_acc"]))
+        method_kls.append(float(result["method"]["test_kl_to_omega"]))
+        analytical_kls.append(float(result["analytical"]["test_kl_to_omega"]))
+        method_lls.append(float(result["method"]["test_log_loss"]))
+        method_briers.append(float(result["method"]["test_brier"]))
         method_per_t.append(list(map(float, result["method"]["per_t_test_acc"])))
         analytical_per_t.append(
             list(map(float, result["analytical"]["per_t_test_acc"]))
@@ -85,12 +93,24 @@ def _probe_cell(
         "seeds": seeds,
         "method_test_acc_per_seed": method_accs,
         "analytical_test_acc_per_seed": analytical_accs,
+        "method_kl_per_seed": method_kls,
+        "analytical_kl_per_seed": analytical_kls,
+        "method_log_loss_per_seed": method_lls,
+        "method_brier_per_seed": method_briers,
         "method_per_t_test_acc_per_seed": method_per_t,
         "analytical_per_t_test_acc_per_seed": analytical_per_t,
     }
 
 
-def _decoupling_diagnostic(scatter_points: list[dict[str, Any]]) -> dict[str, Any]:
+def _decoupling_diagnostic(
+    scatter_points: list[dict[str, Any]], error_key: str = "posterior_error",
+) -> dict[str, Any]:
+    """Flag cells where belief-quality rank and performance rank disagree.
+
+    ``error_key`` selects the belief-error measure (higher = worse belief);
+    quality is its negation. Default ``posterior_error`` is accuracy-based;
+    pass ``belief_error_kl`` for the KL-based (primary) diagnostic.
+    """
     by_cell: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for p in scatter_points:
         by_cell.setdefault(p["env_label"], {}).setdefault(p["method"], []).append(p)
@@ -99,7 +119,7 @@ def _decoupling_diagnostic(scatter_points: list[dict[str, Any]]) -> dict[str, An
         if len(methods) < 2:
             continue
         post_means = {
-            m: float(np.mean([1.0 - p["posterior_error"] for p in pts]))
+            m: float(np.mean([-p[error_key] for p in pts]))
             for m, pts in methods.items()
         }
         gc_means = {
@@ -188,18 +208,31 @@ def main() -> int:
             gc_per_seed = _gap_closed_per_seed(
                 cell["per_seed_final_return"], floor, oracle,
             )
-            for seed, m_acc, a_acc, gc in zip(
+            for seed, m_acc, a_acc, m_kl, a_kl, m_ll, m_br, gc in zip(
                 probe["seeds"], probe["method_test_acc_per_seed"],
-                probe["analytical_test_acc_per_seed"], gc_per_seed,
+                probe["analytical_test_acc_per_seed"],
+                probe["method_kl_per_seed"], probe["analytical_kl_per_seed"],
+                probe["method_log_loss_per_seed"], probe["method_brier_per_seed"],
+                gc_per_seed,
             ):
                 scatter_points.append({
                     "method": method,
                     "env_label": env_label,
                     "experiment_name": experiment_name,
                     "seed": seed,
+                    # Decodability (kept as a secondary metric).
                     "method_test_acc": m_acc,
                     "analytical_test_acc": a_acc,
                     "posterior_error": a_acc - m_acc,
+                    # Belief quality (primary): KL of the analytical ceiling
+                    # belief from the probe-recovered belief, plus proper-score
+                    # cross-checks. belief_error_kl subtracts the analytical
+                    # probe's small reconstruction residual.
+                    "method_kl_to_omega": m_kl,
+                    "analytical_kl_to_omega": a_kl,
+                    "method_log_loss": m_ll,
+                    "method_brier": m_br,
+                    "belief_error_kl": m_kl - a_kl,
                     "gap_closed": gc,
                 })
             method_per_t = np.asarray(probe["method_per_t_test_acc_per_seed"])
@@ -216,12 +249,25 @@ def main() -> int:
                     float(np.percentile(np.asarray(probe["method_test_acc_per_seed"]), 97.5)),
                 ],
                 "analytical_test_acc_per_seed": probe["analytical_test_acc_per_seed"],
+                # Belief-quality metrics (primary).
+                "method_kl_to_omega_mean": float(np.mean(probe["method_kl_per_seed"])),
+                "method_kl_to_omega_per_seed": probe["method_kl_per_seed"],
+                "method_kl_to_omega_ci95": [
+                    float(np.percentile(np.asarray(probe["method_kl_per_seed"]), 2.5)),
+                    float(np.percentile(np.asarray(probe["method_kl_per_seed"]), 97.5)),
+                ],
+                "analytical_kl_to_omega_mean": float(np.mean(probe["analytical_kl_per_seed"])),
+                "method_log_loss_mean": float(np.mean(probe["method_log_loss_per_seed"])),
+                "method_log_loss_per_seed": probe["method_log_loss_per_seed"],
+                "method_brier_mean": float(np.mean(probe["method_brier_per_seed"])),
             }
             m_mean = float(np.mean(probe["method_test_acc_per_seed"]))
             a_mean = float(np.mean(probe["analytical_test_acc_per_seed"]))
+            m_kl_mean = float(np.mean(probe["method_kl_per_seed"]))
+            m_ll_mean = float(np.mean(probe["method_log_loss_per_seed"]))
             print(
-                f"[probe] {experiment_name:>50s} | method={m_mean:.3f} "
-                f"analytical={a_mean:.3f} pe={a_mean - m_mean:+.3f}",
+                f"[probe] {experiment_name:>50s} | acc={m_mean:.3f} "
+                f"(anal={a_mean:.3f}) KL={m_kl_mean:.3f} logloss={m_ll_mean:.3f}",
                 flush=True,
             )
 
@@ -232,28 +278,30 @@ def main() -> int:
         )
         return 1
 
-    arr_pe = np.asarray([p["posterior_error"] for p in scatter_points])
-    arr_gc = np.asarray([p["gap_closed"] for p in scatter_points])
-    valid = ~np.isnan(arr_pe) & ~np.isnan(arr_gc)
-    if valid.sum() >= 2 and np.std(arr_pe[valid]) > 0 and np.std(arr_gc[valid]) > 0:
-        correlation_overall = float(np.corrcoef(arr_pe[valid], arr_gc[valid])[0, 1])
-    else:
-        correlation_overall = float("nan")
+    def _corr(points: list[dict[str, Any]], xkey: str, ykey: str = "gap_closed") -> float:
+        x = np.asarray([p[xkey] for p in points], dtype=float)
+        y = np.asarray([p[ykey] for p in points], dtype=float)
+        v = ~np.isnan(x) & ~np.isnan(y)
+        if v.sum() >= 2 and np.std(x[v]) > 0 and np.std(y[v]) > 0:
+            return float(np.corrcoef(x[v], y[v])[0, 1])
+        return float("nan")
 
     by_method: dict[str, list[dict[str, Any]]] = {}
     for p in scatter_points:
         by_method.setdefault(p["method"], []).append(p)
-    correlation_per_method: dict[str, float] = {}
-    for method, pts in by_method.items():
-        pe = np.asarray([p["posterior_error"] for p in pts])
-        gc = np.asarray([p["gap_closed"] for p in pts])
-        v = ~np.isnan(pe) & ~np.isnan(gc)
-        if v.sum() >= 2 and np.std(pe[v]) > 0 and np.std(gc[v]) > 0:
-            correlation_per_method[method] = float(np.corrcoef(pe[v], gc[v])[0, 1])
-        else:
-            correlation_per_method[method] = float("nan")
 
-    decoupling = _decoupling_diagnostic(scatter_points)
+    # Accuracy-based correlation kept for continuity; KL-based is primary.
+    correlation_overall = _corr(scatter_points, "posterior_error")
+    correlation_overall_kl = _corr(scatter_points, "belief_error_kl")
+    correlation_per_method = {
+        m: _corr(pts, "posterior_error") for m, pts in by_method.items()
+    }
+    correlation_per_method_kl = {
+        m: _corr(pts, "belief_error_kl") for m, pts in by_method.items()
+    }
+
+    decoupling = _decoupling_diagnostic(scatter_points, error_key="posterior_error")
+    decoupling_kl = _decoupling_diagnostic(scatter_points, error_key="belief_error_kl")
 
     stats = {
         "n_rollouts": args.n_rollouts,
@@ -266,7 +314,10 @@ def main() -> int:
         "per_method_per_env": per_method_per_env,
         "correlation_overall": correlation_overall,
         "correlation_per_method": correlation_per_method,
+        "correlation_overall_kl": correlation_overall_kl,
+        "correlation_per_method_kl": correlation_per_method_kl,
         "decoupling_detected": decoupling,
+        "decoupling_detected_kl": decoupling_kl,
     }
     with open(stats_path, "w") as f:
         json.dump(stats, f, indent=2)
@@ -291,9 +342,17 @@ def main() -> int:
     )
 
     print("[probe] === summary ===", flush=True)
-    print(f"[probe] r_overall={correlation_overall:+.3f}", flush=True)
-    for method, r in correlation_per_method.items():
-        print(f"[probe]   {method:>22s} | r={r:+.3f}", flush=True)
+    print(
+        f"[probe] r_overall(acc)={correlation_overall:+.3f} "
+        f"r_overall(KL)={correlation_overall_kl:+.3f}",
+        flush=True,
+    )
+    for method in correlation_per_method:
+        print(
+            f"[probe]   {method:>22s} | r_acc={correlation_per_method[method]:+.3f} "
+            f"r_kl={correlation_per_method_kl[method]:+.3f}",
+            flush=True,
+        )
     if decoupling["methods_with_decoupling"]:
         print(
             f"[probe] decoupling: {decoupling['methods_with_decoupling']}",

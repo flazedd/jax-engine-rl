@@ -1,0 +1,15 @@
+# 3-simplex-belief ablation (supervised): RL2 concat, medium env.
+# The policy conditions on a learned 3-dim softmax over regimes, supervised
+# toward the true regime (aux_decode_coef > 0) so the belief is calibrated.
+# Tests whether PPO+concat reaches the Belief-PPO ceiling on a clean, low-dim
+# LEARNED belief. Probe reads the simplex via belief_key.
+extends:
+- m5r_locked/rl2_concat.yaml
+- envs/e_final.yaml
+experiment_name: m5r_simplex_rl2_concat_simplex_sup
+agent:
+  params:
+    belief_simplex_head: true
+    aux_decode_coef: 1.0
+    n_regimes: 3
+    belief_key: belief_simplex

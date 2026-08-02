@@ -183,10 +183,12 @@ def probe_one_seed_cartpole(
     method_probe = train_probe(
         data["belief"], data["regime"], train_idx, test_idx,
         classifier=classifier, seed=rng_key,
+        omega_TND=data["analytical_belief"],
     )
     analytical_probe = train_probe(
         data["analytical_belief"], data["regime"], train_idx, test_idx,
         classifier=classifier, seed=rng_key,
+        omega_TND=data["analytical_belief"],
     )
 
     return {

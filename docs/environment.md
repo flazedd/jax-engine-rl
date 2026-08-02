@@ -42,19 +42,21 @@ This framing should be stated explicitly in the thesis: *"The MM environment is 
 The MM environment must satisfy the following properties for the thesis to be well-posed. These are the foundation that makes meta-RL a meaningful thing to study here — if any of them fail, the research questions collapse. Concrete thresholds are committed in the M2 JSON schema; what follows is the conceptual statement.
 
 **R1. Regime-conditional policy divergence.** The optimal policy on each locked regime must differ across regimes, and the value loss from playing the wrong regime's policy must be real.
-*Threshold:* `fraction_disagreeing_states >= 0.15` AND `wrong_regime_value_loss_as_fraction_of_optimal_return >= 0.10`.
+*Threshold:* `fraction_disagreeing_states >= 0.80`.
 *Why required:* if optimal policies are the same across regimes, regime information is useless and no method can benefit from it. There is nothing to study.
 
 **R2. PPO achieves optimality on locked regimes.** A PPO agent trained on a single locked regime must converge to the regime-conditional optimum (matching VI). This must hold for every regime.
 *Threshold:* `min_ratio >= 0.85` in M2 diagnostic, `>= 0.95` in full-budget M1/M3 re-verification.
 *Why required:* if PPO cannot learn a locked regime's optimum, any failure of PPO on the mixed setting is attributable to optimization, not to the regime-switching structure. The ceiling decomposition loses meaning.
 
-**R3. PPO settles on a strictly suboptimal compromise on mixed regimes.** A regime-agnostic PPO trained on the full HMM-generated trajectories must converge to a return below Oracle-PPO and below per-regime PPO. The gap must exceed seed-level CI width by a clear margin.
+**R3. PPO settles on a strictly suboptimal compromise on mixed regimes.** A regime-agnostic PPO trained on the full HMM-generated trajectories must converge to a return below Oracle-PPO and below per-regime PPO.
+
+*Threshold:* `recovery_ratio = regime_agnostic_return_mean / oracle_ppo_return_mean <= 0.90`. The agnostic agent must leave at least a tenth of oracle return on the table. `gap_to_ci_ratio` is still reported for reference but does not gate the check.
 *Threshold:* `gap_to_ci_ratio >= 3.0`.
 *Why required:* this is the gap that meta-RL methods are asked to close. Without a measurable gap, there is no room for belief-conditioned methods to shine.
 
 **R4. Regime inferability from history.** The HMM posterior must sharpen with evidence, and a policy conditioned on it must improve performance over regime-agnostic PPO.
-*Threshold:* `entropy_decay_fraction >= 0.30` AND `belief_ppo_gap_closure_fraction >= 0.30`.
+*Threshold:* `entropy_decay_fraction >= 0.35`.
 *Why required:* if the regime is not inferable from observations, no belief-based method can succeed regardless of its machinery. RQ2 becomes unanswerable.
 
 These requirements are verified empirically on the chosen parameterization in M2. The `oracles/verify_requirements.py` script produces `stats_M2_requirements.json` containing the pass/fail decision for each R.

@@ -58,11 +58,34 @@ class GRUActorCritic(nn.Module):
     # policy path.
     policy_trunk_layers: int = 0
     policy_trunk_hidden: int = 0
+    # 3-simplex belief bottleneck: the policy conditions on a learned softmax
+    # over regimes instead of the raw hidden state, giving concat a calibrated
+    # low-dimensional belief like the analytical posterior. The value head keeps
+    # reading the full hidden state.
+    belief_simplex_head: bool = False
+    n_regimes: int = 3
+    # Matched policy inputs. The encoder always consumes the augmented
+    # observation [o_t, a_{t-1}, r_{t-1}]; these two knobs control what the
+    # *policy* sees, so that concat and hypernet differ only in how the belief
+    # enters and not in what information reaches the action.
+    #   policy_obs_dim > 0 restricts the policy-side observation to its first
+    #     `policy_obs_dim` entries, i.e. the base observation o_t without the
+    #     previous action and reward, as specified in the methodology.
+    #   concat_policy_reads_obs gives the concat path o_t alongside the belief,
+    #     matching what the hypernet target network already receives.
+    # Both default to the legacy behaviour so existing checkpoints load.
+    policy_obs_dim: int = 0
+    concat_policy_reads_obs: bool = False
+
+    def _policy_obs(self, obs: chex.Array) -> chex.Array:
+        if self.policy_obs_dim <= 0:
+            return obs
+        return obs[..., : self.policy_obs_dim]
 
     @nn.compact
     def __call__(
         self, carry: chex.Array, obs: chex.Array
-    ) -> tuple[chex.Array, chex.Array, chex.Array]:
+    ) -> tuple[chex.Array, chex.Array, chex.Array, chex.Array]:
         x = nn.Dense(
             self.hidden_dim,
             kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
@@ -76,7 +99,24 @@ class GRUActorCritic(nn.Module):
         belief = (jax.lax.stop_gradient(new_carry)
                   if self.detach_belief_for_policy else new_carry)
 
-        trunk_out = belief
+        if self.belief_simplex_head:
+            simplex_logits = nn.Dense(
+                self.n_regimes,
+                kernel_init=nn.initializers.orthogonal(0.01),
+                name="simplex_head",
+            )(belief)
+            policy_belief = jax.nn.softmax(simplex_logits)
+        else:
+            simplex_logits = jnp.zeros((self.n_regimes,), dtype=new_carry.dtype)
+            policy_belief = belief
+
+        policy_obs = self._policy_obs(obs)
+
+        trunk_out = (
+            jnp.concatenate([policy_obs, policy_belief], axis=-1)
+            if (self.integration == "concat" and self.concat_policy_reads_obs)
+            else policy_belief
+        )
         for _ in range(self.policy_trunk_layers):
             trunk_out = nn.Dense(
                 self.policy_trunk_hidden,
@@ -92,21 +132,30 @@ class GRUActorCritic(nn.Module):
             )(policy_in)
         elif self.integration == "hypernet":
             hn = Hypernet(
-                target_obs_dim=self.obs_size,
+                target_obs_dim=(self.policy_obs_dim or self.obs_size),
                 target_hidden=self.hypernet_target_hidden,
                 target_output_dim=self.n_actions,
                 hypernet_hidden=self.hypernet_hidden,
                 init_scale=self.hypernet_init_scale,
             )
             flat_weights = hn(trunk_out)
-            logits = hn.apply_target(flat_weights, obs)
+            logits = hn.apply_target(flat_weights, policy_obs)
         else:
             raise ValueError(f"unknown integration: {self.integration!r}")
 
+        # Under matched policy inputs the actor reads [o_t, h_t]; the critic
+        # reads the same, otherwise it must recover the inventory from the
+        # recurrent state that the actor is handed directly, and its noisier
+        # advantages would differ between variants for reasons unrelated to the
+        # conditioning architecture.
+        value_in = (
+            jnp.concatenate([policy_obs, belief], axis=-1)
+            if self.concat_policy_reads_obs else belief
+        )
         value = nn.Dense(
             1, kernel_init=nn.initializers.orthogonal(1.0)
-        )(belief).squeeze(-1)
-        return new_carry, logits, value
+        )(value_in).squeeze(-1)
+        return new_carry, logits, value, simplex_logits
 
 
 @dataclass(frozen=True)
@@ -161,6 +210,13 @@ class RL2Agent:
     # Detach the belief into the policy/value heads (single-stage decoupling);
     # only meaningful together with `aux_decode_coef > 0`.
     detach_belief_for_policy: bool = False
+    # 3-simplex belief bottleneck (see GRUActorCritic). When on, the policy
+    # conditions on a learned softmax over regimes; with aux_decode_coef > 0 that
+    # softmax is supervised toward the true regime. Off by default.
+    belief_simplex_head: bool = False
+    # Matched policy inputs; see GRUActorCritic for the semantics.
+    policy_obs_dim: int = 0
+    concat_policy_reads_obs: bool = False
 
     # ---- model factory --------------------------------------------------
 
@@ -177,6 +233,10 @@ class RL2Agent:
             policy_trunk_layers=self.policy_trunk_layers,
             policy_trunk_hidden=self.policy_trunk_hidden,
             detach_belief_for_policy=self.detach_belief_for_policy,
+            belief_simplex_head=self.belief_simplex_head,
+            n_regimes=self.n_regimes,
+            policy_obs_dim=self.policy_obs_dim,
+            concat_policy_reads_obs=self.concat_policy_reads_obs,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:
@@ -193,7 +253,7 @@ class RL2Agent:
         dummy_carry = jnp.zeros((self.hidden_dim,), dtype=jnp.float32)
         dummy_obs = jnp.zeros((self.obs_size,), dtype=jnp.float32)
         params = model.init(k_model, dummy_carry, dummy_obs)
-        if self.aux_decode_coef > 0.0:
+        if self.aux_decode_coef > 0.0 and not self.belief_simplex_head:
             # Linear regime decoder over the GRU belief; trained jointly, lives
             # as a sibling collection so the model (which only reads "params")
             # is untouched while the optimizer still updates it.
@@ -220,11 +280,13 @@ class RL2Agent:
         obs: chex.Array,
         key: chex.PRNGKey,
     ) -> tuple[chex.Array, dict[str, chex.Array], chex.Array]:
-        new_carry, logits, value = self._model().apply(
+        new_carry, logits, value, simplex_logits = self._model().apply(
             {"params": state["params"]["params"]}, carry, obs)
         action = jax.random.categorical(key, logits)
         log_prob = jax.nn.log_softmax(logits)[action]
         extras = {"log_prob": log_prob, "value": value}
+        if self.belief_simplex_head:
+            extras["belief_simplex"] = jax.nn.softmax(simplex_logits)
         return action, extras, new_carry
 
     # ---- update ---------------------------------------------------------
@@ -241,23 +303,23 @@ class RL2Agent:
 
         def step(carry, inputs):
             obs_t, done_t = inputs
-            new_carry, logits_t, value_t = model.apply(mvars, carry, obs_t)
+            new_carry, logits_t, value_t, simplex_t = model.apply(mvars, carry, obs_t)
             # If this step ended an episode, reset carry for next step.
             zeros = jnp.zeros_like(new_carry)
             mask = done_t.astype(new_carry.dtype)
             next_carry = mask * zeros + (1.0 - mask) * new_carry
-            return next_carry, (logits_t, value_t, new_carry)
+            return next_carry, (logits_t, value_t, new_carry, simplex_t)
 
-        _, (logits, values, carries) = jax.lax.scan(
+        _, (logits, values, carries, simplex_logits) = jax.lax.scan(
             step, init_carry, (obs_seq, done_seq))
-        return logits, values, carries
+        return logits, values, carries, simplex_logits
 
     def _bootstrap_value(self, params, final_obs, final_carry):
         """Compute V(final_obs | final_carry) per env for GAE bootstrap."""
         mvars = {"params": params["params"]}
 
         def f(carry_i, obs_i):
-            _, _, v = self._model().apply(mvars, carry_i, obs_i)
+            _, _, v, _ = self._model().apply(mvars, carry_i, obs_i)
             return v
         return jax.vmap(f)(final_carry, final_obs)
 
@@ -295,7 +357,7 @@ class RL2Agent:
                 lambda c, o, d: self._replay_forward(params, c, o, d),
                 in_axes=(0, 1, 1), out_axes=1,
             )
-            logits, values, carries = replay(
+            logits, values, carries, simplex_logits = replay(
                 batch["init_carry"], batch["obs"], batch["done"])
             log_probs_all = jax.nn.log_softmax(logits)
             lp_new = jnp.take_along_axis(
@@ -323,13 +385,18 @@ class RL2Agent:
             aux_loss = jnp.array(0.0)
             aux_acc = jnp.array(0.0)
             if self.aux_decode_coef > 0.0:
-                # Linear regime decode over the differentiable belief; gradient
-                # flows into the GRU encoder, pressuring it to keep the regime
-                # decodable while the policy uses its own integration.
-                aux_logits = (
-                    jnp.einsum("tnh,hr->tnr", carries, params["aux"]["W"])
-                    + params["aux"]["b"]
-                )
+                # Regime cross-entropy. With a simplex head it supervises the
+                # softmax the policy itself conditions on; otherwise it trains a
+                # separate linear decoder over the GRU belief, pressuring the
+                # encoder to keep the regime decodable while the policy uses its
+                # own integration.
+                if self.belief_simplex_head:
+                    aux_logits = simplex_logits
+                else:
+                    aux_logits = (
+                        jnp.einsum("tnh,hr->tnr", carries, params["aux"]["W"])
+                        + params["aux"]["b"]
+                    )
                 aux_loss = optax.softmax_cross_entropy_with_integer_labels(
                     aux_logits, batch["regime"]
                 ).mean()

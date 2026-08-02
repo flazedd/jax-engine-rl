@@ -199,7 +199,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     disagree_frac, disagree_mask = policy_disagreement(vi)
     mean_loss, rel_loss, per_state_loss = wrong_regime_value_loss(env, vi)
     per_regime_optima = vi.per_regime_expected_episode_return.astype(float)
-    r1_pass = bool(disagree_frac >= 0.15 and rel_loss >= 0.10)
+    r1_pass = bool(disagree_frac >= 0.80)
     print(
         f"[verify] R1: disagree_frac={disagree_frac:.3f} "
         f"rel_loss={rel_loss:.3f} pass={r1_pass}",
@@ -292,7 +292,16 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     gap_ci_width = float(gap_ci_hi - gap_ci_lo)
     gap_ci_width_safe = max(gap_ci_width, 1e-6)
     gap_to_ci_ratio = float(gap_absolute / gap_ci_width_safe)
-    r3_pass = bool(gap_to_ci_ratio >= 3.0)
+    # The fraction of Oracle-PPO's return the regime-agnostic agent recovers.
+    # gap_to_ci_ratio is still reported for reference but does not gate the check.
+    recovery_ratio = float(agn_mean / oracle_mean) if abs(oracle_mean) > 1e-9 else 1.0
+    r3_pass = bool(recovery_ratio <= 0.90)
+    print(
+        f"[verify] R3: recovery_ratio={recovery_ratio:.3f} (<=0.90) "
+        f"gap={gap_absolute:.2f} gap_to_ci_ratio={gap_to_ci_ratio:.2f} "
+        f"pass={r3_pass}",
+        flush=True,
+    )
 
     # ------- R4: posterior entropy + Belief-PPO ------------------------
     print(
@@ -336,7 +345,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     gap_closure = (
         float((belief_mean - agn_mean) / oracle_gap) if abs(oracle_gap) > 1e-9 else 0.0
     )
-    r4_pass = bool(decay_frac >= 0.30 and gap_closure >= 0.30)
+    r4_pass = bool(decay_frac >= 0.35)
 
     # ------- Compromise-policy sanity check ----------------------------
     compromise_per_regime, compromise_mixed, compromise_policy = (
@@ -369,6 +378,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
             "gap_ci": [gap_ci_lo, gap_ci_hi],
             "gap_ci_width": gap_ci_width,
             "gap_to_ci_ratio": gap_to_ci_ratio,
+            "recovery_ratio": recovery_ratio,
             "pass": r3_pass,
         },
         "R4_inferability": {

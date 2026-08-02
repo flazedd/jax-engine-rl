@@ -20,6 +20,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+from evaluation.action_distribution import regime_separation_per_seed
 from plotting.style import apply_style
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -29,9 +30,13 @@ THESIS_FIG_DIR = (
     REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
 )
 
-# Fixed row order. Belief-PPO sits at the top as the regime-aware reference;
-# the four meta-RL cells follow in the same order used elsewhere in the thesis.
+# Fixed row order. The regime-agnostic agent sits at the top as the zero
+# anchor: it cannot observe the regime, so its three regime panels are
+# identical, which calibrates how much separation counts as conditioning.
+# Belief-PPO follows as the regime-aware reference, then the four meta-RL
+# variants in the same order used elsewhere in the thesis.
 METHOD_ORDER = (
+    ("regime_agnostic_ppo", "Regime-agnostic PPO"),
     ("belief_ppo",          "Belief-PPO"),
     ("rl2_concat",          "RL² Concat"),
     ("rl2_hypernet",        "RL² Hypernet"),
@@ -69,7 +74,7 @@ def main() -> int:
     n_cols = n_regimes
     fig, axes = plt.subplots(
         n_rows, n_cols,
-        figsize=(2.6 * n_cols + 1.0, 1.5 * n_rows + 0.6),
+        figsize=(2.9 * n_cols + 1.9, 1.5 * n_rows + 0.6),
         sharex=True, sharey=True, squeeze=False,
     )
 
@@ -84,6 +89,13 @@ def main() -> int:
     for row, (key, method_label) in enumerate(method_order):
         m_data = stats["by_method"][key]
         arr = np.asarray(m_data["mean_action_given_regime_inventory"])
+        # The printed separation is the seed mean of the same per-seed
+        # statistic the hypothesis tests consume, so the figure and the
+        # reported p-values describe one quantity rather than two.
+        separation = float(np.nanmean(regime_separation_per_seed(
+            np.asarray(m_data["per_seed_action_given_regime_inventory"]),
+            np.asarray(m_data["per_seed_inventory_counts"], dtype=float),
+        )))
         # arr has shape [n_regimes, n_inv, n_actions]; transpose per panel
         # to put actions on the y-axis and inventory on the x-axis.
         for col in range(n_cols):
@@ -106,6 +118,12 @@ def main() -> int:
             if col == 0:
                 ax.set_ylabel(method_label, fontsize=9, rotation=90,
                               labelpad=8)
+            if col == n_cols - 1:
+                ax.text(
+                    1.035, 0.5, f"regime\nseparation\n{separation:.2f}",
+                    transform=ax.transAxes, fontsize=7.5, ha="left",
+                    va="center", color="#555555", linespacing=1.35,
+                )
             for a_idx in range(n_actions):
                 for q_idx in range(n_inv):
                     val = float(panel[a_idx, q_idx])
@@ -123,8 +141,8 @@ def main() -> int:
     for col in range(n_cols):
         axes[-1, col].set_xlabel("Inventory $q$", fontsize=9)
 
-    fig.tight_layout(rect=(0, 0.02, 0.95, 0.99))
-    cbar_ax = fig.add_axes([0.96, 0.18, 0.012, 0.66])
+    fig.tight_layout(rect=(0, 0.02, 0.905, 0.99))
+    cbar_ax = fig.add_axes([0.955, 0.18, 0.012, 0.66])
     cb = fig.colorbar(im, cax=cbar_ax)
     cb.set_label("P(action | regime, inventory)", fontsize=9)
     cb.ax.tick_params(labelsize=8)

@@ -66,6 +66,14 @@ class PPOAgent:
     lam: float = 0.95
     epochs: int = 4
     minibatch_size: int = 256
+    # Environment-wise minibatching, matching the scheme the recurrent agents
+    # are forced into. When set, minibatches are whole environment columns of
+    # `minibatch_envs` environments rather than `minibatch_size` transitions
+    # drawn freely across time and environments. This equalises the update rule
+    # across the method ladder: the same number of optimiser steps per training
+    # iteration, on the same number of transitions each, with the same
+    # composition. Left at 0 the agent keeps the sample-wise scheme.
+    minibatch_envs: int = 0
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -142,6 +150,28 @@ class PPOAgent:
         }
 
         update_key, next_key = jax.random.split(state["update_key"])
+        if self.minibatch_envs > 0:
+            # Group the flattened batch into whole environment columns so a
+            # minibatch is `minibatch_envs` complete trajectories, the scheme
+            # the recurrent agents are forced into. `_flatten` maps (t, n) to
+            # t*N + n, so environment n owns rows n, n+N, n+2N, ...; gathering
+            # in that order puts each environment's T steps contiguous.
+            # `shuffle_block` then keeps the per-epoch reshuffle at trajectory
+            # granularity instead of breaking the columns apart again.
+            n_steps, n_env = trajectory["reward"].shape[:2]
+            idx = (
+                jnp.arange(n_env)[:, None] + jnp.arange(n_steps)[None, :] * n_env
+            ).reshape(-1)
+            batch = jax.tree_util.tree_map(lambda x: x[idx], batch)
+            # Cap to the environments actually present, as the recurrent agents
+            # do: a reduced-scale run can have fewer environments than the
+            # configured minibatch, which would otherwise yield no minibatches.
+            mb_envs = min(self.minibatch_envs, n_env)
+            minibatch_size = mb_envs * n_steps
+            shuffle_block = n_steps
+        else:
+            minibatch_size = self.minibatch_size
+            shuffle_block = 0
         params, opt_state, metrics = run_ppo_epochs(
             lambda p, o: self._model().apply(p, o),
             self._optimizer(),
@@ -150,7 +180,8 @@ class PPOAgent:
             batch,
             key=update_key,
             epochs=self.epochs,
-            minibatch_size=self.minibatch_size,
+            minibatch_size=minibatch_size,
+            shuffle_block=shuffle_block,
             clip_eps=self.clip_eps,
             ent_coef=self.ent_coef,
             vf_coef=self.vf_coef,

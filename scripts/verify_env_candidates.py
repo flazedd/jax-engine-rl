@@ -142,7 +142,7 @@ def main() -> int:
         print(f"  R1d={r['R1_disagree']:.2f} R2={r['R2_ratio']:.2f} R3gap/ci={r['R3_gap_ci']:.1f} "
               f"R4decay={r['R4_decay']:.2f} R4close={r['R4_close']:.2f} | PASS:[{flags}]", flush=True)
 
-    print("\n=== SUMMARY (thresholds: R1d>=0.15  R2>=0.85  R3>=3.0  R4decay>=0.30 & close>=0.30) ===")
+    print("\n=== SUMMARY (thresholds: R1d>=0.80  R2>=0.85  R3ratio<=0.90  R4decay>=0.35) ===")
     print(f"{'candidate':>12} {'dwell':>6} | {'R1d':>5} {'R2':>5} {'R3':>6} {'R4dec':>6} {'R4cls':>6} | pass")
     for name, kw, dwell, r in rows:
         dw = f"{dwell:.0f}" if dwell else "-"

@@ -47,13 +47,18 @@ RESULTS = REPO / "results"
 PCE = RESULTS / "M5R" / "final" / "per_cell_env.json"
 BACKUP = RESULTS / "_backup_pre_sweep_redesign"
 
-REFS = [("regime_agnostic", "m3_regime_agnostic.yaml"),
-        ("belief", "m3_belief.yaml"),
-        ("oracle", "m3_oracle.yaml")]
-CELLS = [("rl2_concat", "m5r_locked/rl2_concat.yaml"),
-         ("rl2_hypernet", "m5r_locked/rl2_hypernet.yaml"),
-         ("varibad_concat", "m5r_locked/varibad_concat.yaml"),
-         ("varibad_hypernet", "m5r_locked/varibad_hypernet.yaml")]
+# Every method runs from the matched-fairness configs, so a difficulty level
+# compares methods on identical inputs, optimiser settings, budget and
+# capacity. `scripts.config_fairness_audit` enforces that; changing a config
+# here without re-running the audit breaks the comparison.
+REFS = [("regime_agnostic", "m5r_matched/regime_agnostic.yaml"),
+        ("belief", "m5r_matched/belief_ppo.yaml"),
+        ("oracle", "m5r_matched/oracle_ppo.yaml"),
+        ("stacked_obs", "m5r_matched/stacked_obs.yaml")]
+CELLS = [("rl2_concat", "m5r_matched/rl2_concat.yaml"),
+         ("rl2_hypernet", "m5r_matched/rl2_hypernet.yaml"),
+         ("varibad_concat", "m5r_matched/varibad_concat.yaml"),
+         ("varibad_hypernet", "m5r_matched/varibad_hypernet.yaml")]
 
 # (env_label, env_yaml_rel). Medium (e_final) is the shared centre, already done.
 ENVS = [
@@ -71,7 +76,10 @@ def _env_params(env_yaml_rel: str) -> dict[str, Any]:
 def _build_cfg(base_yaml: str, env_yaml_rel: str, name: str, iters: int, seeds: int):
     cfg = load_config(CONFIG / base_yaml)
     apply_run_mode(cfg, "full")
-    cfg.env.params = copy.deepcopy(_env_params(env_yaml_rel))
+    # Merge rather than replace: the level YAML carries the regime parameters,
+    # while wrapper settings that live in the method config (stacked-obs `K`)
+    # must survive the override.
+    cfg.env.params = {**cfg.env.params, **copy.deepcopy(_env_params(env_yaml_rel))}
     cfg.experiment_name = name
     cfg.iterations = iters
     cfg.num_seeds = seeds
@@ -125,7 +133,9 @@ def _train_env(label: str, env_yaml: str, iters: int, seeds: int) -> dict[str, A
             "per_seed_final_return": sr,
         }
     return {
-        "refs": {"regime_agnostic_ppo": floor, "belief_ppo": belief, "oracle_ppo": oracle},
+        "refs": {"regime_agnostic_ppo": floor, "belief_ppo": belief,
+                 "oracle_ppo": oracle,
+                 "stacked_obs_ppo": ref_means.get("stacked_obs")},
         "cells": cells,
     }
 

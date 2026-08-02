@@ -34,6 +34,7 @@ import numpy as np
 
 from evaluation.posterior_probe import load_experiment
 from evaluation.posterior_probe_cartpole import probe_one_seed_cartpole
+from scripts.cartpole_names import cartpole_experiment_name
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -45,15 +46,7 @@ AXES = ("asymmetry", "persistence")
 
 
 def _experiment_name(method: str, level: str, axis: str = "asymmetry") -> str:
-    """Medium reuses the historical m_cartpole_<method> dirs (shared
-    across axes). Easy / hard for asymmetry get the legacy
-    m_cartpole_<method>_<level>; for persistence get
-    m_cartpole_<method>_persistence_<level>."""
-    if level == "medium":
-        return f"m_cartpole_{method}"
-    if axis == "asymmetry":
-        return f"m_cartpole_{method}_{level}"
-    return f"m_cartpole_{method}_{axis}_{level}"
+    return cartpole_experiment_name(method, axis, level)
 
 
 def _reference_name(method: str, level: str, axis: str = "asymmetry") -> str:
@@ -82,6 +75,10 @@ def _probe_cell(
 
     method_accs: list[float] = []
     analytical_accs: list[float] = []
+    method_kls: list[float] = []
+    analytical_kls: list[float] = []
+    method_lls: list[float] = []
+    method_briers: list[float] = []
     for seed in seeds:
         bundle = load_experiment(exp_dir, seed)
         result = probe_one_seed_cartpole(
@@ -90,24 +87,35 @@ def _probe_cell(
         )
         method_accs.append(float(result["method"]["test_acc"]))
         analytical_accs.append(float(result["analytical"]["test_acc"]))
+        method_kls.append(float(result["method"]["test_kl_to_omega"]))
+        analytical_kls.append(float(result["analytical"]["test_kl_to_omega"]))
+        method_lls.append(float(result["method"]["test_log_loss"]))
+        method_briers.append(float(result["method"]["test_brier"]))
     return {
         "seeds": seeds,
         "method_test_acc_per_seed": method_accs,
         "analytical_test_acc_per_seed": analytical_accs,
+        "method_kl_per_seed": method_kls,
+        "analytical_kl_per_seed": analytical_kls,
+        "method_log_loss_per_seed": method_lls,
+        "method_brier_per_seed": method_briers,
     }
 
 
-def _decoupling_diagnostic(scatter_points: list[dict[str, Any]]) -> dict[str, Any]:
-    """Same heuristic as M6: a method is decoupled if it lands in the top
-    half by posterior decodability but bottom half by gap_closed (or
-    vice versa) — i.e. its rank by the two metrics disagree.
+def _decoupling_diagnostic(
+    scatter_points: list[dict[str, Any]], error_key: str = "posterior_error",
+) -> dict[str, Any]:
+    """A method is decoupled if it lands in the top half by belief quality
+    but bottom half by gap_closed (or vice versa). ``error_key`` selects the
+    belief-error measure (higher = worse); pass ``belief_error_kl`` for the
+    KL-based (primary) diagnostic.
     """
     by_method: dict[str, list[dict[str, Any]]] = {}
     for p in scatter_points:
         by_method.setdefault(p["method"], []).append(p)
     if len(by_method) < 2:
         return {"methods_with_decoupling": [], "per_method_cells": {}}
-    post_means = {m: float(np.mean([1.0 - p["posterior_error"] for p in pts])) for m, pts in by_method.items()}
+    post_means = {m: float(np.mean([-p[error_key] for p in pts])) for m, pts in by_method.items()}
     gc_means = {m: float(np.mean([p["gap_closed"] for p in pts])) for m, pts in by_method.items()}
     post_order = sorted(post_means, key=post_means.get, reverse=True)
     gc_order = sorted(gc_means, key=gc_means.get, reverse=True)
@@ -213,9 +221,12 @@ def main() -> int:
             gc_per_seed = _gap_closed_per_seed(
                 per_seed_return, floor_mean, oracle_mean,
             )
-            for seed, m_acc, a_acc, gc in zip(
+            for seed, m_acc, a_acc, m_kl, a_kl, m_ll, m_br, gc in zip(
                 probe["seeds"], probe["method_test_acc_per_seed"],
-                probe["analytical_test_acc_per_seed"], gc_per_seed,
+                probe["analytical_test_acc_per_seed"],
+                probe["method_kl_per_seed"], probe["analytical_kl_per_seed"],
+                probe["method_log_loss_per_seed"], probe["method_brier_per_seed"],
+                gc_per_seed,
             ):
                 scatter_points.append({
                     "axis": args.axis,
@@ -226,14 +237,20 @@ def main() -> int:
                     "method_test_acc": m_acc,
                     "analytical_test_acc": a_acc,
                     "posterior_error": a_acc - m_acc,
+                    "method_kl_to_omega": m_kl,
+                    "analytical_kl_to_omega": a_kl,
+                    "method_log_loss": m_ll,
+                    "method_brier": m_br,
+                    "belief_error_kl": m_kl - a_kl,
                     "gap_closed": gc,
                 })
 
             m_mean = float(np.mean(probe["method_test_acc_per_seed"]))
             a_mean = float(np.mean(probe["analytical_test_acc_per_seed"]))
+            m_kl_mean = float(np.mean(probe["method_kl_per_seed"]))
             print(
-                f"[probe] {experiment_name:>45s} | method={m_mean:.3f} "
-                f"analytical={a_mean:.3f} posterior_error={a_mean - m_mean:+.3f}",
+                f"[probe] {experiment_name:>45s} | acc={m_mean:.3f} "
+                f"(anal={a_mean:.3f}) KL={m_kl_mean:.3f}",
                 flush=True,
             )
 
@@ -250,45 +267,52 @@ def main() -> int:
         return 1
 
     # ---- correlations ---------------------------------------------------
-    arr_pe = np.asarray([p["posterior_error"] for p in scatter_points])
-    arr_gc = np.asarray([p["gap_closed"] for p in scatter_points])
-    valid = ~np.isnan(arr_pe) & ~np.isnan(arr_gc)
-    if valid.sum() >= 2 and np.std(arr_pe[valid]) > 0 and np.std(arr_gc[valid]) > 0:
-        correlation_overall = float(np.corrcoef(arr_pe[valid], arr_gc[valid])[0, 1])
-    else:
-        correlation_overall = float("nan")
+    def _corr_ci(points, xkey, ykey="gap_closed", n_boot=10_000, seed=0):
+        x = np.asarray([p[xkey] for p in points], dtype=float)
+        y = np.asarray([p[ykey] for p in points], dtype=float)
+        v = ~np.isnan(x) & ~np.isnan(y)
+        x, y = x[v], y[v]
+        if x.size < 2 or np.std(x) == 0 or np.std(y) == 0:
+            return float("nan"), float("nan"), float("nan")
+        r = float(np.corrcoef(x, y)[0, 1])
+        rng = np.random.default_rng(seed)
+        boot = []
+        for _ in range(n_boot):
+            idx = rng.integers(0, x.size, size=x.size)
+            xx, yy = x[idx], y[idx]
+            if np.std(xx) > 0 and np.std(yy) > 0:
+                boot.append(np.corrcoef(xx, yy)[0, 1])
+        boot = np.asarray(boot)
+        return r, float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))
 
-    # Bootstrap CI on overall Pearson r
-    rng = np.random.default_rng(0)
-    pe_v = arr_pe[valid]
-    gc_v = arr_gc[valid]
-    if pe_v.size >= 2:
-        boot_rs = []
-        for _ in range(10_000):
-            idx = rng.integers(0, pe_v.size, size=pe_v.size)
-            x, y = pe_v[idx], gc_v[idx]
-            if np.std(x) > 0 and np.std(y) > 0:
-                boot_rs.append(np.corrcoef(x, y)[0, 1])
-        boot_rs = np.asarray(boot_rs)
-        ci_low = float(np.percentile(boot_rs, 2.5))
-        ci_high = float(np.percentile(boot_rs, 97.5))
-    else:
-        ci_low = ci_high = float("nan")
+    def _corr(points, xkey, ykey="gap_closed"):
+        x = np.asarray([p[xkey] for p in points], dtype=float)
+        y = np.asarray([p[ykey] for p in points], dtype=float)
+        v = ~np.isnan(x) & ~np.isnan(y)
+        if v.sum() >= 2 and np.std(x[v]) > 0 and np.std(y[v]) > 0:
+            return float(np.corrcoef(x[v], y[v])[0, 1])
+        return float("nan")
+
+    # posterior_error is accuracy-based (kept); belief_error_kl is primary.
+    # Both are error metrics (higher = worse belief), so both keep the same
+    # sign against gap_closed; no sign flip between them.
+    correlation_overall, ci_low, ci_high = _corr_ci(scatter_points, "posterior_error")
+    correlation_overall_kl, ci_low_kl, ci_high_kl = _corr_ci(
+        scatter_points, "belief_error_kl"
+    )
 
     by_method: dict[str, list[dict[str, Any]]] = {}
     for p in scatter_points:
         by_method.setdefault(p["method"], []).append(p)
-    correlation_per_method: dict[str, float] = {}
-    for method, pts in by_method.items():
-        pe = np.asarray([p["posterior_error"] for p in pts])
-        gc = np.asarray([p["gap_closed"] for p in pts])
-        v = ~np.isnan(pe) & ~np.isnan(gc)
-        if v.sum() >= 2 and np.std(pe[v]) > 0 and np.std(gc[v]) > 0:
-            correlation_per_method[method] = float(np.corrcoef(pe[v], gc[v])[0, 1])
-        else:
-            correlation_per_method[method] = float("nan")
+    correlation_per_method = {
+        m: _corr(pts, "posterior_error") for m, pts in by_method.items()
+    }
+    correlation_per_method_kl = {
+        m: _corr(pts, "belief_error_kl") for m, pts in by_method.items()
+    }
 
-    decoupling = _decoupling_diagnostic(scatter_points)
+    decoupling = _decoupling_diagnostic(scatter_points, error_key="posterior_error")
+    decoupling_kl = _decoupling_diagnostic(scatter_points, error_key="belief_error_kl")
     signal_pattern = _signal_pattern(correlation_overall, decoupling)
     scatter_interpretable = signal_pattern in ("tight_correlation", "decoupling")
     decoupling_supported = abs(correlation_overall) < 0.30
@@ -305,7 +329,11 @@ def main() -> int:
         "correlation_overall": correlation_overall,
         "correlation_overall_ci95": [ci_low, ci_high],
         "correlation_per_method": correlation_per_method,
+        "correlation_overall_kl": correlation_overall_kl,
+        "correlation_overall_kl_ci95": [ci_low_kl, ci_high_kl],
+        "correlation_per_method_kl": correlation_per_method_kl,
         "decoupling_detected": decoupling,
+        "decoupling_detected_kl": decoupling_kl,
         "signal_pattern": signal_pattern,
         "scatter_interpretable": scatter_interpretable,
         "decoupling_supported": decoupling_supported,
@@ -336,13 +364,17 @@ def main() -> int:
 
     print("[probe] === summary ===", flush=True)
     print(
-        f"[probe] correlation_overall={correlation_overall:+.3f} "
-        f"CI=[{ci_low:+.3f}, {ci_high:+.3f}] | signal={signal_pattern} | "
-        f"decoupling_supported={decoupling_supported}",
+        f"[probe] r(acc)={correlation_overall:+.3f} CI=[{ci_low:+.3f},{ci_high:+.3f}] "
+        f"| r(KL)={correlation_overall_kl:+.3f} CI=[{ci_low_kl:+.3f},{ci_high_kl:+.3f}] "
+        f"| signal={signal_pattern}",
         flush=True,
     )
-    for method, r in correlation_per_method.items():
-        print(f"[probe]   {method:>22s} | r={r:+.3f}", flush=True)
+    for method in correlation_per_method:
+        print(
+            f"[probe]   {method:>22s} | r_acc={correlation_per_method[method]:+.3f} "
+            f"r_kl={correlation_per_method_kl[method]:+.3f}",
+            flush=True,
+        )
     return 0
 
 

@@ -170,6 +170,46 @@ def compute_action_given_regime(
     return counts / row_sums
 
 
+def regime_separation_per_seed(
+    tables: np.ndarray,  # [S, n_regimes, n_inv, n_actions]
+    counts: np.ndarray,  # [S, n_regimes, n_inv]
+) -> np.ndarray:
+    """Regime separation of a policy, one scalar per seed.
+
+    At each inventory level, the largest total-variation distance between two
+    regimes' action distributions; then a weighted average over inventory
+    levels. Zero means the policy plays the same action distribution whatever
+    the regime, which is what the regime-agnostic agent must score.
+
+    Inventory is held fixed inside the comparison because the regime shifts the
+    inventory distribution a policy occupies. A policy conditioning on
+    inventory alone would otherwise register as conditioning on the regime.
+
+    The weight at an inventory level is the *minimum* visit count any regime
+    recorded there: a comparison is only as well measured as its worst-covered
+    regime, and an unweighted mean would let a level that one regime almost
+    never occupies carry the same influence as a level all three occupy often.
+
+    This is the single definition of the statistic. The heatmap figure and the
+    hypothesis tests both call it, so the number displayed and the number
+    tested cannot drift apart; they did once, when each computed its own.
+    """
+    tables = np.asarray(tables, dtype=float)
+    counts = np.asarray(counts, dtype=float)
+    n_regimes = tables.shape[1]
+    pairs = [(i, j) for i in range(n_regimes) for j in range(i + 1, n_regimes)]
+
+    out = []
+    for s in range(tables.shape[0]):
+        t = tables[s]
+        per_q = np.max(
+            [0.5 * np.abs(t[i] - t[j]).sum(-1) for i, j in pairs], axis=0
+        )
+        w = counts[s].min(axis=0)
+        out.append(float((per_q * w).sum() / w.sum()) if w.sum() > 0 else np.nan)
+    return np.asarray(out)
+
+
 def compute_action_given_regime_inventory(
     actions: np.ndarray,    # [T, N] int
     regimes: np.ndarray,    # [T, N] int

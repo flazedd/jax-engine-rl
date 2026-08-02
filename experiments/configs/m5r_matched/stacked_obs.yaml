@@ -1,0 +1,20 @@
+# Stacked-observation PPO over the last K augmented tuples, so the window holds
+# regime evidence rather than a signal the environment makes uninformative.
+extends:
+- base/base_ppo.yaml
+- envs/e_final.yaml
+experiment_name: m5r_matched_stacked_obs
+iterations: 300
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: market_making_v1_stacked_augmented
+  params:
+    stack_k: 4
+agent:
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 44

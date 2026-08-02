@@ -1,0 +1,27 @@
+# VariBAD hypernet on CartPoleRegimeV1 at the matched budget.
+# Encoder and reward decoder identical to varibad_concat.yaml.
+extends:
+- base/base_varibad.yaml
+- envs/e_cartpole_v1.yaml
+experiment_name: m_cartpole_matched_varibad_hypernet
+iterations: 300
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+agent:
+  params:
+    integration: hypernet
+    reward_decoder: gaussian
+    hidden_dim: 21
+    latent_dim: 2
+    policy_trunk_layers: 2
+    policy_trunk_hidden: 13
+    hypernet_target_hidden: 4
+    hypernet_hidden: 4
+    hypernet_init_scale: 0.01
+    policy_obs_dim: 4
+    learning_rate: 3.0e-4
+    ent_coef: 0.01
+    max_grad_norm: 0.5
+    kl_coef: 0.1

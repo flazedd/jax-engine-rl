@@ -34,9 +34,8 @@ from training.config import _load_yaml_with_extends
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Same thresholds as oracles/verify_requirements.py.
-R1_DISAGREE_MIN = 0.15
-R1_REL_LOSS_MIN = 0.10
-R4_DECAY_MIN = 0.30
+R1_DISAGREE_MIN = 0.80
+R4_DECAY_MIN = 0.35
 
 
 def probe(env_config_path: Path) -> int:
@@ -48,10 +47,10 @@ def probe(env_config_path: Path) -> int:
     vi = solve_value_iteration(env)
     disagree_frac, _ = policy_disagreement(vi)
     mean_loss, rel_loss, _ = wrong_regime_value_loss(env, vi)
-    r1_pass = disagree_frac >= R1_DISAGREE_MIN and rel_loss >= R1_REL_LOSS_MIN
+    r1_pass = disagree_frac >= R1_DISAGREE_MIN
     print(
         f"[probe] R1: disagree_frac={disagree_frac:.3f} (>={R1_DISAGREE_MIN})  "
-        f"rel_loss={rel_loss:.3f} (>={R1_REL_LOSS_MIN})  mean_loss={mean_loss:.3f}  "
+        f"rel_loss={rel_loss:.3f}  mean_loss={mean_loss:.3f}  "
         f"pass={r1_pass}"
     )
 

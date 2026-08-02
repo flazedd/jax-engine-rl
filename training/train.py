@@ -79,6 +79,23 @@ def _build_env(cfg: ExperimentConfig):
         params = dict(cfg.env.params)
         k = int(params.pop("stack_k", 4))
         return StackObsEnv(inner=MarketMakingV1(**params), k=k)
+    # Augmented variants: every method receives the same per-step tuple
+    # u_t = [o_t, a_{t-1}, r_{t-1}, d_{t-1}], so the references and the memory
+    # baseline are not disadvantaged relative to the meta-RL methods by their
+    # inputs. RL2ObsEnv sits outermost, so regime information appended by the
+    # belief and oracle wrappers stays adjacent to the base observation.
+    if cfg.env.name == "market_making_v1_augmented":
+        return RL2ObsEnv(inner=MarketMakingV1(**cfg.env.params))
+    if cfg.env.name == "market_making_v1_oracle_augmented":
+        return RL2ObsEnv(inner=OracleObsEnv(inner=MarketMakingV1(**cfg.env.params)))
+    if cfg.env.name == "market_making_v1_belief_augmented":
+        return RL2ObsEnv(inner=BeliefObsEnv(inner=MarketMakingV1(**cfg.env.params)))
+    if cfg.env.name == "market_making_v1_stacked_augmented":
+        # Stack sits outside the augmentation, so the window holds the last K
+        # tuples rather than the last K inventories.
+        params = dict(cfg.env.params)
+        k = int(params.pop("stack_k", 4))
+        return StackObsEnv(inner=RL2ObsEnv(inner=MarketMakingV1(**params)), k=k)
     if cfg.env.name == "market_making_v1_belief_constant":
         return BeliefObsEnv(
             inner=MarketMakingV1(**cfg.env.params), constant_belief=True
@@ -93,6 +110,14 @@ def _build_env(cfg: ExperimentConfig):
         params = dict(cfg.env.params)
         k = int(params.pop("stack_k", 4))
         return StackObsEnv(inner=CartPoleRegimeV1(**params), k=k)
+    # Augmented cartpole variants, mirroring the market-making ones above so
+    # the external-validity probe compares methods on matched inputs too.
+    if cfg.env.name == "cartpole_regime_v1_augmented":
+        return RL2ObsEnv(inner=CartPoleRegimeV1(**cfg.env.params))
+    if cfg.env.name == "cartpole_regime_v1_oracle_augmented":
+        return RL2ObsEnv(inner=OracleObsEnv(inner=CartPoleRegimeV1(**cfg.env.params)))
+    if cfg.env.name == "cartpole_regime_v1_belief_augmented":
+        return RL2ObsEnv(inner=BeliefObsEnv(inner=CartPoleRegimeV1(**cfg.env.params)))
     raise ValueError(f"unknown env: {cfg.env.name!r}")
 
 

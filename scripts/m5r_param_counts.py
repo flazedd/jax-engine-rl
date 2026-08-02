@@ -32,19 +32,20 @@ CONFIG_ROOT = REPO_ROOT / "experiments" / "configs"
 RESULTS_ROOT = REPO_ROOT / "results"
 OUT_DIR = RESULTS_ROOT / "M5R" / "final"
 
-# (display_label, config_path_relative_to_CONFIG_ROOT). The four meta-RL cells
-# use the locked configs composed with the medium-difficulty env override, the
-# same composition used at training time. References and stacked-obs use the
-# configs they were actually trained under.
+# (display_label, config_path_relative_to_CONFIG_ROOT). Every target is the
+# config it was actually trained under. The four meta-RL variants use the
+# matched configs composed with the medium-difficulty env override, and the
+# references use the matched configs directly, so the counts this reports are
+# the counts the parameter-budget claim rests on.
 TARGETS: list[tuple[str, str]] = [
     ("rl2_concat",          "m5r_final/rl2_concat_e_final.yaml"),
     ("rl2_hypernet",        "m5r_final/rl2_hypernet_e_final.yaml"),
     ("varibad_concat",      "m5r_final/varibad_concat_e_final.yaml"),
     ("varibad_hypernet",    "m5r_final/varibad_hypernet_e_final.yaml"),
-    ("regime_agnostic_ppo", "m3_regime_agnostic.yaml"),
-    ("stacked_obs_ppo",     "m5_ladder_stacked_ppo.yaml"),
-    ("belief_ppo",          "m3_belief.yaml"),
-    ("oracle_ppo",          "m3_oracle.yaml"),
+    ("regime_agnostic_ppo", "m5r_matched/regime_agnostic.yaml"),
+    ("stacked_obs_ppo",     "m5r_matched/stacked_obs.yaml"),
+    ("belief_ppo",          "m5r_matched/belief_ppo.yaml"),
+    ("oracle_ppo",          "m5r_matched/oracle_ppo.yaml"),
 ]
 
 

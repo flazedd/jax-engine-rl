@@ -1,17 +1,16 @@
-"""M5R Stage C — final evaluation on the 5 thesis evaluation environments.
+"""Final evaluation of the four conditioning variants on the medium env.
 
-For each of the four locked meta-RL configs (RL² × {concat, hypernet},
-VariBAD × {concat, hypernet}), train at full budget × n=12 seeds on each of:
-  - E_final (= persistence-medium = distinguishability-medium)
-  - persistence_easy   (P_ii = 0.99)
-  - persistence_hard   (P_ii = 0.96)
-  - distinguishability_easy
-  - distinguishability_hard
+Trains RL² × {concat, hypernet} and VariBAD × {concat, hypernet} from the
+matched-fairness configs on the medium-difficulty environment, at the budget
+those configs declare. The difficulty levels are owned by
+`scripts.sweep_redesign_n20`, which trains their references and cells from the
+same configs, so each environment label has exactly one writer.
 
-References (regime_agnostic / belief / oracle PPO) and stacked-obs PPO are
-NOT re-trained — their existing M3 / M6 numbers stay valid because the
-fairness fix only touches the meta-RL cells. Their values are read from
-the M3 + M6 stats JSONs and used to compute gap-closed fractions.
+References (regime-agnostic / Belief-PPO / Oracle-PPO / stacked-obs) are not
+re-trained here: the programme driver trains them from the matched configs and
+this script reads their metrics to form the gap-closed denominators. Because
+they come from the same matched family, the denominators sit on the same
+inputs, optimiser settings, budget and capacity as the cells they normalise.
 
 Outputs:
   experiments/configs/m5r_final/{cell}_{env_label}.yaml  # per-cell-env config
@@ -54,65 +53,44 @@ CELLS = ["rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet"]
 # (env_label, env_yaml_relative_to_CONFIG_ROOT). Order is env-major: outer
 # loop runs all 4 cells on one env before moving to the next, so partial
 # results give a complete cross-section per env.
+# The medium-difficulty environment only. The difficulty levels are owned by
+# `scripts.sweep_redesign_n20`, which trains their references and cells from
+# the same matched configs and merges them into the same per_cell_env.json.
+# Splitting them this way keeps one writer per environment label.
 EVAL_ENVS: list[tuple[str, str]] = [
-    ("e_final",                "envs/e_final.yaml"),
-    ("persistence_easy",       "envs/m6_persistence_easy.yaml"),
-    ("persistence_hard",       "envs/m6_persistence_hard.yaml"),
-    ("distinguishability_easy","envs/m6_distinguishability_easy.yaml"),
-    ("distinguishability_hard","envs/m6_distinguishability_hard.yaml"),
+    ("e_final", "envs/e_final.yaml"),
 ]
 
-LOCKED_CONFIG_DIR = CONFIG_ROOT / "m5r_locked"
+# Matched-fairness configs: identical inputs, optimiser settings, budget and
+# capacity across methods, enforced by `scripts.config_fairness_audit`.
+MATCHED_CONFIG_DIR = CONFIG_ROOT / "m5r_matched"
 
-M3_REF_PATH = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"
-M6_SWEEP_PATH = RESULTS_ROOT / "milestones" / "M6" / "stats_M6_sweep.json"
+# Reference experiments trained from the matched configs by the programme
+# driver. Reading their metrics directly, rather than a cached milestone stats
+# file, keeps the denominators on the same inputs, optimiser settings, budget
+# and capacity as the cells they normalise.
+MATCHED_REF_EXPERIMENTS = {
+    "regime_agnostic_ppo": "m5r_matched_regime_agnostic",
+    "belief_ppo": "m5r_matched_belief",
+    "oracle_ppo": "m5r_matched_oracle",
+    "stacked_obs_ppo": "m5r_matched_stacked_obs",
+}
 
 
 # ---------------------------------------------------------------------------
-# Reference loading (no retraining; reuse M3 + M6)
+# Reference loading (no retraining; reads the matched reference runs)
 # ---------------------------------------------------------------------------
-
-
-def _load_e_final_refs() -> dict[str, float]:
-    if not M3_REF_PATH.exists():
-        return {}
-    with open(M3_REF_PATH) as f:
-        d = json.load(f)
-    rl = d.get("reference_levels", {})
-    return {
-        "regime_agnostic_ppo": float(rl.get("regime_agnostic_ppo", {}).get("mean", float("nan"))),
-        "belief_ppo":          float(rl.get("belief_ppo", {}).get("mean", float("nan"))),
-        "oracle_ppo":          float(rl.get("oracle_ppo", {}).get("mean", float("nan"))),
-    }
-
-
-def _load_m6_refs(env_label: str) -> dict[str, float]:
-    """Pull floor / belief / oracle for an M6 sweep env from stats_M6_sweep.json.
-
-    The stats file structure is `results.{axis}.{level}.{method}.final_return_mean`.
-    `env_label` is split on the FIRST underscore: 'persistence_easy' →
-    axis='persistence', level='easy'.
-    """
-    if not M6_SWEEP_PATH.exists():
-        return {}
-    if "_" not in env_label:
-        return {}
-    axis, level = env_label.split("_", 1)
-    with open(M6_SWEEP_PATH) as f:
-        d = json.load(f)
-    cells = d.get("results", {}).get(axis, {}).get(level, {})
-    out: dict[str, float] = {}
-    for k in ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo"):
-        v = cells.get(k, {})
-        if isinstance(v, dict) and "final_return_mean" in v:
-            out[k] = float(v["final_return_mean"])
-    return out
 
 
 def _load_refs(env_label: str) -> dict[str, float]:
-    if env_label == "e_final":
-        return _load_e_final_refs()
-    return _load_m6_refs(env_label)
+    """Mean final return of each reference on the medium-difficulty env."""
+    del env_label  # only e_final is evaluated here; see EVAL_ENVS.
+    out: dict[str, float] = {}
+    for key, experiment in MATCHED_REF_EXPERIMENTS.items():
+        m = _read_metrics(experiment)
+        if m and m.get("per_seed_final_return"):
+            out[key] = float(np.mean(m["per_seed_final_return"]))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -121,12 +99,12 @@ def _load_refs(env_label: str) -> dict[str, float]:
 
 
 def _materialise_final_config(cell: str, env_label: str, env_yaml: str) -> Path:
-    """Compose locked config + env override into a per-cell-env YAML."""
+    """Compose matched config + env override into a per-cell-env YAML."""
     FINAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     yaml_path = FINAL_CONFIG_DIR / f"{cell}_{env_label}.yaml"
-    locked_rel = f"m5r_locked/{cell}.yaml"
+    matched_rel = f"m5r_matched/{cell}.yaml"
     doc: dict[str, Any] = {
-        "extends": [locked_rel, env_yaml],
+        "extends": [matched_rel, env_yaml],
         "experiment_name": f"m5r_final_{cell}_{env_label}",
     }
     with open(yaml_path, "w") as f:
@@ -286,10 +264,10 @@ def main() -> int:
     cells = [args.cell] if args.cell else CELLS
     envs = [(el, ep) for el, ep in EVAL_ENVS if (args.env is None or el == args.env)]
 
-    # Pre-flight: confirm all locked configs exist before launching anything.
-    missing = [c for c in cells if not (LOCKED_CONFIG_DIR / f"{c}.yaml").exists()]
+    # Pre-flight: confirm all matched configs exist before launching anything.
+    missing = [c for c in cells if not (MATCHED_CONFIG_DIR / f"{c}.yaml").exists()]
     if missing:
-        raise SystemExit(f"missing locked configs (run Stage B first): {missing}")
+        raise SystemExit(f"missing matched configs: {missing}")
 
     FINAL_RESULTS.mkdir(parents=True, exist_ok=True)
     summary_path = FINAL_RESULTS / "m5r_final_run.json"

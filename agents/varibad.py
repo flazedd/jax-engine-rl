@@ -119,21 +119,48 @@ class VariBADPolicy(nn.Module):
     # matched-compute factorial.
     policy_trunk_layers: int = 2
     policy_trunk_hidden: int = 0  # 0 = fall back to hidden_dim
+    # 3-simplex belief bottleneck: the policy conditions on a learned softmax
+    # over regimes instead of the posterior parameters. Off by default.
+    belief_simplex_head: bool = False
+    n_regimes: int = 3
+    # Matched policy inputs. The encoder always consumes the augmented
+    # observation [o_t, a_{t-1}, r_{t-1}]; `policy_obs_dim > 0` restricts the
+    # policy-side observation to the base observation o_t, as the methodology
+    # specifies. Defaults to the legacy behaviour so existing checkpoints load.
+    policy_obs_dim: int = 0
+
+    def _policy_obs(self, obs: chex.Array) -> chex.Array:
+        if self.policy_obs_dim <= 0:
+            return obs
+        return obs[..., : self.policy_obs_dim]
 
     @nn.compact
     def __call__(
         self, obs: chex.Array, mu: chex.Array, log_var: chex.Array
-    ) -> tuple[chex.Array, chex.Array]:
+    ) -> tuple[chex.Array, chex.Array, chex.Array]:
         if self.detach_belief_for_policy:
             mu = jax.lax.stop_gradient(mu)
             log_var = jax.lax.stop_gradient(log_var)
         sigma = jnp.exp(0.5 * log_var)
         belief = jnp.concatenate([mu, sigma], axis=-1)
-        if self.belief_layernorm and self.integration == "concat":
+
+        if self.belief_simplex_head:
+            simplex_logits = nn.Dense(
+                self.n_regimes,
+                kernel_init=nn.initializers.orthogonal(0.01),
+                name="simplex_head",
+            )(belief)
+            belief = jax.nn.softmax(simplex_logits)
+        else:
+            simplex_logits = jnp.zeros((self.n_regimes,), dtype=belief.dtype)
+
+        if self.belief_layernorm and self.integration == "concat" \
+                and not self.belief_simplex_head:
             belief_for_concat = nn.LayerNorm()(belief)
         else:
             belief_for_concat = belief
-        x = jnp.concatenate([obs, belief_for_concat], axis=-1)
+        policy_obs = self._policy_obs(obs)
+        x = jnp.concatenate([policy_obs, belief_for_concat], axis=-1)
 
         trunk_width = self.policy_trunk_hidden or self.hidden_dim
         for _ in range(self.policy_trunk_layers):
@@ -146,20 +173,35 @@ class VariBADPolicy(nn.Module):
         if self.integration == "concat":
             logits = nn.Dense(self.n_actions, kernel_init=nn.initializers.orthogonal(0.01))(x)
         elif self.integration == "hypernet":
+            # Belief-only trunk before the weight generator. The concat path
+            # sends the belief through `policy_trunk_layers` of nonlinearity
+            # before it reaches the action; without this the hypernet path
+            # would use a raw belief, so the two variants would differ in
+            # belief depth as well as in how the belief enters. The trunk
+            # cannot read the observation: the generated weights must be a
+            # function of the belief alone, or the observation would enter
+            # twice, once through the weights and once through the target.
+            belief_trunk = belief
+            for _ in range(self.policy_trunk_layers):
+                belief_trunk = nn.Dense(
+                    trunk_width,
+                    kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
+                )(belief_trunk)
+                belief_trunk = nn.tanh(belief_trunk)
             hn = Hypernet(
-                target_obs_dim=self.obs_size,
+                target_obs_dim=(self.policy_obs_dim or self.obs_size),
                 target_hidden=self.hypernet_target_hidden,
                 target_output_dim=self.n_actions,
                 hypernet_hidden=self.hypernet_hidden,
                 init_scale=self.hypernet_init_scale,
             )
-            flat_weights = hn(belief)
-            logits = hn.apply_target(flat_weights, obs)
+            flat_weights = hn(belief_trunk)
+            logits = hn.apply_target(flat_weights, policy_obs)
         else:
             raise ValueError(f"unknown integration: {self.integration!r}")
 
         value = nn.Dense(1, kernel_init=nn.initializers.orthogonal(1.0))(x).squeeze(-1)
-        return logits, value
+        return logits, value, simplex_logits
 
 
 @dataclass(frozen=True)
@@ -208,6 +250,12 @@ class VariBADAgent:
     # Detach the belief (μ, σ) into the policy/value heads (single-stage
     # decoupling); only meaningful together with aux_decode_coef > 0.
     detach_belief_for_policy: bool = False
+    # 3-simplex belief bottleneck (see VariBADPolicy). When on, the policy
+    # conditions on a learned softmax over regimes; with aux_decode_coef > 0 that
+    # softmax is supervised toward the true regime. Off by default.
+    belief_simplex_head: bool = False
+    # Matched policy inputs; see VariBADPolicy for the semantics.
+    policy_obs_dim: int = 0
 
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
@@ -228,6 +276,7 @@ class VariBADAgent:
 
     def _policy(self) -> VariBADPolicy:
         return VariBADPolicy(
+            policy_obs_dim=self.policy_obs_dim,
             n_actions=self.n_actions,
             obs_size=self.obs_size,
             latent_dim=self.latent_dim,
@@ -240,6 +289,8 @@ class VariBADAgent:
             policy_trunk_layers=self.policy_trunk_layers,
             policy_trunk_hidden=self.policy_trunk_hidden,
             detach_belief_for_policy=self.detach_belief_for_policy,
+            belief_simplex_head=self.belief_simplex_head,
+            n_regimes=self.n_regimes,
         )
 
     def _optimizer(self) -> optax.GradientTransformation:
@@ -270,7 +321,7 @@ class VariBADAgent:
             "decoder": decoder_params,
             "policy": policy_params,
         }
-        if self.aux_decode_coef > 0.0:
+        if self.aux_decode_coef > 0.0 and not self.belief_simplex_head:
             # Linear regime decoder over the latent mean μ; trained jointly as a
             # sibling collection so the sub-modules (which read their own keys)
             # are untouched while the optimizer still updates it.
@@ -300,7 +351,7 @@ class VariBADAgent:
         new_carry, mu, log_var = self._encoder().apply(
             state["params"]["encoder"], carry, obs
         )
-        logits, value = self._policy().apply(
+        logits, value, simplex_logits = self._policy().apply(
             state["params"]["policy"], obs, mu, log_var
         )
         action = jax.random.categorical(key, logits)
@@ -311,6 +362,8 @@ class VariBADAgent:
             "mu": mu,
             "log_var": log_var,
         }
+        if self.belief_simplex_head:
+            extras["belief_simplex"] = jax.nn.softmax(simplex_logits)
         return action, extras, new_carry
 
     # ---- update helpers -------------------------------------------------
@@ -338,7 +391,7 @@ class VariBADAgent:
         encoder, policy = self._encoder(), self._policy()
         def f(carry_i, obs_i):
             new_c, mu_i, lv_i = encoder.apply(params["encoder"], carry_i, obs_i)
-            _, v = policy.apply(params["policy"], obs_i, mu_i, lv_i)
+            _, v, _ = policy.apply(params["policy"], obs_i, mu_i, lv_i)
             return v
         return jax.vmap(f)(final_carry, final_obs)
 
@@ -388,7 +441,7 @@ class VariBADAgent:
             policy_apply = lambda o, m, lv: policy.apply(
                 params["policy"], o, m, lv
             )
-            logits, values = jax.vmap(jax.vmap(policy_apply))(
+            logits, values, simplex_logits = jax.vmap(jax.vmap(policy_apply))(
                 batch["obs"], mus, log_vars
             )
             # logits [T, n_envs, n_actions], values [T, n_envs]
@@ -460,10 +513,16 @@ class VariBADAgent:
             aux_loss = jnp.array(0.0)
             aux_acc = jnp.array(0.0)
             if self.aux_decode_coef > 0.0:
-                aux_logits = (
-                    jnp.einsum("tnl,lr->tnr", mus, params["aux"]["W"])
-                    + params["aux"]["b"]
-                )
+                # With a simplex head the regime cross-entropy supervises the
+                # softmax the policy conditions on; otherwise it trains a
+                # separate linear decoder over the latent mean.
+                if self.belief_simplex_head:
+                    aux_logits = simplex_logits
+                else:
+                    aux_logits = (
+                        jnp.einsum("tnl,lr->tnr", mus, params["aux"]["W"])
+                        + params["aux"]["b"]
+                    )
                 aux_loss = optax.softmax_cross_entropy_with_integer_labels(
                     aux_logits, batch["regime"]
                 ).mean()

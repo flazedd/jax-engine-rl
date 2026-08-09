@@ -58,6 +58,26 @@ FIGURES_ROOT = REPO_ROOT / "figures"
 
 
 # ---------------------------------------------------------------------------
+# Pass thresholds — the single source of truth
+# ---------------------------------------------------------------------------
+# These are the values reported in the thesis (Table "Environment Validation
+# Requirements"). Import them rather than restating the numbers: they were
+# duplicated in prose once already and drifted (R4 was cited as 0.30 in one
+# place while the check ran at 0.35).
+R1_MIN_DISAGREE_FRAC = 0.80  # fraction of inventory levels where policies differ
+R2_MIN_RATIO = 0.85  # worst-regime PPO / VI return ratio
+R3_MAX_RECOVERY = 0.90  # regime-agnostic / Oracle-PPO return ratio
+R4_MIN_ENTROPY_DECAY = 0.35  # posterior entropy decay by episode midpoint
+
+THRESHOLDS = {
+    "R1": {"statistic": "fraction_disagreeing_states", "op": ">=", "value": R1_MIN_DISAGREE_FRAC},
+    "R2": {"statistic": "min_ratio", "op": ">=", "value": R2_MIN_RATIO},
+    "R3": {"statistic": "recovery_ratio", "op": "<=", "value": R3_MAX_RECOVERY},
+    "R4": {"statistic": "entropy_decay_fraction", "op": ">=", "value": R4_MIN_ENTROPY_DECAY},
+}
+
+
+# ---------------------------------------------------------------------------
 # Short-budget PPO runner
 # ---------------------------------------------------------------------------
 
@@ -175,12 +195,29 @@ def _ci(values: list[float], n_boot: int = 10_000) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 
-def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
+def verify(
+    env_config_path: Path,
+    run_mode: str,
+    fig_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Check R1-R4 for one env config.
+
+    fig_dir overrides where the diagnostic figures are written. Callers that
+    must not disturb the committed figures (smoke tests) pass a scratch
+    directory; the default is the M2 figure directory the thesis appendix
+    draws from.
+    """
     env_cfg = _load_yaml_with_extends(env_config_path)["env"]
     env_params = env_cfg["params"]
     env = MarketMakingV1(**env_params)
 
     env_version = env_config_path.stem
+    # Reduced-mode runs get their own experiment namespace. train() writes to
+    # results/{experiment_name}/, and plotting.regenerate_figures rebuilds the
+    # R2 appendix figure from the per-regime metrics.json there — so a smoke
+    # test sharing the namespace would silently replace full-budget learning
+    # curves with 2-iteration ones.
+    exp_prefix = f"m2_verify_{env_version}" + ("" if run_mode == "full" else f"_{run_mode}")
     n_ppo_runs = env.n_regimes + 3  # per-regime × n_regimes + agnostic + oracle + belief
 
     print(
@@ -199,7 +236,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     disagree_frac, disagree_mask = policy_disagreement(vi)
     mean_loss, rel_loss, per_state_loss = wrong_regime_value_loss(env, vi)
     per_regime_optima = vi.per_regime_expected_episode_return.astype(float)
-    r1_pass = bool(disagree_frac >= 0.80)
+    r1_pass = bool(disagree_frac >= R1_MIN_DISAGREE_FRAC)
     print(
         f"[verify] R1: disagree_frac={disagree_frac:.3f} "
         f"rel_loss={rel_loss:.3f} pass={r1_pass}",
@@ -220,7 +257,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
         t0 = time.perf_counter()
         params = {**env_params, "lock_regime": r}
         m = _run_short_ppo(
-            experiment_name=f"m2_verify_{env_version}_per_regime_{r}",
+            experiment_name=f"{exp_prefix}_per_regime_{r}",
             env_name="market_making_v1",
             env_params=params,
             agent_name="ppo_per_regime",
@@ -236,7 +273,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
             flush=True,
         )
     r2_min = float(min(per_regime_ratios))
-    r2_pass = bool(r2_min >= 0.85)
+    r2_pass = bool(r2_min >= R2_MIN_RATIO)
 
     # ------- R3: regime-agnostic PPO vs Oracle-PPO ----------------------
     ppo_runs_done += 1
@@ -246,7 +283,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     )
     t0 = time.perf_counter()
     m_agn = _run_short_ppo(
-        experiment_name=f"m2_verify_{env_version}_regime_agnostic",
+        experiment_name=f"{exp_prefix}_regime_agnostic",
         env_name="market_making_v1",
         env_params=env_params,
         agent_name="ppo",
@@ -265,7 +302,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     )
     t0 = time.perf_counter()
     m_oracle = _run_short_ppo(
-        experiment_name=f"m2_verify_{env_version}_oracle",
+        experiment_name=f"{exp_prefix}_oracle",
         env_name="market_making_v1_oracle",
         env_params=env_params,
         agent_name="ppo_oracle",
@@ -295,9 +332,9 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     # The fraction of Oracle-PPO's return the regime-agnostic agent recovers.
     # gap_to_ci_ratio is still reported for reference but does not gate the check.
     recovery_ratio = float(agn_mean / oracle_mean) if abs(oracle_mean) > 1e-9 else 1.0
-    r3_pass = bool(recovery_ratio <= 0.90)
+    r3_pass = bool(recovery_ratio <= R3_MAX_RECOVERY)
     print(
-        f"[verify] R3: recovery_ratio={recovery_ratio:.3f} (<=0.90) "
+        f"[verify] R3: recovery_ratio={recovery_ratio:.3f} (<={R3_MAX_RECOVERY}) "
         f"gap={gap_absolute:.2f} gap_to_ci_ratio={gap_to_ci_ratio:.2f} "
         f"pass={r3_pass}",
         flush=True,
@@ -328,7 +365,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     )
     t0 = time.perf_counter()
     m_belief = _run_short_ppo(
-        experiment_name=f"m2_verify_{env_version}_belief",
+        experiment_name=f"{exp_prefix}_belief",
         env_name="market_making_v1_belief",
         env_params=env_params,
         agent_name="ppo_belief",
@@ -345,7 +382,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     gap_closure = (
         float((belief_mean - agn_mean) / oracle_gap) if abs(oracle_gap) > 1e-9 else 0.0
     )
-    r4_pass = bool(decay_frac >= 0.35)
+    r4_pass = bool(decay_frac >= R4_MIN_ENTROPY_DECAY)
 
     # ------- Compromise-policy sanity check ----------------------------
     compromise_per_regime, compromise_mixed, compromise_policy = (
@@ -356,6 +393,10 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
 
     stats = {
         "env_version": env_version,
+        "env_config_path": str(env_config_path),
+        "run_mode": run_mode,
+        "ppo_budget": _budget(run_mode),
+        "thresholds": THRESHOLDS,
         "parameters": env_params,
         "R1_policy_disagreement": {
             "fraction_disagreeing_states": disagree_frac,
@@ -404,7 +445,7 @@ def verify(env_config_path: Path, run_mode: str) -> dict[str, Any]:
     }
 
     # ------- Figures ---------------------------------------------------
-    fig_dir = FIGURES_ROOT / "milestones" / "M2"
+    fig_dir = fig_dir if fig_dir is not None else FIGURES_ROOT / "milestones" / "M2"
     fig_dir.mkdir(parents=True, exist_ok=True)
     plot_policy_heatmap(vi, env, fig_dir / "fig_M2_R1_policy_heatmap.png")
     plot_value_loss_distribution(

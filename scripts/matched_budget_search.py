@@ -32,6 +32,12 @@ from agents.varibad import VariBADAgent
 
 BUDGET = 5000
 
+# Floor on the policy-side free knob of each arm. Without it the search spends
+# the whole budget on the encoder and leaves the conditioning path a handful of
+# units, which bottlenecks a variant for reasons that have nothing to do with
+# the conditioning architecture under test.
+MIN_POLICY_WIDTH = 4
+
 
 @dataclass(frozen=True)
 class Domain:
@@ -77,25 +83,28 @@ def _ppo(d: Domain, obs: int, hidden: int):
     return PPOAgent(obs_size=obs, n_actions=d.n_actions, hidden_dim=hidden)
 
 
-def _rl2(d: Domain, integration: str, hidden: int, trunk: int):
+def _rl2(d: Domain, integration: str, hidden: int, trunk: int, hn_hidden: int = 0):
     return RL2Agent(
         obs_size=d.tuple_obs, n_actions=d.n_actions, integration=integration,
         hidden_dim=hidden,
-        hypernet_target_hidden=4, hypernet_hidden=12 if integration == "hypernet" else 0,
+        hypernet_target_hidden=4, hypernet_hidden=hn_hidden if integration == "hypernet" else 0,
         hypernet_init_scale=0.01,
         policy_trunk_layers=1, policy_trunk_hidden=trunk,
         policy_obs_dim=d.base_obs, concat_policy_reads_obs=True,
     )
 
 
-def _varibad(d: Domain, integration: str, hidden: int, trunk: int):
+def _varibad(d: Domain, integration: str, hidden: int, trunk: int, hn_hidden: int = 0):
     return VariBADAgent(
         obs_size=d.tuple_obs, n_actions=d.n_actions, integration=integration,
         hidden_dim=hidden, latent_dim=2, reward_decoder="gaussian",
-        hypernet_target_hidden=4, hypernet_hidden=4 if integration == "hypernet" else 0,
+        hypernet_target_hidden=4, hypernet_hidden=hn_hidden if integration == "hypernet" else 0,
         hypernet_init_scale=0.01,
-        policy_trunk_layers=2, policy_trunk_hidden=trunk,
+        policy_trunk_layers=1, policy_trunk_hidden=trunk,
         policy_obs_dim=d.base_obs,
+        # The decoder reads the base observation only, so its input width, and
+        # therefore its parameter count, must match what training uses.
+        decoder_obs_dim=d.base_obs,
     )
 
 
@@ -103,6 +112,7 @@ BUILDERS = {"rl2": _rl2, "varibad": _varibad}
 
 
 def _best_monotone(count_at, lo: int, hi: int, budget: int) -> tuple[int, int]:
+    lo_bound, hi_bound = lo, hi
     """Width closest to `budget`, exploiting that params grow with width.
 
     Binary-searches the crossing point rather than enumerating the range, which
@@ -122,7 +132,7 @@ def _best_monotone(count_at, lo: int, hi: int, budget: int) -> tuple[int, int]:
             lo = mid + 1
         else:
             hi = mid
-    candidates = [x for x in (lo - 1, lo, lo + 1) if x >= 1]
+    candidates = [x for x in (lo - 1, lo, lo + 1) if lo_bound <= x <= hi_bound]
     scored = [(abs(f(x) - budget), x, f(x)) for x in candidates]
     _, x, n = min(scored)
     return x, n
@@ -133,33 +143,55 @@ def _solve_reference(d: Domain, obs: int, budget: int) -> tuple[int, int]:
     return _best_monotone(lambda h: _count(_ppo(d, obs, h)), 4, 128, budget)
 
 
-def _solve_pair(d: Domain, method: str, budget: int) -> dict:
+def _solve_pair(d: Domain, method: str, budget: int, tol_frac: float = 0.01) -> dict:
     """Common encoder width across the pair, policy trunk free per variant.
 
     Scored on the worse of the two variants, so the chosen encoder is the one
     at which *both* conditioning architectures can reach the budget.
+
+    Any width landing within `tol_frac` of the budget counts as an equally good
+    fit, and the largest such encoder wins. Ranking on the raw deviation
+    instead lets a few parameters out of five thousand decide the encoder
+    width, which is the wrong trade: the fit difference is far below anything
+    that affects a result, whereas the encoder width sets how much regime
+    history the belief can carry.
     """
     build = BUILDERS[method]
+    tol = max(1.0, tol_frac * budget)
     best = None
+    within_tol: list[tuple[int, dict]] = []
     for hidden in range(6, 41):
         per_variant = {}
         ok = True
-        for integration in ("concat", "hypernet"):
-            try:
-                per_variant[integration] = _best_monotone(
-                    lambda t: _count(build(d, integration, hidden, t)),
-                    2, 96, budget,
-                )
-            except Exception:  # architecture invalid at this width
-                ok = False
-                break
+        try:
+            # Concat absorbs the budget through the policy MLP width. That width
+            # also sets the value head, so it is then pinned for the hypernet arm
+            # to keep the critic identical across the pair, and the hypernet arm
+            # absorbs the budget through the weight generator instead.
+            trunk, n_concat = _best_monotone(
+                lambda t: _count(build(d, "concat", hidden, t)),
+                MIN_POLICY_WIDTH, 256, budget,
+            )
+            per_variant["concat"] = (trunk, n_concat)
+            hn_hidden, n_hyper = _best_monotone(
+                lambda hh: _count(build(d, "hypernet", hidden, trunk, hh)),
+                MIN_POLICY_WIDTH, 160, budget,
+            )
+            per_variant["hypernet"] = (hn_hidden, n_hyper)
+        except Exception:  # architecture invalid at this width
+            ok = False
         if not ok:
             continue
         worst = max(abs(v[1] - budget) for v in per_variant.values())
-        # Tie-break toward the larger encoder: more belief capacity at equal fit.
+        if worst <= tol:
+            within_tol.append((hidden, per_variant))
         if best is None or (worst, -hidden) < (best[0], -best[1]):
             best = (worst, hidden, per_variant)
-    worst, hidden, per_variant = best
+    if within_tol:
+        hidden, per_variant = max(within_tol, key=lambda hv: hv[0])
+        worst = max(abs(v[1] - budget) for v in per_variant.values())
+    else:
+        worst, hidden, per_variant = best
     return {"hidden": hidden, "variants": per_variant, "worst_delta": worst}
 
 
@@ -181,10 +213,12 @@ def run_domain(d: Domain, budget: int) -> list[tuple[str, int]]:
 
     for method in ("rl2", "varibad"):
         sol = _solve_pair(d, method, budget)
-        for integration, (trunk, n) in sol["variants"].items():
+        for integration, (knob, n) in sol["variants"].items():
             label = f"{method}-{integration}"
+            knob_name = ("policy_trunk_hidden" if integration == "concat"
+                         else "hypernet_hidden")
             setting = (f"hidden_dim={sol['hidden']}, "
-                       f"policy_trunk_hidden={trunk}")
+                       f"{knob_name}={knob}")
             print(f"{label:<24}{setting:<38}{n:>8}{n-budget:>+7}")
             counts.append((label, n))
 

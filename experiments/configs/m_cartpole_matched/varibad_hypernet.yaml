@@ -15,8 +15,8 @@ agent:
     reward_decoder: gaussian
     hidden_dim: 21
     latent_dim: 2
-    policy_trunk_layers: 2
-    policy_trunk_hidden: 13
+    policy_trunk_layers: 1
+    policy_trunk_hidden: 71
     hypernet_target_hidden: 4
     hypernet_hidden: 4
     hypernet_init_scale: 0.01
@@ -25,3 +25,5 @@ agent:
     ent_coef: 0.01
     max_grad_norm: 0.5
     kl_coef: 0.1
+    recon_window: 1
+    decoder_obs_dim: 4

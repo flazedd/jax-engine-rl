@@ -112,33 +112,39 @@ class GRUActorCritic(nn.Module):
 
         policy_obs = self._policy_obs(obs)
 
-        trunk_out = (
-            jnp.concatenate([policy_obs, policy_belief], axis=-1)
-            if (self.integration == "concat" and self.concat_policy_reads_obs)
-            else policy_belief
-        )
-        for _ in range(self.policy_trunk_layers):
-            trunk_out = nn.Dense(
-                self.policy_trunk_hidden,
-                kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
-            )(trunk_out)
-            trunk_out = nn.tanh(trunk_out)
-
         if self.integration == "concat":
-            policy_in = nn.LayerNorm()(trunk_out) if self.belief_layernorm else trunk_out
+            x = (
+                jnp.concatenate([policy_obs, policy_belief], axis=-1)
+                if self.concat_policy_reads_obs
+                else policy_belief
+            )
+            for _ in range(self.policy_trunk_layers):
+                x = nn.Dense(
+                    self.policy_trunk_hidden,
+                    kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
+                )(x)
+                x = nn.tanh(x)
+            policy_in = nn.LayerNorm()(x) if self.belief_layernorm else x
             logits = nn.Dense(
                 self.n_actions,
                 kernel_init=nn.initializers.orthogonal(0.01),
             )(policy_in)
         elif self.integration == "hypernet":
+            # The belief enters the weight generator directly. A hypernetwork is
+            # itself the belief-processing path, so nothing precedes it; the
+            # generated target carries the same number of hidden layers as the
+            # concat policy, which is what matches the two arms on the
+            # observation-to-action map. Capacity is equalised by parameter
+            # count, not by counting layers on the belief path.
             hn = Hypernet(
                 target_obs_dim=(self.policy_obs_dim or self.obs_size),
                 target_hidden=self.hypernet_target_hidden,
                 target_output_dim=self.n_actions,
                 hypernet_hidden=self.hypernet_hidden,
                 init_scale=self.hypernet_init_scale,
+                target_hidden_layers=self.policy_trunk_layers,
             )
-            flat_weights = hn(trunk_out)
+            flat_weights = hn(policy_belief)
             logits = hn.apply_target(flat_weights, policy_obs)
         else:
             raise ValueError(f"unknown integration: {self.integration!r}")

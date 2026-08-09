@@ -13,9 +13,9 @@ seed_base: 0
 agent:
   params:
     integration: concat
-    hidden_dim: 25
+    hidden_dim: 27
     policy_trunk_layers: 1
-    policy_trunk_hidden: 28
+    policy_trunk_hidden: 7
     policy_obs_dim: 4
     concat_policy_reads_obs: true
     learning_rate: 3.0e-4

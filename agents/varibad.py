@@ -173,29 +173,23 @@ class VariBADPolicy(nn.Module):
         if self.integration == "concat":
             logits = nn.Dense(self.n_actions, kernel_init=nn.initializers.orthogonal(0.01))(x)
         elif self.integration == "hypernet":
-            # Belief-only trunk before the weight generator. The concat path
-            # sends the belief through `policy_trunk_layers` of nonlinearity
-            # before it reaches the action; without this the hypernet path
-            # would use a raw belief, so the two variants would differ in
-            # belief depth as well as in how the belief enters. The trunk
-            # cannot read the observation: the generated weights must be a
-            # function of the belief alone, or the observation would enter
-            # twice, once through the weights and once through the target.
-            belief_trunk = belief
-            for _ in range(self.policy_trunk_layers):
-                belief_trunk = nn.Dense(
-                    trunk_width,
-                    kernel_init=nn.initializers.orthogonal(jnp.sqrt(2)),
-                )(belief_trunk)
-                belief_trunk = nn.tanh(belief_trunk)
+            # The belief enters the weight generator directly. A hypernetwork is
+            # itself the belief-processing path, so nothing precedes it. The
+            # generated target carries the same number of hidden layers as the
+            # concat policy, which is what matches the two arms on the
+            # observation-to-action map; capacity is equalised by parameter
+            # count, not by counting layers on the belief path. The generated
+            # weights stay a function of the belief alone, so the observation
+            # reaches the action once, through the target.
             hn = Hypernet(
                 target_obs_dim=(self.policy_obs_dim or self.obs_size),
                 target_hidden=self.hypernet_target_hidden,
                 target_output_dim=self.n_actions,
                 hypernet_hidden=self.hypernet_hidden,
                 init_scale=self.hypernet_init_scale,
+                target_hidden_layers=self.policy_trunk_layers,
             )
-            flat_weights = hn(belief_trunk)
+            flat_weights = hn(belief)
             logits = hn.apply_target(flat_weights, policy_obs)
         else:
             raise ValueError(f"unknown integration: {self.integration!r}")
@@ -257,6 +251,25 @@ class VariBADAgent:
     # Matched policy inputs; see VariBADPolicy for the semantics.
     policy_obs_dim: int = 0
 
+    # ---- Reconstruction target ------------------------------------------
+    # `recon_window = 0` reproduces the original single-latent objective: one
+    # sample from the final-step posterior q(m | tau_{:T}) reconstructs every
+    # reward in the trajectory. That assumes one task per episode.
+    #
+    # `recon_window = K > 0` is the filtering form used when the task changes
+    # within the episode. For every step t a sample is drawn from q(m | tau_{:t})
+    # and asked to predict only the next K rewards, r_t .. r_{t+K-1}. The
+    # regime is roughly constant over a window much shorter than its dwell
+    # time, so the target is consistent with the latent that has to explain it,
+    # and every posterior is scored rather than only the last one.
+    recon_window: int = 0
+    # Width of the observation slice the decoder reads. 0 = the whole augmented
+    # tuple. Set to the base observation width so the decoder does not receive
+    # the previous reward: rewards are correlated through a persistent regime,
+    # so a decoder given r_{t-1} can predict r_t without consulting the latent,
+    # which weakens the very gradient the reconstruction exists to provide.
+    decoder_obs_dim: int = 0
+
     requires_regime_label: bool = False
     requires_analytical_posterior: bool = False
     is_recurrent: bool = True
@@ -273,6 +286,12 @@ class VariBADAgent:
 
     def _decoder(self) -> VariBADRewardDecoder:
         return VariBADRewardDecoder(hidden_dim=self.hidden_dim, n_actions=self.n_actions)
+
+    def _decoder_obs(self, obs: chex.Array) -> chex.Array:
+        """Slice the decoder's view of the observation. See `decoder_obs_dim`."""
+        if self.decoder_obs_dim <= 0:
+            return obs
+        return obs[..., : self.decoder_obs_dim]
 
     def _policy(self) -> VariBADPolicy:
         return VariBADPolicy(
@@ -305,7 +324,9 @@ class VariBADAgent:
         k_e, k_d, k_p = jax.random.split(key, 3)
         dummy_carry = jnp.zeros((self.hidden_dim,), dtype=jnp.float32)
         dummy_obs_aug = jnp.zeros((self.obs_size,), dtype=jnp.float32)
-        dummy_obs_base = jnp.zeros((self.obs_size,), dtype=jnp.float32)
+        dummy_obs_base = jnp.zeros(
+            (self.decoder_obs_dim or self.obs_size,), dtype=jnp.float32
+        )
         dummy_m = jnp.zeros((self.latent_dim,), dtype=jnp.float32)
         dummy_action = jnp.asarray(0, dtype=jnp.int32)
         dummy_log_var = jnp.zeros((self.latent_dim,), dtype=jnp.float32)
@@ -467,31 +488,57 @@ class VariBADAgent:
             entropy = -jnp.sum(probs * log_probs_all, axis=-1).mean()
             ppo_loss = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
 
-            # 4. VAE loss: sample m from final posterior q(m | τ_{:T}) and
-            #    reconstruct ALL rewards r_τ for τ ∈ [0, T).
-            mu_T = mus[-1]              # [n_envs, latent_dim]
-            log_var_T = log_vars[-1]
-            sigma_T = jnp.exp(0.5 * log_var_T)
-            eps = jax.random.normal(sample_key, mu_T.shape)
-            m = mu_T + sigma_T * eps    # [n_envs, latent_dim]
-
+            # 4. VAE loss. See `recon_window` for the two forms.
             decoder = self._decoder()
-            # Decode r_τ for every τ; broadcast m over T.
-            m_bcast = jnp.broadcast_to(m[None, :, :], (T,) + m.shape)
             decode_apply = lambda mm, oo, aa: decoder.apply(
                 params["decoder"], mm, oo, aa
             )
-            r_logits = jax.vmap(jax.vmap(decode_apply))(
-                m_bcast, batch["obs"], batch["action"]
-            )  # [T, n_envs]
+            dec_obs = self._decoder_obs(batch["obs"])   # [T, n_envs, dec_dim]
+            sigmas = jnp.exp(0.5 * log_vars)
 
-            r_target = batch["reward"]
+            if self.recon_window <= 0:
+                # Original: one sample from q(m | tau_{:T}) explains everything.
+                eps = jax.random.normal(sample_key, mus[-1].shape)
+                m = mus[-1] + sigmas[-1] * eps          # [n_envs, latent_dim]
+                m_bcast = jnp.broadcast_to(m[None, :, :], (T,) + m.shape)
+                r_pred = jax.vmap(jax.vmap(decode_apply))(
+                    m_bcast, dec_obs, batch["action"]
+                )                                       # [T, n_envs]
+                r_target = batch["reward"]
+                weight = jnp.ones_like(r_target)
+            else:
+                # Filtering form: q(m | tau_{:t}) predicts the next K rewards.
+                K = int(self.recon_window)
+                eps = jax.random.normal(sample_key, mus.shape)
+                m_t = mus + sigmas * eps                # [T, n_envs, latent_dim]
+
+                # Target index t+k, clamped so the gather stays in range; the
+                # mask zeroes the steps that ran past the end of the rollout,
+                # keeping shapes static for jit.
+                t_idx = jnp.arange(T)[:, None]          # [T, 1]
+                k_idx = jnp.arange(K)[None, :]          # [1, K]
+                tau = jnp.minimum(t_idx + k_idx, T - 1)  # [T, K]
+                weight = (t_idx + k_idx < T).astype(jnp.float32)[..., None]
+
+                m_rep = jnp.broadcast_to(
+                    m_t[:, None, :, :], (T, K) + m_t.shape[1:]
+                )                                       # [T, K, n_envs, latent]
+                obs_win = dec_obs[tau]                  # [T, K, n_envs, dec_dim]
+                act_win = batch["action"][tau]          # [T, K, n_envs]
+                r_target = batch["reward"][tau]         # [T, K, n_envs]
+                weight = jnp.broadcast_to(weight, r_target.shape)
+
+                r_pred = jax.vmap(jax.vmap(jax.vmap(decode_apply)))(
+                    m_rep, obs_win, act_win
+                )                                       # [T, K, n_envs]
+
+            denom = jnp.maximum(weight.sum(), 1.0)
             if self.reward_decoder == "bernoulli":
-                recon_loss = optax.sigmoid_binary_cross_entropy(
-                    r_logits, r_target
-                ).mean()
+                per_step = optax.sigmoid_binary_cross_entropy(r_pred, r_target)
+                recon_loss = (per_step * weight).sum() / denom
             elif self.reward_decoder == "gaussian":
-                recon_loss = 0.5 * jnp.mean((r_logits - r_target) ** 2)
+                per_step = 0.5 * (r_pred - r_target) ** 2
+                recon_loss = (per_step * weight).sum() / denom
             else:
                 raise ValueError(
                     f"unknown reward_decoder: {self.reward_decoder!r}"

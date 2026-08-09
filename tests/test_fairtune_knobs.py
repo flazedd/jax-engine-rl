@@ -31,7 +31,7 @@ def _rl2_forward(model: GRUActorCritic, key) -> jnp.ndarray:
     carry = jnp.zeros((HIDDEN,), dtype=jnp.float32)
     obs = jnp.ones((OBS_SIZE,), dtype=jnp.float32)
     params = model.init(key, carry, obs)
-    _, logits, _ = model.apply(params, carry, obs)
+    _, logits, _, _ = model.apply(params, carry, obs)
     return logits
 
 
@@ -101,7 +101,7 @@ def _varibad_policy_forward(policy: VariBADPolicy, key) -> jnp.ndarray:
     mu = jnp.ones((LATENT,), dtype=jnp.float32) * 0.5
     log_var = jnp.zeros((LATENT,), dtype=jnp.float32)
     params = policy.init(key, obs, mu, log_var)
-    logits, _ = policy.apply(params, obs, mu, log_var)
+    logits, _, _ = policy.apply(params, obs, mu, log_var)
     return logits
 
 

@@ -10,11 +10,11 @@ seed_base: 0
 agent:
   params:
     integration: hypernet
-    hidden_dim: 22
+    hidden_dim: 25
     policy_trunk_layers: 1
-    policy_trunk_hidden: 22
+    policy_trunk_hidden: 17
     hypernet_target_hidden: 4
-    hypernet_hidden: 12
+    hypernet_hidden: 7
     hypernet_init_scale: 0.01
     policy_obs_dim: 11
     concat_policy_reads_obs: true

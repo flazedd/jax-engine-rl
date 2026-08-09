@@ -39,7 +39,7 @@ This framing should be stated explicitly in the thesis: *"The MM environment is 
 
 ### Problem requirements
 
-The MM environment must satisfy the following properties for the thesis to be well-posed. These are the foundation that makes meta-RL a meaningful thing to study here — if any of them fail, the research questions collapse. Concrete thresholds are committed in the M2 JSON schema; what follows is the conceptual statement.
+The MM environment must satisfy the following properties for the thesis to be well-posed. These are the foundation that makes meta-RL a meaningful thing to study here — if any of them fail, the research questions collapse. What follows is the conceptual statement; the numeric thresholds live in `oracles/verify_requirements.py` as `R1_MIN_DISAGREE_FRAC` / `R2_MIN_RATIO` / `R3_MAX_RECOVERY` / `R4_MIN_ENTROPY_DECAY` and are echoed into every stats JSON under `thresholds`. Import them from there rather than restating the numbers.
 
 **R1. Regime-conditional policy divergence.** The optimal policy on each locked regime must differ across regimes, and the value loss from playing the wrong regime's policy must be real.
 *Threshold:* `fraction_disagreeing_states >= 0.80`.
@@ -51,8 +51,7 @@ The MM environment must satisfy the following properties for the thesis to be we
 
 **R3. PPO settles on a strictly suboptimal compromise on mixed regimes.** A regime-agnostic PPO trained on the full HMM-generated trajectories must converge to a return below Oracle-PPO and below per-regime PPO.
 
-*Threshold:* `recovery_ratio = regime_agnostic_return_mean / oracle_ppo_return_mean <= 0.90`. The agnostic agent must leave at least a tenth of oracle return on the table. `gap_to_ci_ratio` is still reported for reference but does not gate the check.
-*Threshold:* `gap_to_ci_ratio >= 3.0`.
+*Threshold:* `recovery_ratio = regime_agnostic_return_mean / oracle_ppo_return_mean <= 0.90`. The agnostic agent must leave at least a tenth of oracle return on the table. `gap_to_ci_ratio` is still reported for reference but does not gate the check — the `>= 3.0` criterion it used to carry is retired.
 *Why required:* this is the gap that meta-RL methods are asked to close. Without a measurable gap, there is no room for belief-conditioned methods to shine.
 
 **R4. Regime inferability from history.** The HMM posterior must sharpen with evidence, and a policy conditioned on it must improve performance over regime-agnostic PPO.
@@ -106,6 +105,32 @@ What it outputs:
 - `results/milestones/M2/stats_M2_requirements.json` with the full pass/fail report for each R (schema specified under M2).
 - All six M2 plots in `figures/milestones/M2/`.
 - Final stdout line: `[verify_requirements] OK | env_version=e2 | R1=pass | R2=pass | R3=pass | R4=pass | all_pass=true | output=results/milestones/M2/`
+
+**Reproducing the thesis validation table: `scripts/env_validation_final.py`**
+
+`verify_requirements.py` checks one env and overwrites the shared M2 outputs, so
+it cannot on its own produce the four-row table the thesis reports. The runner
+wraps it over the four thesis environments, keeps per-env stats and figures, and
+checks the result against the values printed in the thesis:
+
+```
+uv run python -m scripts.env_validation_final               # reproduces the table
+uv run python -m scripts.env_validation_final --fast        # plumbing smoke test
+```
+
+- Environments and their expected table values are declared in `ENVS`. Editing an
+  env config without updating `expected` makes the run FAIL with a `DRIFT` line
+  per changed statistic, so a silent divergence between the repo and the thesis
+  is not possible.
+- Only `--full` writes to `results/env_validation_final/` and to
+  `figures/milestones/M2/`. Reduced modes write to `_smoke_{mode}/` and get their
+  own `m2_verify_{env}_{mode}_*` experiment namespace, because their budget is a
+  fraction of what R2 and R3 need and would otherwise replace full-budget
+  artifacts with numbers that fail their own thresholds.
+- Every env writes its figures to the same directory, so the runner snapshots
+  each env's set into `results/env_validation_final/figures/{label}/` and then
+  restores the reference env's set into `figures/milestones/M2/`. The thesis
+  appendix shows the reference env, and that must not depend on iteration order.
 
 Design notes:
 - The verification runs use `--fast` budgets internally (fewer iterations, fewer seeds) because they're diagnostic, not final-result-generating. A full-budget version of each component is what M1 and M3 do.

@@ -30,15 +30,24 @@ class Hypernet(nn.Module):
     target_output_dim: int  # action_dim
     hypernet_hidden: int
     init_scale: float = 0.01
+    # Number of hidden layers in the generated target. Set equal to the concat
+    # arm's policy depth so the observation-to-action map has the same shape in
+    # both conditioning architectures; that path is the policy function itself,
+    # and matching it is what makes the two arms comparable over observations.
+    target_hidden_layers: int = 1
+
+    def _target_shapes(self) -> list[tuple[int, int]]:
+        """(in_dim, out_dim) of each Dense layer in the generated target."""
+        dims = (
+            [self.target_obs_dim]
+            + [self.target_hidden] * self.target_hidden_layers
+            + [self.target_output_dim]
+        )
+        return list(zip(dims[:-1], dims[1:]))
 
     def target_param_count(self) -> int:
         """Total scalar weights needed to parameterize the target network."""
-        return (
-            self.target_obs_dim * self.target_hidden
-            + self.target_hidden
-            + self.target_hidden * self.target_output_dim
-            + self.target_output_dim
-        )
+        return sum(d_in * d_out + d_out for d_in, d_out in self._target_shapes())
 
     @nn.compact
     def __call__(self, belief: chex.Array) -> chex.Array:
@@ -64,15 +73,19 @@ class Hypernet(nn.Module):
 
         flat_weights: [target_param_count]. obs: [target_obs_dim].
         Returns logits: [target_output_dim].
+
+        Hidden layers use tanh; the output layer is linear, matching the concat
+        arm's policy MLP.
         """
+        shapes = self._target_shapes()
         i = 0
-        D, H, A = self.target_obs_dim, self.target_hidden, self.target_output_dim
-        W1 = flat_weights[i : i + D * H].reshape(D, H)
-        i += D * H
-        b1 = flat_weights[i : i + H]
-        i += H
-        W2 = flat_weights[i : i + H * A].reshape(H, A)
-        i += H * A
-        b2 = flat_weights[i : i + A]
-        h = jnp.tanh(obs @ W1 + b1)
-        return h @ W2 + b2
+        h = obs
+        for layer, (d_in, d_out) in enumerate(shapes):
+            W = flat_weights[i : i + d_in * d_out].reshape(d_in, d_out)
+            i += d_in * d_out
+            b = flat_weights[i : i + d_out]
+            i += d_out
+            h = h @ W + b
+            if layer < len(shapes) - 1:
+                h = jnp.tanh(h)
+        return h

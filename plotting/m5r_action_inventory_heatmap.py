@@ -23,12 +23,12 @@ import numpy as np
 from evaluation.action_distribution import regime_separation_per_seed
 from plotting.style import apply_style
 
+from utils.paths import project_fig_dir, results_root, thesis_fig_dir, resolve_data
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_ROOT = REPO_ROOT / "results"
-PROJECT_FIG_DIR = REPO_ROOT / "figures" / "milestones" / "M5R"
-THESIS_FIG_DIR = (
-    REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
-)
+RESULTS_ROOT = results_root()
+PROJECT_FIG_DIR = project_fig_dir("milestones", "M5R")
+THESIS_FIG_DIR = thesis_fig_dir()
 
 # Fixed row order. The regime-agnostic agent sits at the top as the zero
 # anchor: it cannot observe the regime, so its three regime panels are
@@ -50,7 +50,7 @@ def main() -> int:
     if not stats_path.exists():
         print(f"[m5r_action_inv_heatmap] missing {stats_path}", flush=True)
         return 1
-    with open(stats_path) as f:
+    with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
     action_names = stats["action_names"]
     n_regimes = stats["n_regimes"]

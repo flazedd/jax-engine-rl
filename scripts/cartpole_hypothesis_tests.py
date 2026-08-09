@@ -1,8 +1,9 @@
 """Cartpole external-validity probe — Family A hypothesis test.
 
-Family A: hypernet > concat at the single difficulty cell, paired
-Wilcoxon n=8, Holm-corrected over 2 hypotheses. Same protocol as
-M5 Stage A and M6 Family A but on the second-POMDP env.
+Family A: hypernet versus concat at each difficulty cell, two-sided paired
+Wilcoxon, Holm-corrected within the level's comparison set. Runs through
+`evaluation.metrics` so the second domain uses the same statistical protocol as
+the RSMM programme rather than a private copy of it.
 
 Writes:
   results/milestones/cartpole/stats_cartpole_hypothesis_tests.json
@@ -15,8 +16,14 @@ import time
 from pathlib import Path
 
 import numpy as np
-from scipy import stats
 
+from evaluation.metrics import (
+    bootstrap_paired_mean_ci,
+    holm_bonferroni,
+    leave_one_out_sensitivity,
+    paired_wilcoxon,
+    rank_biserial,
+)
 from scripts.cartpole_names import cartpole_experiment_name
 from utils.script_output import ScriptRun
 
@@ -41,21 +48,11 @@ def _bootstrap_median_ci(diffs: np.ndarray, n_boot: int = 10_000) -> tuple[float
     return float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))
 
 
-def _loo(diffs: np.ndarray) -> bool:
-    """Leave-one-out: every n-1 subset must still be Wilcoxon-significant
-    at the Holm-corrected level. Mirrors M5/M6 protocol."""
-    for i in range(len(diffs)):
-        d = np.delete(diffs, i)
-        try:
-            res = stats.wilcoxon(d, alternative="greater")
-        except ValueError:
-            return False
-        # min Holm-corrected p over family-of-2 at n=7 paired Wilcoxon
-        # is 2 / 128 = 0.0156 × 2 = 0.0313 (still passes), but if any LOO
-        # subset has p_raw > 0.025 we cannot mark it robust to LOO at α.
-        if res.pvalue > 0.025:
-            return False
-    return True
+def _loo(hyp: np.ndarray, conc: np.ndarray, family_size: int) -> bool:
+    """Stability under seed omission, via the shared protocol helper."""
+    return bool(leave_one_out_sensitivity(
+        hyp, conc, n_corrections=family_size, alternative="two-sided",
+    )["stable_under_seed_omission"])
 
 
 def main() -> int:
@@ -111,28 +108,35 @@ def main() -> int:
 
     raw = []
     for name, hyp, conc, level in hypotheses:
-        diffs = methods_by_level[level][hyp] - methods_by_level[level][conc]
-        res = stats.wilcoxon(diffs, alternative="greater")
-        ci_low, ci_high = _bootstrap_median_ci(diffs)
+        h_vals = methods_by_level[level][hyp]
+        c_vals = methods_by_level[level][conc]
+        diffs = h_vals - c_vals
+        wil = paired_wilcoxon(h_vals, c_vals, alternative="two-sided")
+        mean_delta, ci_low, ci_high = bootstrap_paired_mean_ci(h_vals, c_vals)
         raw.append({
             "name": name,
             "level": level,
-            "p_raw": float(res.pvalue),
+            "p_raw": wil["p"],
+            "wilcoxon_null_distribution": wil["null_distribution"],
             "delta_median": float(np.median(diffs)),
-            "delta_mean": float(diffs.mean()),
+            "delta_mean": mean_delta,
             "ci_low": ci_low,
             "ci_high": ci_high,
+            "rank_biserial": rank_biserial(h_vals, c_vals),
             "n_pos": int((diffs > 0).sum()),
             "n_total": int(len(diffs)),
-            "loo_robust": bool(_loo(diffs)),
             "diffs": diffs.tolist(),
+            "_pair": (h_vals, c_vals),
         })
 
-    sorted_idx = sorted(range(len(raw)), key=lambda i: raw[i]["p_raw"])
     m = len(raw)
-    for rank, idx in enumerate(sorted_idx):
-        raw[idx]["p_holm"] = min(1.0, raw[idx]["p_raw"] * (m - rank))
-        raw[idx]["supported"] = raw[idx]["p_holm"] < 0.05
+    for idx, p_holm in enumerate(holm_bonferroni([r["p_raw"] for r in raw])):
+        raw[idx]["p_holm"] = p_holm
+        raw[idx]["supported"] = bool(p_holm < 0.05)
+    for r in raw:
+        h_vals, c_vals = r.pop("_pair")
+        r["loo_robust"] = _loo(h_vals, c_vals, m)
+        r["stable_under_seed_omission"] = r["loo_robust"]
 
     n_supported = sum(1 for r in raw if r["supported"])
     n_loo_robust = sum(1 for r in raw if r["loo_robust"])
@@ -178,7 +182,7 @@ def main() -> int:
     for r in raw:
         print(
             f"[cartpole_tests]   {r['name']:45s} | "
-            f"Δmedian={r['delta_median']:+.2f} "
+            f"Δmean={r['delta_mean']:+.2f} "
             f"CI=[{r['ci_low']:+.2f}, {r['ci_high']:+.2f}] | "
             f"n_pos={r['n_pos']}/{r['n_total']} | "
             f"p_raw={r['p_raw']:.4f} p_holm={r['p_holm']:.4f} | "

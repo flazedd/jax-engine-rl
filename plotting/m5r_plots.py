@@ -36,13 +36,13 @@ _CELL_BRAND = {
     "rl2_hypernet": "#2a9d8f", "varibad_hypernet": "#73b8ad",
 }
 
+from utils.paths import final_dir, project_fig_dir, results_root, thesis_fig_dir, resolve_data
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_ROOT = REPO_ROOT / "results"
-FINAL_DIR = RESULTS_ROOT / "M5R" / "final"
-PROJECT_FIG_DIR = REPO_ROOT / "figures" / "milestones" / "M5R"
-THESIS_FIG_DIR = (
-    REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
-)
+RESULTS_ROOT = results_root()
+FINAL_DIR = final_dir()
+PROJECT_FIG_DIR = project_fig_dir("milestones", "M5R")
+THESIS_FIG_DIR = thesis_fig_dir()
 
 
 def _both_targets(name: str) -> list[Path]:
@@ -67,6 +67,15 @@ DISTINGUISHABILITY_LEVELS = (
     ("e_final", "Medium"),
     ("distinguishability_hard", "Hard"),
 )
+# The figure the thesis includes as m5r_sweep_n20.png: the three
+# distinguishability levels plus the coupled fast-persistence instance, which
+# is what its caption describes.
+THESIS_SWEEP_LEVELS = (
+    ("distinguishability_easy", "Easy"),
+    ("e_final", "Medium"),
+    ("distinguishability_hard", "Hard"),
+    ("coupled_fast", "Coupled fast persistence ($P_{ii}=0.95$)"),
+)
 KAPPA_LEVELS = (
     ("kappa02", "$\\kappa = 0.02$"),
     ("e_final", "$\\kappa = 0.05$"),
@@ -76,7 +85,7 @@ KAPPA_LEVELS = (
 
 
 def _load() -> dict:
-    with open(FINAL_DIR / "per_cell_env.json") as f:
+    with open(resolve_data(FINAL_DIR / "per_cell_env.json")) as f:
         return json.load(f)
 
 
@@ -85,7 +94,7 @@ def _load_probe(classifier: str = "logistic") -> dict | None:
     p = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}.json"
     if not p.exists():
         return None
-    with open(p) as f:
+    with open(resolve_data(p)) as f:
         return json.load(f)
 
 
@@ -94,7 +103,7 @@ def _load_stacked_obs() -> dict | None:
     p = FINAL_DIR / "m5r_stacked_obs_sweep.json"
     if not p.exists():
         return None
-    with open(p) as f:
+    with open(resolve_data(p)) as f:
         return json.load(f)
 
 
@@ -291,7 +300,9 @@ def plot_method_ladder(out_path: Path) -> None:
                     textcoords="offset points", ha="center", va="bottom",
                     fontsize=8.5, fontweight="bold", color="#333333")
 
-    _bar(0.0, stacked["by_env"]["e_final"], C_STACK)
+    stacked_cell = (stacked or {}).get("by_env", {}).get("e_final")
+    if stacked_cell is not None:
+        _bar(0.0, stacked_cell, C_STACK)
     for i_m, method in enumerate(["rl2", "varibad"]):
         xc = i_m + 1
         _bar(xc - bw * 0.62, cells[f"{method}_concat"], C_CONCAT)
@@ -449,7 +460,7 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     for cell_key, label, color, ls, m_path in cell_specs:
         if not m_path.exists():
             continue
-        with open(m_path) as f:
+        with open(resolve_data(m_path)) as f:
             m = json.load(f)
         per_seed = np.asarray(m["per_seed_mean_return_per_iter"])  # [seeds, T]
         mean = per_seed.mean(axis=0)
@@ -513,7 +524,7 @@ def _draw_probe_per_t(ax, classifier: str, env_label: str = "e_final") -> bool:
     suffix = "" if classifier == "logistic" else f"_{classifier}"
     hires = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}_hires.json"
     if hires.exists():
-        with open(hires) as f:
+        with open(resolve_data(hires)) as f:
             probe = json.load(f)
     else:
         probe = _load_probe(classifier)
@@ -650,12 +661,22 @@ def main() -> int:
             "MarketMakingV1, distinguishability-axis difficulty sweep",
             target,
         )
+    for target in _both_targets("m5r_sweep_n20.png"):
+        plot_sweep(
+            THESIS_SWEEP_LEVELS,
+            "MarketMakingV1, in-domain difficulty study at $n=20$",
+            target,
+        )
     for target in _both_targets("m5r_posterior_vs_performance.png"):
         plot_posterior_vs_performance(target, classifier="logistic")
     for target in _both_targets("m5r_posterior_vs_performance_mlp.png"):
         plot_posterior_vs_performance(target, classifier="mlp")
     for target in _both_targets("m5r_learning_curves.png"):
         plot_m5r_learning_curves(target)
+    # The thesis includes the two-panel version; it was defined but never
+    # called, so the figure it references had no producer.
+    for target in _both_targets("m5r_probe_per_t_combined.png"):
+        plot_m5r_probe_per_t_combined(target)
     for target in _both_targets("m5r_probe_per_t.png"):
         plot_m5r_probe_per_t(target, classifier="logistic")
     for target in _both_targets("m5r_probe_per_t_mlp.png"):

@@ -7,7 +7,7 @@ Family A (4 environments): the gap decomposition is non-degenerate at every
   with non-overlapping bootstrap CIs on regime-agnostic and Oracle-PPO.
 
 Family B (8 variants): hypernet > concat at every (env, method) variant.
-  Paired Wilcoxon (one-sided, alternative="greater") on the n seeds the
+  Paired Wilcoxon (two-sided) on the n seeds the
   configs declare. Holm-Bonferroni correction across all 8 tests. Each test
   must clear two bars: Holm-corrected p < 0.05 AND bootstrap CI on the paired
   difference excludes zero.
@@ -176,11 +176,11 @@ def _run_family_b(per_cell_env: dict[str, Any]) -> dict[str, dict[str, Any]]:
         test = primary_hypothesis_test(
             method=method_seeds, baseline=baseline_seeds,
             family_size=FAMILY_B_SIZE, alpha=ALPHA, n_boot=N_BOOT,
-            alternative="greater",
+            alternative="two-sided",
         )
         loo = leave_one_out_sensitivity(
             method=method_seeds, baseline=baseline_seeds, alpha=ALPHA,
-            n_corrections=FAMILY_B_SIZE, alternative="greater",
+            n_corrections=FAMILY_B_SIZE, alternative="two-sided",
         )
         out[hyp_name] = {
             **test, "loo": loo, "env": env,
@@ -315,7 +315,7 @@ def main() -> int:
         "family_b": {
             "name": "hypernet_beats_concat",
             "size": FAMILY_B_SIZE,
-            "alternative": "greater",
+            "alternative": "two-sided",
             "n_seeds": 8,
             "results": family_b,
         },
@@ -369,7 +369,7 @@ def main() -> int:
         loo = hyp.get("loo", {})
         print(
             f"[m5r_tests]   {hyp_name:>50s} | "
-            f"Δmedian={hyp['median_paired_delta']:+7.2f} "
+            f"Δmean={hyp['mean_paired_delta']:+7.2f} "
             f"CI=[{hyp['delta_ci'][0]:+6.2f},{hyp['delta_ci'][1]:+6.2f}] | "
             f"p_corr={hyp['holm_corrected_p']:.4f} | "
             f"sup={hyp['supported']} loo={loo.get('robust_to_loo')}",

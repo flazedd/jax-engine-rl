@@ -18,10 +18,12 @@ import matplotlib.pyplot as plt
 
 from plotting.style import PALETTE, apply_style, polish, ref_line
 
+from utils.paths import final_dir, project_fig_dir, thesis_fig_dir, resolve_data
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FINAL = REPO_ROOT / "results" / "M5R" / "final"
-PROJECT_FIG = REPO_ROOT / "figures" / "milestones" / "M5R"
-THESIS_FIG = REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures"
+FINAL = final_dir()
+PROJECT_FIG = project_fig_dir("milestones", "M5R")
+THESIS_FIG = thesis_fig_dir()
 
 FLOOR, BELIEF, ORACLE = 138.0, 168.8, 182.0
 
@@ -34,7 +36,7 @@ def _load(prefix, head):
     p = FINAL / f"{prefix}_{head}.json"
     if not p.exists():
         return None, None
-    d = json.load(open(p))
+    d = json.load(open(resolve_data(p)))
     return d["final_return_mean"], d["final_return_std"]
 
 

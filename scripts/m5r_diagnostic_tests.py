@@ -92,10 +92,17 @@ def main() -> int:
             for k, v in payload["by_method"].items()
         }
 
-    # The family is every hypernet-versus-concat comparison tested here, so the
-    # Holm correction spans diagnostics as well as methods.
+    # The protocol's diagnostic comparison set is the action separation and the
+    # belief-swap diagnostic over both methods, which is four comparisons. The
+    # two further belief-swap channels are robustness checks on the same
+    # question and are reported without correction, exactly as the extra probe
+    # metrics are: correcting them would enlarge the set and cost the primary
+    # diagnostics power for tests no claim rests on.
+    PRIMARY_TAGS = ("locked_regime_action_distribution", "belief_swap_belief_only")
+    corrected = {k: v for k, v in sources.items() if k in PRIMARY_TAGS}
+    uncorrected = {k: v for k, v in sources.items() if k not in PRIMARY_TAGS}
     family_size = sum(
-        1 for per_seed in sources.values() for _n, h, c in PAIRS
+        1 for per_seed in corrected.values() for _n, h, c in PAIRS
         if h in per_seed and c in per_seed
     )
 
@@ -103,8 +110,9 @@ def main() -> int:
     raw_p: list[float] = []
     index: list[tuple[str, str]] = []
 
-    for tag, per_seed in sources.items():
+    for tag, per_seed in {**corrected, **uncorrected}.items():
         results[tag] = {}
+        in_set = tag in corrected
         for name, hyper, concat in PAIRS:
             if hyper not in per_seed or concat not in per_seed:
                 continue
@@ -118,30 +126,38 @@ def main() -> int:
                 h, c, n_corrections=family_size, alternative="two-sided",
             )
             test["leave_one_out"] = loo
+            # Promoted to the top level: the protocol reports this property for
+            # every claim, and the contract audit looks for it there.
+            test["stable_under_seed_omission"] = bool(
+                loo["stable_under_seed_omission"]
+            )
             test["mean_hypernet"] = float(h.mean())
             test["mean_concat"] = float(c.mean())
             test["direction"] = "hypernet > concat" if h.mean() > c.mean() \
                 else "concat > hypernet"
+            test["in_comparison_set"] = in_set
             results[tag][name] = test
-            raw_p.append(test["wilcoxon_p"])
-            index.append((tag, name))
+            if in_set:
+                raw_p.append(test["wilcoxon_p"])
+                index.append((tag, name))
 
     # Recompute Holm properly across the whole family rather than the
     # per-test Bonferroni scaling primary_hypothesis_test applies.
     for (tag, name), p_corr in zip(index, holm_bonferroni(raw_p)):
         r = results[tag][name]
         r["holm_corrected_p"] = p_corr
+        # The protocol makes the corrected p the inferential decision; the
+        # interval states magnitude and precision and is reported beside it.
         lo, hi = r["delta_ci"]
-        r["supported"] = bool(
-            (not np.isnan(p_corr)) and p_corr < 0.05 and (lo > 0 or hi < 0)
-        )
+        r["ci_excludes_zero"] = bool(lo > 0 or hi < 0)
+        r["supported"] = bool((not np.isnan(p_corr)) and p_corr < 0.05)
 
     for tag, block in results.items():
         for name, r in block.items():
             print(
                 f"[m5r_diag_tests] {tag:34s} {name:8s} "
                 f"hyper={r['mean_hypernet']:.3f} concat={r['mean_concat']:.3f} "
-                f"delta={r['median_paired_delta']:+.3f} "
+                f"delta={r['mean_paired_delta']:+.3f} "
                 f"CI[{r['delta_ci'][0]:+.3f},{r['delta_ci'][1]:+.3f}] "
                 f"p_holm={r['holm_corrected_p']:.4g} "
                 f"supported={r['supported']} ({r['direction']})",
@@ -153,7 +169,9 @@ def main() -> int:
         json.dump(
             {
                 "alternative": "two-sided",
+                "comparison_set": "diagnostics",
                 "family_size": family_size,
+                "uncorrected_robustness_checks": sorted(uncorrected),
                 "results": results,
             },
             f, indent=2,

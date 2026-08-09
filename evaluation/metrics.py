@@ -76,27 +76,118 @@ def bootstrap_paired_delta_ci(
 # ---------------------------------------------------------------------------
 
 
+def bootstrap_paired_mean_ci(
+    method: list[float] | np.ndarray,
+    baseline: list[float] | np.ndarray,
+    n_boot: int = 10_000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, float]:
+    """Mean paired delta + percentile bootstrap CI.
+
+    This is the estimand the thesis reports: `d_bar`, the mean of the per-seed
+    differences, with a percentile interval from resampling the *pairs* as
+    units so the dependence induced by the shared seed is preserved.
+
+    Returns (mean_delta, ci_lo, ci_hi).
+    """
+    a = np.asarray(method, dtype=float)
+    b = np.asarray(baseline, dtype=float)
+    if a.shape != b.shape:
+        raise ValueError(f"shape mismatch: {a.shape} vs {b.shape}")
+    deltas = a - b
+    mean = float(np.mean(deltas))
+    if deltas.size <= 1:
+        return mean, mean, mean
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, deltas.size, size=(n_boot, deltas.size))
+    boot_means = np.mean(deltas[idx], axis=1)
+    lo = float(np.percentile(boot_means, 100 * alpha / 2))
+    hi = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
+    return mean, lo, hi
+
+
+# ---------------------------------------------------------------------------
+# Paired Wilcoxon
+# ---------------------------------------------------------------------------
+
+
 def paired_wilcoxon(
     method: list[float] | np.ndarray,
     baseline: list[float] | np.ndarray,
-    alternative: str = "greater",
-) -> dict[str, float]:
-    """Paired Wilcoxon signed-rank test. Returns p, statistic, n_pairs.
+    alternative: str = "two-sided",
+) -> dict[str, Any]:
+    """Paired Wilcoxon signed-rank test, per the thesis statistical protocol.
 
-    `alternative="greater"` tests H1: method > baseline (one-sided).
+    Two-sided by default: no direction is committed to before the runs. Zero
+    differences are dropped and the pair count reduced accordingly, tied
+    absolute differences take average ranks, and the exact null distribution is
+    used whenever it is valid. Exactness is impossible once ties or dropped
+    zeros are present, so the normal approximation with continuity correction
+    is used there instead and the choice is recorded in `null_distribution`.
+
     Falls back to NaN p-value if all pairs are zero (Wilcoxon is undefined).
     """
     a = np.asarray(method, dtype=float)
     b = np.asarray(baseline, dtype=float)
     deltas = a - b
+    n_all = int(deltas.size)
     if np.all(deltas == 0):
-        return {"p": float("nan"), "statistic": 0.0, "n_pairs": int(deltas.size)}
-    res = sps.wilcoxon(a, b, alternative=alternative, zero_method="wilcox")
+        return {
+            "p": float("nan"), "statistic": 0.0, "n_pairs": n_all,
+            "n_nonzero_pairs": 0, "n_zero_dropped": n_all,
+            "null_distribution": "undefined", "alternative": alternative,
+        }
+    nonzero = deltas[deltas != 0]
+    n_zero = n_all - int(nonzero.size)
+    absd = np.abs(nonzero)
+    has_ties = bool(np.unique(absd).size != absd.size)
+    exact_ok = (n_zero == 0) and (not has_ties)
+    method_name = "exact" if exact_ok else "asymptotic"
+    res = sps.wilcoxon(
+        a, b, alternative=alternative, zero_method="wilcox",
+        method=method_name, correction=not exact_ok,
+    )
     return {
         "p": float(res.pvalue),
         "statistic": float(res.statistic),
-        "n_pairs": int(deltas.size),
+        "n_pairs": n_all,
+        "n_nonzero_pairs": int(nonzero.size),
+        "n_zero_dropped": n_zero,
+        "null_distribution": method_name,
+        "alternative": alternative,
     }
+
+
+# ---------------------------------------------------------------------------
+# Matched-pairs rank-biserial correlation (the reported effect size)
+# ---------------------------------------------------------------------------
+
+
+def rank_biserial(
+    method: list[float] | np.ndarray,
+    baseline: list[float] | np.ndarray,
+) -> float:
+    """Matched-pairs rank-biserial correlation r_rb = (W+ - W-) / (W+ + W-).
+
+    W+ and W- are the sums of the positive and the negative signed ranks over
+    the non-zero differences, with average ranks for ties. Runs from -1 to +1
+    on the same rank scale the signed-rank test uses. NaN when every pair is
+    zero, where no ranking exists.
+    """
+    a = np.asarray(method, dtype=float)
+    b = np.asarray(baseline, dtype=float)
+    deltas = a - b
+    nonzero = deltas[deltas != 0]
+    if nonzero.size == 0:
+        return float("nan")
+    ranks = sps.rankdata(np.abs(nonzero))
+    w_pos = float(ranks[nonzero > 0].sum())
+    w_neg = float(ranks[nonzero < 0].sum())
+    total = w_pos + w_neg
+    if total == 0:
+        return float("nan")
+    return float((w_pos - w_neg) / total)
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +252,7 @@ def leave_one_out_sensitivity(
     baseline: list[float] | np.ndarray,
     alpha: float = 0.05,
     n_corrections: int = 1,
-    alternative: str = "greater",
+    alternative: str = "two-sided",
 ) -> dict[str, Any]:
     """For each seed i, drop it and re-test. Flag if removing any single
     seed flips the "supported" decision.
@@ -189,6 +280,9 @@ def leave_one_out_sensitivity(
             flipping = int(i)
             break
     return {
+        # Thesis name for the property; `robust_to_loo` is kept as an alias so
+        # existing readers of this dict keep working.
+        "stable_under_seed_omission": flipping is None,
         "robust_to_loo": flipping is None,
         "flipping_seed": flipping,
         "n_seeds": int(n),
@@ -246,21 +340,31 @@ def primary_hypothesis_test(
     family_size: int,
     alpha: float = 0.05,
     n_boot: int = 10_000,
-    alternative: str = "greater",
+    alternative: str = "two-sided",
 ) -> dict[str, Any]:
-    """Run the full primary-hypothesis decision: paired Wilcoxon (one-sided),
-    Holm correction across `family_size`, paired-delta median + bootstrap CI,
-    Cliff's δ. "supported" requires Holm-corrected p < alpha AND the CI
-    excludes zero (one-sided: lower bound > 0 for "greater" alternative).
+    """Run the full primary-hypothesis decision of the thesis protocol.
+
+    Two-sided paired Wilcoxon, Holm correction across `family_size`, the mean
+    paired difference `d_bar` with its percentile bootstrap CI, and the
+    matched-pairs rank-biserial effect size.
+
+    `supported` is the Holm-corrected p alone: the protocol treats the test as
+    the inferential decision and the interval as the statement of magnitude and
+    precision, not as a second gate. `ci_excludes_zero` is reported alongside so
+    a reader can see both.
     """
     wil = paired_wilcoxon(method, baseline, alternative=alternative)
     p_corr = (
         float("nan") if np.isnan(wil["p"]) else min(1.0, wil["p"] * family_size)
     )
-    median, lo, hi = bootstrap_paired_delta_ci(
+    mean, lo, hi = bootstrap_paired_mean_ci(
+        method, baseline, n_boot=n_boot, alpha=alpha
+    )
+    median, med_lo, med_hi = bootstrap_paired_delta_ci(
         method, baseline, n_boot=n_boot, alpha=alpha
     )
     delta = cliffs_delta(method, baseline)
+    r_rb = rank_biserial(method, baseline)
 
     if alternative == "greater":
         ci_excludes_zero = lo > 0
@@ -269,14 +373,21 @@ def primary_hypothesis_test(
     else:
         ci_excludes_zero = (lo > 0) or (hi < 0)
     p_passes = (not np.isnan(p_corr)) and p_corr < alpha
-    supported = bool(p_passes and ci_excludes_zero)
     return {
-        "median_paired_delta": median,
+        "mean_paired_delta": mean,
         "delta_ci": [lo, hi],
+        "median_paired_delta": median,
+        "median_delta_ci": [med_lo, med_hi],
         "wilcoxon_p": wil["p"],
         "wilcoxon_statistic": wil["statistic"],
+        "wilcoxon_null_distribution": wil["null_distribution"],
+        "alternative": alternative,
         "n_pairs": wil["n_pairs"],
+        "n_nonzero_pairs": wil["n_nonzero_pairs"],
+        "n_zero_dropped": wil["n_zero_dropped"],
         "holm_corrected_p": p_corr,
+        "rank_biserial": r_rb,
         "cliffs_delta": delta,
-        "supported": supported,
+        "ci_excludes_zero": bool(ci_excludes_zero),
+        "supported": bool(p_passes),
     }

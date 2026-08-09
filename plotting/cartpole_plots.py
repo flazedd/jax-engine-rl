@@ -30,14 +30,16 @@ _CELL_COLORS = {
     "varibad_hypernet": "#73b8ad",
 }
 
+from utils.paths import project_fig_dir, results_root, resolve_data
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_ROOT = REPO_ROOT / "results"
-FIGURES_ROOT = REPO_ROOT / "figures" / "milestones" / "cartpole"
+RESULTS_ROOT = results_root()
+FIGURES_ROOT = project_fig_dir("milestones", "cartpole")
 
 
 def _load(method: str) -> np.ndarray:
     p = RESULTS_ROOT / f"m_cartpole_{method}" / "metrics.json"
-    with open(p) as f:
+    with open(resolve_data(p)) as f:
         m = json.load(f)
     return np.asarray(m["per_seed_final_return"], dtype=float)
 
@@ -132,7 +134,7 @@ def plot_posterior_vs_performance(out_path: Path) -> bool:
     if not stats_path.exists():
         print(f"[cartpole_plots] skip scatter: missing {stats_path}", flush=True)
         return False
-    with open(stats_path) as f:
+    with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
     points = stats.get("scatter_points", [])
     if not points:
@@ -217,7 +219,7 @@ def plot_logistic_vs_mlp_side_by_side(out_path: Path) -> bool:
         if not p.exists():
             print(f"[cartpole_plots] skip side-by-side: missing {p}", flush=True)
             return False
-        with open(p) as f:
+        with open(resolve_data(p)) as f:
             stats_by_clf[clf] = json.load(f)
 
     apply_style()
@@ -295,7 +297,7 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
         if not p.exists():
             print(f"[cartpole_plots] skip 2x2: missing {p}", flush=True)
             return False
-        with open(p) as f:
+        with open(resolve_data(p)) as f:
             stats[k] = json.load(f)
 
     apply_style()
@@ -373,7 +375,7 @@ def plot_difficulty_sweep_returns(out_path: Path) -> bool:
 
     def get_seeds(method: str, level: str) -> np.ndarray:
         name = f"m_cartpole_{method}" if level == "medium" else f"m_cartpole_{method}_{level}"
-        with open(RESULTS_ROOT / name / "metrics.json") as f:
+        with open(resolve_data(RESULTS_ROOT / name / "metrics.json")) as f:
             return np.asarray(json.load(f)["per_seed_final_return"], dtype=float)
 
     means = {m: [float(get_seeds(m, l).mean()) for l in levels] for m in methods}
@@ -448,7 +450,7 @@ def plot_difficulty_sweep_scatter(out_path: Path) -> bool:
         if not p.exists():
             print(f"[cartpole_plots] skip sweep_scatter: missing {p}", flush=True)
             return False
-        with open(p) as f:
+        with open(resolve_data(p)) as f:
             stats_by[clf] = json.load(f)
 
     apply_style()
@@ -523,7 +525,7 @@ def plot_axis_returns(out_path: Path, axis: str) -> bool:
             name = f"m_cartpole_{method}_{level}"
         else:
             name = f"m_cartpole_{method}_{axis}_{level}"
-        with open(RESULTS_ROOT / name / "metrics.json") as f:
+        with open(resolve_data(RESULTS_ROOT / name / "metrics.json")) as f:
             return np.asarray(json.load(f)["per_seed_final_return"], dtype=float)
 
     means = {m: [float(get_seeds(m, l).mean()) for l in levels] for m in methods}
@@ -600,7 +602,7 @@ def plot_two_axis_scatter_grid(out_path: Path) -> bool:
         if not p.exists():
             print(f"[cartpole_plots] skip 4x3 grid: missing {p}", flush=True)
             return False
-        with open(p) as f:
+        with open(resolve_data(p)) as f:
             stats_by[label] = json.load(f)
 
     apply_style()

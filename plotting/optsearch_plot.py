@@ -18,10 +18,12 @@ import matplotlib.pyplot as plt
 
 from plotting.style import PALETTE, apply_style, polish, ref_line
 
+from utils.paths import project_fig_dir, results_root, thesis_fig_dir, resolve_data
+
 REPO = Path(__file__).resolve().parent.parent
-FINAL = REPO / "results" / "M5R" / "final"
-PROJECT_FIG = REPO / "figures" / "milestones" / "M5R"
-THESIS_FIG = REPO.parent / "master_thesis_reinier_schep_final" / "figures"
+FINAL = results_root() / "M5R" / "final"
+PROJECT_FIG = project_fig_dir("milestones", "M5R")
+THESIS_FIG = thesis_fig_dir()
 
 ORACLE = 182.0  # medium-env oracle ceiling, for context
 METHODS = [("rl2", "RL²"), ("varibad", "VariBAD")]
@@ -65,7 +67,7 @@ def _build(suffix, out_name):
     for method, label in METHODS:
         p = FINAL / f"optsearch_{method}{suffix}.json"
         if p.exists():
-            d = json.load(open(p))
+            d = json.load(open(resolve_data(p)))
             # require both arches present and non-empty
             if all(d["by_arch"].get(a, {}).get("per_config") for a in ("concat", "hypernet")):
                 panels.append((d, label))

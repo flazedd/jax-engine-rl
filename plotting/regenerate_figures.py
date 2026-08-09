@@ -35,9 +35,11 @@ from plotting.m3_plots import (
 )
 from utils.script_output import ScriptRun
 
+from utils.paths import project_fig_dir, results_root, resolve_data
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_ROOT = REPO_ROOT / "results"
-FIGURES_ROOT = REPO_ROOT / "figures"
+RESULTS_ROOT = results_root()
+FIGURES_ROOT = project_fig_dir()
 
 
 def regenerate_m0(run: ScriptRun) -> dict:
@@ -67,7 +69,7 @@ def regenerate_m1(run: ScriptRun) -> dict:
 
 def regenerate_m2(run: ScriptRun) -> dict:
     stats_path = RESULTS_ROOT / "milestones" / "M2" / "stats_M2_requirements.json"
-    with open(stats_path) as f:
+    with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
 
     env_version = stats["env_version"]
@@ -91,7 +93,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
     per_regime_metrics = []
     for r in range(env.n_regimes):
         mpath = RESULTS_ROOT / f"m2_verify_{env_version}_per_regime_{r}" / "metrics.json"
-        with open(mpath) as f:
+        with open(resolve_data(mpath)) as f:
             per_regime_metrics.append(json.load(f))
     per_regime_optima = np.asarray(
         stats["vi"]["per_regime_expected_episode_return"], dtype=float
@@ -149,7 +151,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
 
 def regenerate_m3(run: ScriptRun) -> dict:
     stats_path = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"
-    with open(stats_path) as f:
+    with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
 
     reference_levels = stats["reference_levels"]
@@ -167,7 +169,7 @@ def regenerate_m3(run: ScriptRun) -> dict:
     }
     for method, exp_name in experiment_names.items():
         mpath = RESULTS_ROOT / exp_name / "metrics.json"
-        with open(mpath) as f:
+        with open(resolve_data(mpath)) as f:
             per_method_curves[method] = json.load(f)
 
     p_ceilings = fig_dir / "fig_rq1_ceilings_bar.png"

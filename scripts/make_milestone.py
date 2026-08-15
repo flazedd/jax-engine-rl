@@ -16,6 +16,8 @@ import sys
 import time
 from pathlib import Path
 
+from utils.paths import experiment_dir, foundations_dir
+
 import jax
 import numpy as np
 
@@ -369,7 +371,7 @@ def make_m2() -> dict:
         )
 
         stats_path = (
-            RESULTS_ROOT / "milestones" / "M2" / "stats_M2_requirements.json"
+            foundations_dir() / "stats_M2_requirements.json"
         )
         if stats_path.exists():
             with open(stats_path) as f:
@@ -586,7 +588,7 @@ def make_m3() -> dict:
     # ------------------------------------------------------------------
     method_metrics: dict[str, dict] = {}
     for method, exp_name in experiment_dirs.items():
-        mpath = RESULTS_ROOT / exp_name / "metrics.json"
+        mpath = experiment_dir(exp_name) / "metrics.json"
         with open(mpath) as f:
             method_metrics[method] = json.load(f)
 
@@ -666,7 +668,7 @@ def make_m3() -> dict:
         "all_converged": all_converged,
     }
 
-    stats_path = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"
+    stats_path = foundations_dir() / "stats_M3_reference_levels.json"
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     with open(stats_path, "w") as f:
         json.dump(stats, f, indent=2)

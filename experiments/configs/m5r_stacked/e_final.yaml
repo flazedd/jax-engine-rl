@@ -2,10 +2,10 @@ extends:
 - base/base_ppo.yaml
 - envs/e_final.yaml
 experiment_name: m5r_stacked_obs_e_final
-iterations: 300
+iterations: 200
 parallel_envs: 512
 rollout_length: 128
-num_seeds: 20
+num_seeds: 12
 seed_base: 0
 env:
   name: market_making_v1_stacked

@@ -55,6 +55,8 @@ if "--dummy" in sys.argv:
 
 from utils.paths import (  # noqa: E402
     dummy_sibling, is_dummy, project_fig_dir as project_figs, results_root,
+    analysis_dir, cartpole_dir, experiment_dir, foundations_dir,
+    fig_appendix_dir, project_fig_dir as _pfd, fig_home,
 )
 
 RESULTS = results_root()
@@ -68,16 +70,16 @@ VARIANTS = ["rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet"]
 
 # Experiment name written by each medium config, used for the skip check.
 MEDIUM_EXPERIMENT = {
-    "regime_agnostic": "m5r_matched_regime_agnostic",
-    "belief_ppo": "m5r_matched_belief",
-    "oracle_ppo": "m5r_matched_oracle",
-    "stacked_obs": "m5r_matched_stacked_obs",
-    **{v: f"m5r_matched_{v}" for v in VARIANTS},
+    "regime_agnostic": "m5r_ref_regime_agnostic_e9",
+    "belief_ppo": "m5r_ref_belief_e9",
+    "oracle_ppo": "m5r_ref_oracle_e9",
+    "stacked_obs": "m5r_ref_stacked_obs_e9",
+    **{v: f"m5r_final_{v}_e_final" for v in VARIANTS},
 }
 
 
 SEEDS = 20
-ITERATIONS = 300
+ITERATIONS = 600
 
 
 @dataclass
@@ -115,7 +117,18 @@ def _training_is_complete(produces: Path) -> bool:
     # overrides the seed and iteration counts at runtime while the saved config
     # still shows the full budget, so a smoke artifact would otherwise pass.
     n_ckpt = len(list(produces.parent.glob("checkpoint_seed_*.pkl")))
-    return n_ckpt >= SEEDS
+    if n_ckpt < SEEDS:
+        return False
+    # Provenance, not just budget. A run at the right seed and iteration counts
+    # but from a superseded architecture passes every numeric check; requiring
+    # a provenance stamp means an un-stamped directory is treated as needing a
+    # rerun rather than silently adopted.
+    prov = produces.parent / "provenance.json"
+    if not prov.exists():
+        print(f"[programme] {produces.parent.name}: no provenance stamp, "
+              f"treating as stale", flush=True)
+        return False
+    return True
 
 
 def _is_complete(stage: "Stage", by_name: dict[str, "Stage"]) -> bool:
@@ -149,7 +162,7 @@ def _train(key: str, phase: str, cfg: Path, experiment: str, est: float,
         name=f"train:{key}",
         phase=phase,
         cmd=[sys.executable, "-u", "-m", "training.train", "--config", str(cfg)],
-        produces=RESULTS / experiment / "summary.json",
+        produces=experiment_dir(experiment) / "summary.json",
         depends_on=depends_on or [],
         est_min=est,
         kind="train",
@@ -173,7 +186,7 @@ def _analysis(
 
 def build_plan() -> list[Stage]:
     stages: list[Stage] = []
-    final = RESULTS / "M5R" / "final"
+    final = analysis_dir()
 
     # ---- Phase 0: fairness gate ----------------------------------------
     # Every downstream comparison assumes the methods differ only in the thing
@@ -184,6 +197,29 @@ def build_plan() -> list[Stage]:
         RESULTS / "audits" / "config_fairness.json", est=2, always=True,
     ))
     gate = ["audit:config_fairness"]
+
+    # ---- Phase 0b: foundations ------------------------------------------
+    # These were treated as fixed inputs produced by earlier milestones, which
+    # stopped being defensible once the conditioning redesign changed the very
+    # agents they characterise. R2 and R3 are measured on trained agents, so
+    # the environment validation moves with the redesign; the optimiser search
+    # produces two thesis figures from training runs. Both are experiments and
+    # belong in the plan.
+    #
+    # The implementation validation is different in kind: the thesis holds the
+    # implementations fixed after validating them once, so this stage exists to
+    # *check* that claim rather than to retune anything.
+    stages += [
+        _analysis("foundations:env_validation", "foundations",
+                  "scripts.env_validation_final",
+                  foundations_dir() / "env_validation" / "validation_table.json",
+                  depends_on=gate, est=90),
+        _analysis("foundations:impl_validation", "foundations",
+                  "scripts.m5_factorial_toys",
+                  foundations_dir() / "stats_M5_factorial_toys.json",
+                  depends_on=gate, est=45),
+    ]
+    foundations = [s.name for s in stages if s.phase == "foundations"]
 
     # ---- Phase 1: medium environment, training -------------------------
     for key in REFERENCES:
@@ -259,37 +295,6 @@ def build_plan() -> list[Stage]:
         _analysis("analysis:hypothesis_tests", "medium", "scripts.m5r_hypothesis_tests",
                   final / "m5r_hypothesis_tests.json",
                   depends_on=["analysis:final_eval"], est=5),
-        # Both heads, explicitly. The comparison this stage exists to make is
-        # concat-head against hypernet-head on one frozen encoder, so running
-        # the script once leaves the claim with a single arm. `--head` also
-        # defaults to concat, which is why omitting it produced no hypernet
-        # run at all. The declared outputs are the files the script actually
-        # writes, and the ones `scripts.plot_transplant_figure` reads.
-        _analysis("analysis:frozen_encoder_rl2_concat", "medium",
-                  "scripts.m5r_frozen_encoder_transplant",
-                  final / "m5r_transplant_e_final_concat.json",
-                  args=["--head", "concat"],
-                  depends_on=medium_training, est=60),
-        _analysis("analysis:frozen_encoder_rl2_hypernet", "medium",
-                  "scripts.m5r_frozen_encoder_transplant",
-                  final / "m5r_transplant_e_final_hypernet.json",
-                  args=["--head", "hypernet"],
-                  depends_on=medium_training, est=60),
-        # The transplant result is reported for both methods and both head
-        # forms, so VariBAD needs one run per head.
-        _analysis("analysis:frozen_encoder_vb_concat", "medium",
-                  "scripts.m5r_frozen_encoder_transplant_vb",
-                  final / "m5r_transplant_vb_concat.json",
-                  args=["--head", "concat"],
-                  depends_on=medium_training, est=60),
-        _analysis("analysis:frozen_encoder_vb_hypernet", "medium",
-                  "scripts.m5r_frozen_encoder_transplant_vb",
-                  final / "m5r_transplant_vb_hypernet.json",
-                  args=["--head", "hypernet"],
-                  depends_on=medium_training, est=60),
-        _analysis("analysis:bc_belief_usage", "medium", "scripts.m5r_bc_belief_usage",
-                  final / "m5r_bc_belief_usage.json",
-                  depends_on=medium_training, est=30),
     ]
 
     # ---- Phase 3: difficulty sweep -------------------------------------
@@ -305,7 +310,7 @@ def build_plan() -> list[Stage]:
     # Both difficulty axes, three levels each. The axis is not a default the
     # driver can leave implicit: omitting it ran the asymmetry axis alone and
     # the persistence half of the external-validity claim went unproduced.
-    cartpole_root = RESULTS / "milestones" / "cartpole"
+    cartpole_root = cartpole_dir()
     # Asymmetry runs first and trains all 21 of its cells; persistence reuses
     # the shared medium level and trains only 14, so its estimate is lower.
     # Both budgets are 300 iterations x 20 seeds, matching the RSMM programme;
@@ -339,39 +344,37 @@ def build_plan() -> list[Stage]:
 
     # ---- Phase 5: figures ----------------------------------------------
     stages += [
+        # Tables are published on the same trigger as figures: they are
+        # experiment output too, and were the last thing still typed by hand.
+        _analysis("figures:tables", "figures", "scripts.make_tables",
+                  REPO_ROOT.parent / "master_thesis_reinier_schep_final"
+                  / "tables" / "probe_quality.tex",
+                  depends_on=["analysis:final_eval", "analysis:posterior_probe"],
+                  est=1, always=True),
         _analysis("figures:main", "figures", "plotting.m5r_plots",
-                  project_figs("milestones", "M5R") / "m5r_method_ladder.png",
+                  _repo_fig("m5r_method_ladder.png"),
                   depends_on=["analysis:final_eval"], est=5),
         _analysis("figures:action_heatmap", "figures",
                   "plotting.m5r_action_inventory_heatmap",
-                  project_figs("milestones", "M5R")
-                  / "m5r_action_given_regime_inventory.png",
+                  _repo_fig("m5r_action_given_regime_inventory.png"),
                   depends_on=["analysis:action_distributions"], est=2),
         # Figures the thesis includes that had no stage: without these a run
         # produces results the thesis cannot render.
-        _analysis("figures:m2", "figures", "plotting.regenerate_figures",
-                  project_figs("milestones", "M2") / "fig_M2_R1_policy_heatmap.png",
-                  args=["M2"], depends_on=medium_training, est=3),
+        # No figures:m2 stage. Environment validation renders the five M2
+        # charts itself, for every env it checks, and copies the reference
+        # env's set into the figure tree. A second stage re-rendering them from
+        # a separate stats file duplicated the work and read a path nothing
+        # writes any more.
         _analysis("figures:reference_levels", "figures", "plotting.reference_levels",
-                  project_figs("milestones", "M3") / "fig_rq1_ceilings_bar.png",
+                  _repo_fig("fig_rq1_ceilings_bar.png"),
                   depends_on=medium_training, est=2),
         _analysis("figures:cartpole", "figures", "plotting.cartpole_plots",
-                  project_figs("milestones", "cartpole")
-                  / "cartpole_method_ladder.png",
+                  _repo_fig("cartpole_method_ladder.png"),
                   depends_on=[f"cartpole:sweep:{a}"
                               for a in ("asymmetry", "persistence")], est=3),
-        _analysis("figures:optsearch", "figures", "plotting.optsearch_plot",
-                  project_figs("milestones", "M5R") / "m5r_optsearch.png",
-                  depends_on=medium_training, est=2),
         _analysis("figures:factorial_toys", "figures", "plotting.m4_plots",
-                  project_figs("milestones", "M4") / "factorial_toys.png",
+                  _repo_fig("factorial_toys.png"),
                   depends_on=medium_training, est=2),
-        _analysis("figures:transplant", "figures", "scripts.plot_transplant_figure",
-                  project_figs("milestones", "M5R") / "m5r_transplant.png",
-                  depends_on=["analysis:frozen_encoder_rl2_concat",
-                              "analysis:frozen_encoder_rl2_hypernet",
-                              "analysis:frozen_encoder_vb_concat",
-                              "analysis:frozen_encoder_vb_hypernet"], est=2),
     ]
     return stages
 
@@ -428,21 +431,36 @@ def _write_dummy(stage: "Stage") -> bool:
 
 
 
-def _thesis_referenced_figures(thesis_root: Path) -> set[str]:
-    """Figure filenames the thesis actually includes.
+THESIS_DOC_ROOT = REPO_ROOT.parent / "master_thesis_reinier_schep_final"
+
+
+def _repo_fig(name: str) -> Path:
+    """A figure's path in the repo tree, from the one registry."""
+    return _pfd(*fig_home(name).split("/")) / name
+
+
+def _thesis_referenced_figures(thesis_root: Path) -> dict[str, str]:
+    """Figure basename -> path relative to the thesis figure root.
+
+    The include paths in the .tex are what define the thesis layout, so
+    publication reads them rather than assuming a flat directory.
 
     Publication is driven by this rather than by whatever a plotter happens to
     emit: several plotters write charts the thesis deliberately leaves out, and
     copying those in would re-add files that were removed on purpose.
     """
-    names: set[str] = set()
-    sections = thesis_root.parent / "sections"
+    names: dict[str, str] = {}
+    # The .tex lives with the document, not with the figure output root: a
+    # dummy run redirects the figure root into figures_dummy/, and deriving
+    # sections from it found nothing, so publication silently copied nothing.
+    sections = THESIS_DOC_ROOT / "sections"
     if not sections.exists():
         return names
     for tex in sections.glob("*.tex"):
         for m in re.finditer(r"\\includegraphics\[[^\]]*\]\{figures/([^}]+)\}",
                              tex.read_text()):
-            names.add(m.group(1))
+            rel = m.group(1)
+            names[rel.rsplit("/", 1)[-1]] = rel
     return names
 
 
@@ -466,7 +484,9 @@ def _publish_figures(since: float = 0.0) -> int:
         return 0
     wanted = _thesis_referenced_figures(thesis)
     produced: dict[str, Path] = {}
-    for src in (REPO_ROOT / "figures").rglob("*.png"):
+    # Through the override, not REPO_ROOT/figures: a dummy run must publish
+    # from the dummy figure tree, which is what lets it prove this step at all.
+    for src in project_figs().rglob("*.png"):
         if src.name not in wanted:
             continue
         if src.stat().st_mtime < since:
@@ -476,12 +496,29 @@ def _publish_figures(since: float = 0.0) -> int:
             produced[src.name] = src
     published = 0
     for name, src in produced.items():
-        dst = thesis / name
+        dst = thesis / wanted[name]
+        dst.parent.mkdir(parents=True, exist_ok=True)
         if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
             continue
         dst.write_bytes(src.read_bytes())
         published += 1
     return published
+
+
+def _figure_source(png: Path) -> str:
+    """Whether a published figure came from the real programme or a dummy run.
+
+    Read from the PNG's own text chunk, written at savefig. The previous test
+    compared the file against its twin under figures_dummy/, which reported
+    every dummy chart as real as soon as that tree was regenerated. A figure
+    written before the stamp existed reports "unknown" rather than guessing.
+    """
+    try:
+        from PIL import Image
+        with Image.open(png) as im:
+            return im.text.get("thesis-source", "unknown")
+    except Exception:
+        return "unknown"
 
 
 def _write_provenance() -> None:
@@ -495,16 +532,12 @@ def _write_provenance() -> None:
         "THESIS_FIG_ROOT",
         REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures",
     ))
-    dummy_root = REPO_ROOT / "figures_dummy"
     if not thesis.exists():
         return
-    dummy_by_name = {p.name: p for p in dummy_root.rglob("*.png")}
     entries = {}
-    for fig in sorted(thesis.glob("*.png")):
-        twin = dummy_by_name.get(fig.name)
-        is_dummy_copy = bool(twin and twin.read_bytes() == fig.read_bytes())
-        entries[fig.name] = {
-            "source": "dummy" if is_dummy_copy else "real",
+    for fig in sorted(thesis.rglob("*.png")):
+        entries[str(fig.relative_to(thesis))] = {
+            "source": _figure_source(fig),
             "published_at": time.strftime(
                 "%Y-%m-%dT%H:%M:%S", time.localtime(fig.stat().st_mtime)),
         }
@@ -512,7 +545,9 @@ def _write_provenance() -> None:
     (thesis / "PROVENANCE.json").write_text(json.dumps({
         "note": "which figures in this directory come from the real programme "
                 "and which are still synthetic placeholders",
-        "n_real": n_real, "n_dummy": len(entries) - n_real,
+        "n_real": n_real,
+        "n_dummy": sum(1 for e in entries.values() if e["source"] == "dummy"),
+        "n_unknown": sum(1 for e in entries.values() if e["source"] == "unknown"),
         "figures": entries,
     }, indent=2))
 
@@ -568,6 +603,14 @@ def _validate_output(stage: "Stage") -> str | None:
     return None
 
 
+def _rel(p: Path) -> str:
+    """Repo-relative when possible; a redirected root may sit outside it."""
+    try:
+        return str(p.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(p)
+
+
 def _fmt(minutes: float) -> str:
     minutes = max(0.0, minutes)
     h, m = divmod(int(minutes), 60)
@@ -606,26 +649,6 @@ def main() -> int:
               f"{os.environ['THESIS_PROJECT_FIGS'].split('/')[-1]}/", flush=True)
 
     if not is_dummy() and not args.dry_run and not args.skip_preflight:
-        # Some figures read artifacts from earlier milestones that this
-        # programme does not reproduce: the environment validation, the
-        # implementation validation on the toy benchmarks, and the optimiser
-        # search. They are inputs, not outputs, so their absence has to be a
-        # refusal to start rather than a failure after days of training.
-        required_inputs = [
-            RESULTS / "milestones" / "M2" / "stats_M2_requirements.json",
-            RESULTS / "milestones" / "M4" / "method_ranking.json",
-            RESULTS / "milestones" / "M5" / "stats_M5_factorial_toys.json",
-        ] + sorted(RESULTS.glob("M5R/final/optsearch_*.json"))[:1]
-        absent = [p for p in required_inputs if not p.exists()]
-        if absent:
-            print("[programme] ABORT: figures depend on artifacts from earlier "
-                  "milestones that are not on disk:", flush=True)
-            for p in absent:
-                print(f"  missing {p}", flush=True)
-            print("[programme] produce them first, or pass --skip-preflight to "
-                  "run anyway and lose those figures at the end.", flush=True)
-            return 1
-
         print("[programme] preflight: proving the chain on dummy data", flush=True)
         pre = subprocess.run(
             [sys.executable, "-u", "-m", "scripts.run_matched_programme", "--dummy"],
@@ -659,7 +682,7 @@ def main() -> int:
             skip = _is_complete(s, by_name) and s.name not in args.force
             total += 0.0 if skip else s.est_min
             print(f"  [{'skip' if skip else 'run '}] {s.phase:9s} {s.name:38s} "
-                  f"~{_fmt(s.est_min):>7s}  -> {s.produces.relative_to(REPO_ROOT)}")
+                  f"~{_fmt(s.est_min):>7s}  -> {_rel(s.produces)}")
         print(f"\nestimated remaining wall-clock: {_fmt(total)}")
         return 0
 
@@ -758,9 +781,11 @@ def main() -> int:
             _run_ready_figures(plan, by_name, done, failed, args, run_stage,
                                since=t0)
 
-    if not is_dummy():
-        _publish_figures(since=t0)
-        _write_provenance()
+    # Both modes: in a dummy run every root points into figures_dummy/, so this
+    # exercises publication rather than skipping it. Stages that finish last
+    # otherwise never reach the thesis tree at all.
+    _publish_figures(since=t0)
+    _write_provenance()
     _write_status(None)
     print(
         f"\n[programme] finished | {len(done)} ok, {len(failed)} failed "

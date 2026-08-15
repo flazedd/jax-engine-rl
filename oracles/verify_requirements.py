@@ -7,8 +7,8 @@ This is the M2 main tool. CLI:
     uv run python -m oracles.verify_requirements --env-config ... --super-fast
 
 Outputs:
-  results/milestones/M2/stats_M2_requirements.json — pass/fail per R.
-  figures/milestones/M2/fig_M2_*.png                — six M2 figures.
+  results/foundations/stats_M2_requirements.json — pass/fail per R.
+  figures/appendix/fig_M2_*.png                     — the M2 figures.
 
 Budget per PPO run is deliberately short. M2 is a diagnostic; tight CIs and
 final convergence are what M1 / M3 enforce with full budgets. The threshold
@@ -56,6 +56,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 FIGURES_ROOT = REPO_ROOT / "figures"
 
+from utils.paths import foundations_dir  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # Pass thresholds — the single source of truth
@@ -66,7 +68,7 @@ FIGURES_ROOT = REPO_ROOT / "figures"
 # place while the check ran at 0.35).
 R1_MIN_DISAGREE_FRAC = 0.80  # fraction of inventory levels where policies differ
 R2_MIN_RATIO = 0.85  # worst-regime PPO / VI return ratio
-R3_MAX_RECOVERY = 0.90  # regime-agnostic / Oracle-PPO return ratio
+R3_MAX_RECOVERY = 0.90  # regime-agnostic / Belief-PPO return ratio
 R4_MIN_ENTROPY_DECAY = 0.35  # posterior entropy decay by episode midpoint
 
 THRESHOLDS = {
@@ -275,7 +277,7 @@ def verify(
     r2_min = float(min(per_regime_ratios))
     r2_pass = bool(r2_min >= R2_MIN_RATIO)
 
-    # ------- R3: regime-agnostic PPO vs Oracle-PPO ----------------------
+    # ------- R3: regime-agnostic PPO vs Belief-PPO ----------------------
     ppo_runs_done += 1
     print(
         f"[verify] [step 3] PPO {ppo_runs_done}/{n_ppo_runs}: regime-agnostic",
@@ -284,7 +286,12 @@ def verify(
     t0 = time.perf_counter()
     m_agn = _run_short_ppo(
         experiment_name=f"{exp_prefix}_regime_agnostic",
-        env_name="market_making_v1",
+        # R3 compares the agents the thesis compares, so the references are
+        # measured on the matched tuple u_t rather than the base observation.
+        # On the base observation the agent cannot read regime evidence from the
+        # previous reward, which understates what it recovers and passes
+        # instances whose attainable gap is too narrow to measure against.
+        env_name="market_making_v1_augmented",
         env_params=env_params,
         agent_name="ppo",
         run_mode=run_mode,
@@ -303,7 +310,7 @@ def verify(
     t0 = time.perf_counter()
     m_oracle = _run_short_ppo(
         experiment_name=f"{exp_prefix}_oracle",
-        env_name="market_making_v1_oracle",
+        env_name="market_making_v1_oracle_augmented",
         env_params=env_params,
         agent_name="ppo_oracle",
         run_mode=run_mode,
@@ -329,16 +336,10 @@ def verify(
     gap_ci_width = float(gap_ci_hi - gap_ci_lo)
     gap_ci_width_safe = max(gap_ci_width, 1e-6)
     gap_to_ci_ratio = float(gap_absolute / gap_ci_width_safe)
-    # The fraction of Oracle-PPO's return the regime-agnostic agent recovers.
-    # gap_to_ci_ratio is still reported for reference but does not gate the check.
-    recovery_ratio = float(agn_mean / oracle_mean) if abs(oracle_mean) > 1e-9 else 1.0
-    r3_pass = bool(recovery_ratio <= R3_MAX_RECOVERY)
-    print(
-        f"[verify] R3: recovery_ratio={recovery_ratio:.3f} (<={R3_MAX_RECOVERY}) "
-        f"gap={gap_absolute:.2f} gap_to_ci_ratio={gap_to_ci_ratio:.2f} "
-        f"pass={r3_pass}",
-        flush=True,
-    )
+    # R3 is stated against Belief-PPO, which the analytical posterior makes the
+    # level a method can reach, and which is the denominator of the gap-closed
+    # fraction. It is therefore computed after the Belief-PPO run below.
+    # gap_to_ci_ratio is reported for reference but does not gate the check.
 
     # ------- R4: posterior entropy + Belief-PPO ------------------------
     print(
@@ -366,7 +367,7 @@ def verify(
     t0 = time.perf_counter()
     m_belief = _run_short_ppo(
         experiment_name=f"{exp_prefix}_belief",
-        env_name="market_making_v1_belief",
+        env_name="market_making_v1_belief_augmented",
         env_params=env_params,
         agent_name="ppo_belief",
         run_mode=run_mode,
@@ -377,6 +378,15 @@ def verify(
         flush=True,
     )
     belief_mean = float(m_belief["final_return_mean"])
+
+    recovery_ratio = float(agn_mean / belief_mean) if abs(belief_mean) > 1e-9 else 1.0
+    r3_pass = bool(recovery_ratio <= R3_MAX_RECOVERY)
+    print(
+        f"[verify] R3: recovery_ratio={recovery_ratio:.3f} (<={R3_MAX_RECOVERY}) "
+        f"agnostic={agn_mean:.2f} belief={belief_mean:.2f} "
+        f"gap_to_ci_ratio={gap_to_ci_ratio:.2f} pass={r3_pass}",
+        flush=True,
+    )
     belief_ci = [float(x) for x in m_belief["final_return_ci95"]]
     oracle_gap = float(oracle_mean - agn_mean)
     gap_closure = (
@@ -445,7 +455,7 @@ def verify(
     }
 
     # ------- Figures ---------------------------------------------------
-    fig_dir = fig_dir if fig_dir is not None else FIGURES_ROOT / "milestones" / "M2"
+    fig_dir = fig_dir if fig_dir is not None else FIGURES_ROOT / "appendix"
     fig_dir.mkdir(parents=True, exist_ok=True)
     plot_policy_heatmap(vi, env, fig_dir / "fig_M2_R1_policy_heatmap.png")
     plot_value_loss_distribution(
@@ -489,7 +499,7 @@ def main() -> int:
     if not env_config_path.exists():
         env_config_path = REPO_ROOT / env_config_path
 
-    results_dir = RESULTS_ROOT / "milestones" / "M2"
+    results_dir = foundations_dir()
     results_dir.mkdir(parents=True, exist_ok=True)
 
     run = ScriptRun(script="verify_requirements", run_mode=run_mode)
@@ -508,8 +518,10 @@ def main() -> int:
         json.dump(stats, f, indent=2)
     run.add_output(str(stats_path))
 
-    # Add figures to outputs so the summary reflects them.
-    for p in (FIGURES_ROOT / "milestones" / "M2").glob("fig_M2_*.png"):
+    # Add figures to outputs so the summary reflects them. `verify` renders them
+    # into the appendix tree when no explicit directory is passed, which is the
+    # case for this CLI path.
+    for p in (FIGURES_ROOT / "appendix").glob("fig_M2_*.png"):
         run.add_output(str(p))
 
     key_stats = {

@@ -35,8 +35,10 @@ from evaluation.metrics import (
 )
 from utils.script_output import ScriptRun
 
+from utils.paths import analysis_dir
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_ROOT = REPO_ROOT / "results" / "M5R" / "final"
+RESULTS_ROOT = analysis_dir()
 
 PAIRS = [
     ("RL2", "rl2_hypernet", "rl2_concat"),

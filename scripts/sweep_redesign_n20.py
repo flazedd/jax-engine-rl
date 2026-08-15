@@ -40,11 +40,12 @@ import yaml
 
 from training.config import apply_run_mode, load_config
 from training.train import train_or_sweep
+from utils.paths import analysis_dir
 
 REPO = Path(__file__).resolve().parent.parent
 CONFIG = REPO / "experiments" / "configs"
 RESULTS = REPO / "results"
-PCE = RESULTS / "M5R" / "final" / "per_cell_env.json"
+PCE = analysis_dir() / "per_cell_env.json"
 BACKUP = RESULTS / "_backup_pre_sweep_redesign"
 
 # Every method runs from the matched-fairness configs, so a difficulty level
@@ -151,7 +152,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="scripts.sweep_redesign_n20")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--seeds", type=int, default=20)
-    ap.add_argument("--iterations", type=int, default=300)
+    ap.add_argument("--iterations", type=int, default=600)
     args = ap.parse_args()
     seeds = 2 if args.smoke else args.seeds
     iters = 6 if args.smoke else args.iterations

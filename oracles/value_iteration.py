@@ -180,8 +180,17 @@ def _expected_episode_return_under_policy(
     Forward-rolls the policy-induced Markov chain starting from inventory
     `init_inv_idx` (matching the env's reset behaviour, see
     `reset_inventory_range`), summing expected per-step reward over
-    `episode_length` steps. Matches exactly what PPO measures as
-    `final_return_mean`, so VI returns can be used as a true ceiling.
+    `episode_length` steps.
+
+    This matches how PPO *measures* return, but not what it *optimises*. The
+    policy passed in is optimal for the discounted infinite-horizon criterion
+    that `_bellman_iterate` solves, and is then evaluated undiscounted over a
+    finite horizon. The optimal policy for that finite-horizon objective is
+    generally time-dependent and does better, so this is a lower bound on the
+    achievable return rather than a ceiling: on the reference environments it
+    understates the true optimum by 0.1-0.2%, which is why a well-trained agent
+    can measure slightly above it. Use `finite_horizon_optimum` where a genuine
+    ceiling is needed.
 
     If `regime_lock` is an integer, the regime is pinned to that value and the
     inventory-only chain evolves (used for R2). Otherwise the full (inv, regime)
@@ -279,6 +288,26 @@ def solve_value_iteration(env: MarketMakingV1) -> VIResult:
         mixed_expected_episode_return=float(mixed_ep),
     )
 
+
+
+def finite_horizon_optimum(env: MarketMakingV1) -> float:
+    """The true optimum of the objective PPO maximises.
+
+    Backward induction over `episode_length` steps with no discounting, which is
+    what an episode return actually is. `solve_value_iteration` reports the
+    undiscounted value of the *discounted*-optimal stationary policy, a lower
+    bound; this is the bound itself, and is what R2 and any "fraction of
+    optimum" figure should be stated against.
+    """
+    P, R = _transition_tables(env)
+    n_inv, n_reg, n_act, _, _ = P.shape
+    P_flat = P.reshape(n_inv, n_reg, n_act, n_inv * n_reg)
+    V = np.zeros(n_inv * n_reg, dtype=np.float64)
+    for _ in range(env.episode_length):
+        V = (R + P_flat @ V).max(axis=-1).reshape(-1)
+    init = int(env.inventory_max)
+    dist = np.asarray(env.initial_distribution, dtype=np.float64)
+    return float(V.reshape(n_inv, n_reg)[init] @ dist)
 
 def compromise_policy_expected_returns(
     env: MarketMakingV1, vi: VIResult | None = None

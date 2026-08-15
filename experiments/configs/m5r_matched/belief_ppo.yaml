@@ -2,8 +2,8 @@
 extends:
 - base/base_ppo.yaml
 - envs/e_final.yaml
-experiment_name: m5r_matched_belief
-iterations: 300
+experiment_name: m5r_ref_belief_e_final
+iterations: 600
 parallel_envs: 512
 rollout_length: 128
 num_seeds: 20

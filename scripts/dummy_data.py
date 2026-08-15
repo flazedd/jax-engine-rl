@@ -120,6 +120,60 @@ def _repair_intervals(obj: Any) -> Any:
     return out
 
 
+# Belief quality by variant, for a probe artifact produced before the KL
+# metrics existed. Ordered as the thesis reports it: within each method the
+# concat variant sits at the lower divergence, which is the reversal the
+# decoupling argument rests on. Keyed by probe family, since the MLP probe
+# reads every representation a little closer.
+_DUMMY_KL = {
+    "logistic": {"rl2_concat": 0.32, "rl2_hypernet": 0.42,
+                 "varibad_concat": 0.61, "varibad_hypernet": 0.70},
+    "mlp": {"rl2_concat": 0.27, "rl2_hypernet": 0.33,
+            "varibad_concat": 0.50, "varibad_hypernet": 0.55},
+}
+
+
+def _enrich_probe(payload: dict, rng: np.random.Generator) -> dict:
+    """Fill in probe metrics the stored artifact predates.
+
+    A dummy table exists to show what the real one will look like. Leaving the
+    belief-quality column empty because the last real probe run did not emit KL
+    defeats that, so the dummy layer supplies the metrics the current probe code
+    produces.
+    """
+    if "per_method_per_env" not in payload:
+        return payload
+    fam = "mlp" if payload.get("classifier") == "mlp" else "logistic"
+    table = _DUMMY_KL[fam]
+    for env_block in payload.get("per_method_per_env", {}).values():
+        for method, block in env_block.items():
+            if not isinstance(block, dict) or "method_kl_to_omega_mean" in block:
+                continue
+            base = table.get(method)
+            if base is None:
+                continue
+            n = int(block.get("n_seeds") or SEEDS)
+            per_seed = [float(x) for x in rng.normal(base, base * 0.08, n)]
+            block["method_kl_to_omega_mean"] = float(np.mean(per_seed))
+            block["method_kl_to_omega_per_seed"] = per_seed
+            block["method_kl_to_omega_ci95"] = [
+                float(np.percentile(per_seed, 2.5)),
+                float(np.percentile(per_seed, 97.5)),
+            ]
+            block["analytical_kl_to_omega_mean"] = float(abs(rng.normal(0.02, 0.005)))
+    # the per-seed scatter feeds the belief-quality comparison set
+    for pt in payload.get("scatter_points", []):
+        base = table.get(pt.get("method"))
+        if base is None or "method_kl_to_omega" in pt:
+            continue
+        pt["method_kl_to_omega"] = float(rng.normal(base, base * 0.08))
+        pt["analytical_kl_to_omega"] = float(abs(rng.normal(0.02, 0.005)))
+        pt["method_log_loss"] = float(abs(rng.normal(base * 2.0, base * 0.15)))
+        pt["method_brier"] = float(abs(rng.normal(base * 0.9, base * 0.1)))
+        pt["belief_error_kl"] = pt["method_kl_to_omega"] - pt["analytical_kl_to_omega"]
+    return payload
+
+
 def clone_with_jitter(
     template: Path, rel: float = 0.03, seed: int = 0
 ) -> dict[str, Any] | None:
@@ -130,6 +184,8 @@ def clone_with_jitter(
         return None
     rng = np.random.default_rng(seed)
     out = _repair_intervals(_jitter(payload, rng, rel))
+    if isinstance(out, dict) and "posterior_vs_performance" in template.name:
+        out = _enrich_probe(out, rng)
     if isinstance(out, dict):
         out["dummy"] = True
         out["dummy_source"] = str(template)
@@ -143,7 +199,7 @@ def clone_with_jitter(
 # Anchored on the values the thesis currently reports, so a synthesised figure
 # sits on the same scale as a cloned one.
 # Keyed by the experiment-directory suffix, which is what the driver passes in:
-# results/m5r_matched_belief -> "belief", not "belief_ppo".
+# results/m5r_ref_belief_e9 -> "belief", not "belief_ppo".
 _REFS = {"regime_agnostic": 138.0, "belief": 168.8, "belief_ppo": 168.8,
          "oracle": 182.0, "oracle_ppo": 182.0, "stacked_obs": 141.5}
 _VARIANTS = {"rl2_concat": 118.7, "rl2_hypernet": 163.1,
@@ -168,7 +224,14 @@ def synth_training_summary(experiment: str, seed: int = 0) -> dict[str, Any]:
 
 def synth_training_metrics(experiment: str, seed: int = 0) -> dict[str, Any]:
     rng = np.random.default_rng(abs(hash(experiment)) % (2**32))
-    key = experiment.split("m5r_matched_")[-1].split("m5r_final_")[-1]
+    # m5r_ref_<name>_e_final / m5r_final_<cell>_e_final -> <name> / <cell>
+    key = experiment
+    for pre in ("m5r_ref_", "m5r_final_"):
+        if key.startswith(pre):
+            key = key[len(pre):]
+    for suf in ("_e_final",):
+        if key.endswith(suf):
+            key = key[: -len(suf)]
     mean = {**_REFS, **_VARIANTS}.get(key, 140.0)
     per_seed = _per_seed(mean, 6.0, rng)
     curve = list(np.linspace(mean - 45, mean, 300) + rng.normal(0, 1.5, 300))
@@ -242,12 +305,12 @@ def synth_reference_ordering_gate() -> dict[str, Any]:
         "criterion": "lower bootstrap bound on each adjacent paired difference "
                      "is positive",
         "checks": [
-            {"pair": "belief_over_agnostic", "higher": "m5r_matched_belief",
-             "lower": "m5r_matched_regime_agnostic",
+            {"pair": "belief_over_agnostic", "higher": "m5r_ref_belief_e9",
+             "lower": "m5r_ref_regime_agnostic_e9",
              "mean_paired_delta": 30.8, "delta_ci": [27.4, 34.1],
              "n_pairs": SEEDS, "lower_bound_positive": True},
-            {"pair": "oracle_over_belief", "higher": "m5r_matched_oracle",
-             "lower": "m5r_matched_belief",
+            {"pair": "oracle_over_belief", "higher": "m5r_ref_oracle_e9",
+             "lower": "m5r_ref_belief_e9",
              "mean_paired_delta": 13.2, "delta_ci": [10.1, 16.4],
              "n_pairs": SEEDS, "lower_bound_positive": True},
         ],
@@ -273,21 +336,50 @@ SYNTHESISERS = {
 # read has to exist under the dummy results root. These are the globs those
 # scripts touch; anything outside them is never opened by a figure.
 INPUT_GLOBS = (
-    "milestones/M0/*.json",
-    "milestones/M1/*.json",
-    "milestones/M2/*.json",
-    "milestones/M3/*.json",
-    "milestones/M4/*.json",
-    "milestones/M5/*.json",
-    "milestones/M6/*.json",
-    "milestones/cartpole/*.json",
-    "m2_verify_*/metrics.json",
-    "m_cartpole_*/metrics.json",
-    "m5r_*/metrics.json",
-    "M5R/final/*.json",
-    "M6R/**/*.json",
+    "foundations/**/*.json",
+    "medium/*/metrics.json",
+    "sweep/*/metrics.json",
+    "cartpole/**/*.json",
+    "analysis/*.json",
     "audits/*.json",
+    # The archive is the only source of templates until the new layout has
+    # been populated by a real run; cloning from it keeps the dummy chain
+    # useful in the meantime.
+    "_archive/**/metrics.json",
+    "_archive/milestones/**/*.json",   # M2/M4/M5 stats the figures read
+    "_archive/audits/*.json",
+    "_archive/M5R/final/*.json",
 )
+
+
+def _relocate(src: Path, real_root: Path) -> Path:
+    """Map an archived template onto the layout its reader now expects.
+
+    Templates come from `_archive`, which mirrors the old milestone tree, but
+    every reader has moved to the thesis-aligned layout. Writing the sibling
+    beside the template would put it where nothing looks for it.
+    """
+    from utils.paths import analysis_dir, cartpole_dir, experiment_dir
+
+    rel_path = src.relative_to(real_root)
+    parts = rel_path.parts
+    if parts[0] != "_archive":
+        return src
+    inner = Path(*parts[1:])
+    # Experiment directories first: a per-run artifact keeps its directory,
+    # or every run's metrics collapse onto one path.
+    if len(inner.parts) == 2 and inner.name in ("metrics.json", "summary.json"):
+        return experiment_dir(inner.parts[0]) / inner.name
+    if inner.parts[:2] == ("M5R", "final"):
+        return analysis_dir() / inner.name
+    if "cartpole" in inner.parts[0] or (
+        inner.parts[0] == "milestones" and "cartpole" in inner.parts
+    ):
+        return cartpole_dir() / inner.name
+    if inner.parts[0] == "milestones":
+        from utils.paths import foundations_dir
+        return foundations_dir() / inner.name
+    return real_root / inner
 
 
 def mirror_inputs(real_root: Path, rel: float = 0.03) -> int:
@@ -303,8 +395,11 @@ def mirror_inputs(real_root: Path, rel: float = 0.03) -> int:
         for src in real_root.glob(pattern):
             if not src.is_file() or src.name.endswith(".dummy.json"):
                 continue
-            dst = dummy_sibling(src)
-            if dst.exists():
+            dst = dummy_sibling(_relocate(src, real_root))
+            # Refresh a stale sibling: when the real artifact gains a field the
+            # thesis now reports, a sibling cloned before that change silently
+            # produces tables missing the new column.
+            if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
                 continue
             payload = clone_with_jitter(src, rel=rel, seed=abs(hash(str(src))) % 2**31)
             if payload is None:

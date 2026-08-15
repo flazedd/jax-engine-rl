@@ -1,0 +1,63 @@
+# Method arms on E9 (rare fills, persistence 0.995). Agent hyperparameters are
+# carried over unchanged from the e_final matched configs: the observation size
+# is identical, so the capacity match still holds. Budget matches the reference
+# arms at 1500 iterations, which the matched protocol requires.
+extends:
+- m5r_base/rl2_concat.yaml
+experiment_name: m5r_final_rl2_concat_e9
+iterations: 1500
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+agent:
+  params:
+    integration: concat
+    hidden_dim: 25
+    policy_trunk_layers: 1
+    policy_trunk_hidden: 17
+    policy_obs_dim: 11
+    concat_policy_reads_obs: true
+    learning_rate: 0.0003
+    ent_coef: 0.01
+    max_grad_norm: 0.5
+    belief_layernorm: false
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+    n_regimes: 3
+    transition_matrix:
+    - 0.995
+    - 0.0025
+    - 0.0025
+    - 0.0025
+    - 0.995
+    - 0.0025
+    - 0.0025
+    - 0.0025
+    - 0.995
+    regime_p_tight_bid:
+    - 0.105
+    - 0.28
+    - 0.175
+    regime_p_wide_bid:
+    - 0.2275
+    - 0.0175
+    - 0.007
+    regime_p_tight_ask:
+    - 0.105
+    - 0.28
+    - 0.175
+    regime_p_wide_ask:
+    - 0.2275
+    - 0.0175
+    - 0.007
+    initial_distribution:
+    - 0.333
+    - 0.333
+    - 0.334

@@ -25,17 +25,42 @@ ZERO_METHOD = "wilcox"            # zero differences dropped, n reduced
 EFFECT_SIZE = "rank_biserial"     # matched-pairs rank-biserial correlation
 CORRECTION = "holm-bonferroni"
 
+# --- The current experiment set ---------------------------------------------
+# Which environment the medium experiment runs on, as a suffix on every
+# experiment name. This exists because the suffix was written out by hand in
+# nine modules: when the environment changed, the analyses silently kept reading
+# the previous set and reported its numbers as current.
+#
+# e9  rare fills, persistence 0.995. Replaced e_final, whose matched tuple let a
+#     memoryless agent identify the regime from one observation, so the floor sat
+#     two thirds of the way to the oracle and the attainable gap was 9.41 with a
+#     confidence interval 78% as wide as the estimate.
+MEDIUM_ENV = "e9"
+
+REFERENCE_ARMS = ("regime_agnostic", "belief", "oracle", "stacked_obs")
+METHOD_ARMS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
+
+
+def ref_experiment(arm: str, env: str = MEDIUM_ENV) -> str:
+    """Experiment name of a reference arm, e.g. m5r_ref_belief_e9."""
+    if arm not in REFERENCE_ARMS:
+        raise ValueError(f"unknown reference arm {arm!r}; valid: {REFERENCE_ARMS}")
+    return f"m5r_ref_{arm}_{env}"
+
+
+def method_experiment(arm: str, env: str = MEDIUM_ENV) -> str:
+    """Experiment name of a method variant, e.g. m5r_final_rl2_concat_e9."""
+    if arm not in METHOD_ARMS:
+        raise ValueError(f"unknown method arm {arm!r}; valid: {METHOD_ARMS}")
+    return f"m5r_final_{arm}_{env}"
+
+
 # --- Chapter 4 budget -------------------------------------------------------
-ITERATIONS = 300
+ITERATIONS = 1500
 PARALLEL_ENVS = 512
 ROLLOUT_LENGTH = 128              # equals the episode length H
 EPISODE_LENGTH = 128
 PARAM_BUDGET_BAND = (4_900, 5_100)
-
-# The transplant is explicitly outside the protocol: too few seeds for the
-# intervals and tests, reported descriptively and in no comparison set.
-TRANSPLANT_SEEDS = 3
-TRANSPLANT_ITERATIONS = 200
 
 # --- Probe ------------------------------------------------------------------
 PROBE_TIMESTEPS = 64_000
@@ -59,17 +84,32 @@ class ComparisonSet:
 
 # The three sets of the protocol, with the sizes Appendix D records.
 COMPARISON_SETS = {
+    # RQ3's difficulty sweep is deferred: its instances were all defined as
+    # perturbations of e_final and need redefining against the current
+    # environment. Only the medium instance is run, so the family is the two
+    # conditioning comparisons rather than two methods over four instances.
+    # Correcting over eight when two were made would misstate the procedure.
     "returns_rsmm": ComparisonSet(
         "returns_rsmm",
-        "conditioning-architecture return comparisons, two methods over four "
-        "RSMM environment instances",
-        8,
+        "conditioning-architecture return comparisons, two methods on the "
+        "medium RSMM instance",
+        2,
     ),
-    "returns_cartpole": ComparisonSet(
-        "returns_cartpole",
-        "conditioning-architecture return comparisons, two methods over three "
-        "levels, per difficulty axis",
-        6,
+    # Declared after the fact and recorded as such: these two families were
+    # reported uncorrected in an earlier draft, which left the thesis correcting
+    # some multiplicities and not others. Every member survives correction, so
+    # declaring them changes no conclusion, only the consistency of the
+    # procedure.
+    "time_to_threshold": ComparisonSet(
+        "time_to_threshold",
+        "iterations to reach a target return, two methods over two targets",
+        4,
+    ),
+    "returns_method": ComparisonSet(
+        "returns_method",
+        "method return comparisons, RL2 against VariBAD at each conditioning "
+        "architecture",
+        2,
     ),
     "diagnostics": ComparisonSet(
         "diagnostics",

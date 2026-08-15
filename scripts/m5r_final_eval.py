@@ -33,6 +33,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import analysis_dir, experiment_dir
 from typing import Any
 
 import numpy as np
@@ -46,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_ROOT = REPO_ROOT / "experiments" / "configs"
 RESULTS_ROOT = REPO_ROOT / "results"
 FINAL_CONFIG_DIR = CONFIG_ROOT / "m5r_final"
-FINAL_RESULTS = RESULTS_ROOT / "M5R" / "final"
+FINAL_RESULTS = analysis_dir()
 
 CELLS = ["rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet"]
 
@@ -58,22 +60,22 @@ CELLS = ["rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet"]
 # the same matched configs and merges them into the same per_cell_env.json.
 # Splitting them this way keeps one writer per environment label.
 EVAL_ENVS: list[tuple[str, str]] = [
-    ("e_final", "envs/e_final.yaml"),
+    ("e9", "envs/e9_rare_fills.yaml"),
 ]
 
 # Matched-fairness configs: identical inputs, optimiser settings, budget and
 # capacity across methods, enforced by `scripts.config_fairness_audit`.
-MATCHED_CONFIG_DIR = CONFIG_ROOT / "m5r_matched"
+MATCHED_CONFIG_DIR = CONFIG_ROOT / "m5r_e9"
 
 # Reference experiments trained from the matched configs by the programme
 # driver. Reading their metrics directly, rather than a cached milestone stats
 # file, keeps the denominators on the same inputs, optimiser settings, budget
 # and capacity as the cells they normalise.
 MATCHED_REF_EXPERIMENTS = {
-    "regime_agnostic_ppo": "m5r_matched_regime_agnostic",
-    "belief_ppo": "m5r_matched_belief",
-    "oracle_ppo": "m5r_matched_oracle",
-    "stacked_obs_ppo": "m5r_matched_stacked_obs",
+    "regime_agnostic_ppo": "m5r_ref_regime_agnostic_e9",
+    "belief_ppo": "m5r_ref_belief_e9",
+    "oracle_ppo": "m5r_ref_oracle_e9",
+    "stacked_obs_ppo": "m5r_ref_stacked_obs_e9",
 }
 
 
@@ -84,7 +86,7 @@ MATCHED_REF_EXPERIMENTS = {
 
 def _load_refs(env_label: str) -> dict[str, float]:
     """Mean final return of each reference on the medium-difficulty env."""
-    del env_label  # only e_final is evaluated here; see EVAL_ENVS.
+    del env_label  # only the medium instance is evaluated; see EVAL_ENVS.
     out: dict[str, float] = {}
     for key, experiment in MATCHED_REF_EXPERIMENTS.items():
         m = _read_metrics(experiment)
@@ -99,10 +101,17 @@ def _load_refs(env_label: str) -> dict[str, float]:
 
 
 def _materialise_final_config(cell: str, env_label: str, env_yaml: str) -> Path:
-    """Compose matched config + env override into a per-cell-env YAML."""
+    """Compose matched config + env override into a per-cell-env YAML.
+
+    The matched directory is read from MATCHED_CONFIG_DIR rather than written
+    out here. It used to be hardcoded to `m5r_matched`, so repointing that
+    constant at a new config set had no effect: this composed the new
+    environment with the *old* budget and retrained over completed runs at the
+    wrong iteration count.
+    """
     FINAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     yaml_path = FINAL_CONFIG_DIR / f"{cell}_{env_label}.yaml"
-    matched_rel = f"m5r_matched/{cell}.yaml"
+    matched_rel = f"{MATCHED_CONFIG_DIR.name}/{cell}.yaml"
     doc: dict[str, Any] = {
         "extends": [matched_rel, env_yaml],
         "experiment_name": f"m5r_final_{cell}_{env_label}",
@@ -118,7 +127,7 @@ def _materialise_final_config(cell: str, env_label: str, env_yaml: str) -> Path:
 
 
 def _read_metrics(experiment_name: str) -> dict[str, Any] | None:
-    p = RESULTS_ROOT / experiment_name / "metrics.json"
+    p = experiment_dir(experiment_name) / "metrics.json"
     if not p.exists():
         return None
     with open(p) as f:
@@ -146,6 +155,7 @@ def _gap_closed(
     return (cell_mean - floor) / (ceiling - floor)
 
 
+_ALLOW_TRAIN: bool = False
 _ITER_OVERRIDE: int | None = None
 _SEED_OVERRIDE: int | None = None
 
@@ -171,6 +181,19 @@ def _run_one(cell: str, env_label: str, env_yaml: str) -> dict[str, Any]:
         metrics = existing
         elapsed = float("nan")
     else:
+        # Retraining is opt-in. The default used to be to train silently on any
+        # mismatch, which overwrote a finished 1500-iteration run with a
+        # 600-iteration one because the budget came from the wrong config set.
+        # An analysis stage must not be able to destroy training data by
+        # default; a mismatch is now a loud failure unless --train is passed.
+        if not _ALLOW_TRAIN:
+            have = (f"{existing.get('num_seeds')} seeds x "
+                    f"{existing.get('iterations')} iters" if existing else "nothing")
+            raise SystemExit(
+                f"[m5r_final_eval] FAIL | reason=budget_mismatch | cell={cell} "
+                f"| want={cfg.num_seeds} seeds x {cfg.iterations} iters | have={have} "
+                f"| refusing to retrain over {cfg.experiment_name}; pass --train to allow"
+            )
         t0 = time.perf_counter()
         train_or_sweep(cfg)
         elapsed = time.perf_counter() - t0
@@ -246,12 +269,16 @@ def main() -> int:
                         help="run only this cell (default: all 4)")
     parser.add_argument("--env", type=str, default=None,
                         help="run only this env_label (default: all 5)")
+    parser.add_argument("--train", action="store_true",
+                        help="allow retraining a cell whose budget does not match "
+                             "(off by default: an analysis must not overwrite runs)")
     parser.add_argument("--iterations", type=int, default=None,
                         help="override training iterations for every cell")
     parser.add_argument("--num-seeds", type=int, default=None,
                         help="override number of seeds for every cell")
     args = parser.parse_args()
-    global _ITER_OVERRIDE, _SEED_OVERRIDE
+    global _ITER_OVERRIDE, _SEED_OVERRIDE, _ALLOW_TRAIN
+    _ALLOW_TRAIN = args.train
     _ITER_OVERRIDE = args.iterations
     _SEED_OVERRIDE = args.num_seeds
 

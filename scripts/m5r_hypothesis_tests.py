@@ -33,6 +33,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import analysis_dir
 from typing import Any
 
 import numpy as np
@@ -45,7 +47,7 @@ from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
-FINAL_DIR = RESULTS_ROOT / "M5R" / "final"
+FINAL_DIR = analysis_dir()
 PER_CELL_ENV_PATH = FINAL_DIR / "per_cell_env.json"
 PROBE_LOGISTIC_PATH = FINAL_DIR / "m5r_posterior_vs_performance.json"
 PROBE_MLP_PATH = FINAL_DIR / "m5r_posterior_vs_performance_mlp.json"
@@ -57,11 +59,14 @@ DECOUPLING_THRESHOLD = 0.30
 # The medium env plus the three levels `scripts.sweep_redesign_n20` produces.
 # Keep in sync with that script's ENVS; see the Family B note in the module
 # docstring for why a mismatch silently corrupts the corrected p-values.
+# RQ3's difficulty sweep is deferred: its instances were defined as
+# perturbations of the superseded environment and need redefining. Only the
+# medium instance is run, so Family B is the two conditioning comparisons
+# rather than two methods over four instances.
+from evaluation.protocol import MEDIUM_ENV, SEEDS
+
 ENVS = (
-    "e_final",
-    "distinguishability_easy",
-    "distinguishability_hard",
-    "coupled_fast",
+    MEDIUM_ENV,
 )
 METHODS = ("rl2", "varibad")
 FAMILY_B: list[tuple[str, str, str, str]] = []
@@ -316,7 +321,7 @@ def main() -> int:
             "name": "hypernet_beats_concat",
             "size": FAMILY_B_SIZE,
             "alternative": "two-sided",
-            "n_seeds": 8,
+            "n_seeds": SEEDS,
             "results": family_b,
         },
         "family_c": {

@@ -20,6 +20,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import experiment_dir, foundations_dir
 from typing import Any
 
 import numpy as np
@@ -104,22 +106,35 @@ def _build_factorial_config(method: str, env: str, integration: str):
 
 
 def _read_metrics(experiment_name: str) -> dict[str, Any]:
-    with open(RESULTS_ROOT / experiment_name / "metrics.json") as f:
+    with open(experiment_dir(experiment_name) / "metrics.json") as f:
         return json.load(f)
 
 
 def _read_m4_baseline(method: str, env: str) -> float | None:
     """Return the M4 baseline final_return_mean for (method, env), if available."""
-    path = RESULTS_ROOT / f"m4_{method}_{env}" / "metrics.json"
+    path = experiment_dir(f"m4_{method}_{env}") / "metrics.json"
     if not path.exists():
         return None
     with open(path) as f:
         return float(json.load(f)["final_return_mean"])
 
 
+def _num(v, sign: bool = False) -> str:
+    """Format a value that may be absent.
+
+    The M4 baseline is looked up from an earlier milestone's results, which a
+    clean tree does not have. Reporting used to assume it was always present,
+    so a missing baseline destroyed an hour of finished training at the print
+    statement.
+    """
+    if v is None:
+        return "n/a"
+    return f"{v:+.2f}" if sign else f"{v:.2f}"
+
+
 def main() -> int:
     run = ScriptRun(script="m5_factorial_toys")
-    out_dir = RESULTS_ROOT / "milestones" / "M5"
+    out_dir = foundations_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     stats_path = out_dir / "stats_M5_factorial_toys.json"
     summary_path = out_dir / "stats_M5_factorial_toys_run.json"
@@ -247,8 +262,9 @@ def main() -> int:
     for blk in summary_blocks:
         print(
             f"[m5_factorial_toys] {blk['method']:>8s} on {blk['env']:<14s} | "
-            f"m4_baseline={blk['m4_baseline_mean']:.2f} | best={blk['best_label']:<18s} "
-            f"mean={blk['best_mean']:.2f} (Δm4={blk['best_delta_vs_m4']:+.2f})",
+            f"m4_baseline={_num(blk['m4_baseline_mean'])} | "
+            f"best={blk['best_label']:<18s} "
+            f"mean={_num(blk['best_mean'])} (Δm4={_num(blk['best_delta_vs_m4'], sign=True)})",
             flush=True,
         )
         for r in blk["ranked_variants"]:

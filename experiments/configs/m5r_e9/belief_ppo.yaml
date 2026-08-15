@@ -1,0 +1,56 @@
+# Reference arms on E9 (rare fills, persistence 0.995). Agent hyperparameters are
+# carried over unchanged from the e_final matched configs: the observation size is
+# identical, so the capacity match still holds.
+extends:
+- base/base_ppo.yaml
+experiment_name: m5r_ref_belief_e9
+iterations: 1500
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: market_making_v1_belief_augmented
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+    n_regimes: 3
+    transition_matrix:
+    - 0.995
+    - 0.0025
+    - 0.0025
+    - 0.0025
+    - 0.995
+    - 0.0025
+    - 0.0025
+    - 0.0025
+    - 0.995
+    regime_p_tight_bid:
+    - 0.105
+    - 0.28
+    - 0.175
+    regime_p_wide_bid:
+    - 0.2275
+    - 0.0175
+    - 0.007
+    regime_p_tight_ask:
+    - 0.105
+    - 0.28
+    - 0.175
+    regime_p_wide_ask:
+    - 0.2275
+    - 0.0175
+    - 0.007
+    initial_distribution:
+    - 0.333
+    - 0.333
+    - 0.334
+agent:
+  name: ppo_belief
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 59

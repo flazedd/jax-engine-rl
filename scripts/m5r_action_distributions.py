@@ -23,6 +23,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import analysis_dir, experiment_dir
 from typing import Any
 
 import jax
@@ -40,14 +42,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 
 METHODS: list[tuple[str, str]] = [
-    ("regime_agnostic_ppo", "m5r_matched_regime_agnostic"),
-    ("belief_ppo",          "m5r_matched_belief"),
-    ("oracle_ppo",          "m5r_matched_oracle"),
-    ("stacked_obs_ppo",     "m5r_matched_stacked_obs"),
-    ("rl2_concat",          "m5r_final_rl2_concat_e_final"),
-    ("rl2_hypernet",        "m5r_final_rl2_hypernet_e_final"),
-    ("varibad_concat",      "m5r_final_varibad_concat_e_final"),
-    ("varibad_hypernet",    "m5r_final_varibad_hypernet_e_final"),
+    ("regime_agnostic_ppo", "m5r_ref_regime_agnostic_e9"),
+    ("belief_ppo",          "m5r_ref_belief_e9"),
+    ("oracle_ppo",          "m5r_ref_oracle_e9"),
+    ("stacked_obs_ppo",     "m5r_ref_stacked_obs_e9"),
+    ("rl2_concat",          "m5r_final_rl2_concat_e9"),
+    ("rl2_hypernet",        "m5r_final_rl2_hypernet_e9"),
+    ("varibad_concat",      "m5r_final_varibad_concat_e9"),
+    ("varibad_hypernet",    "m5r_final_varibad_hypernet_e9"),
 ]
 
 N_ACTIONS = 3
@@ -56,7 +58,7 @@ INV_MAX = 5  # MarketMakingV1 default; inventory ∈ [-INV_MAX, +INV_MAX]
 
 
 def _probe_one(experiment_name: str, n_rollouts: int, rollout_length: int) -> dict[str, Any]:
-    exp_dir = RESULTS_ROOT / experiment_name
+    exp_dir = experiment_dir(experiment_name)
     if not exp_dir.exists():
         raise FileNotFoundError(f"missing experiment dir: {exp_dir}")
     checkpoints = sorted(exp_dir.glob("checkpoint_seed_*.pkl"))
@@ -142,7 +144,7 @@ def main() -> int:
     parser.add_argument("--rollout-length", type=int, default=128)
     args = parser.parse_args()
 
-    out_dir = RESULTS_ROOT / "M5R" / "final"
+    out_dir = analysis_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     stats_path = out_dir / "m5r_action_distributions.json"
     summary_path = out_dir / "m5r_action_distributions_run.json"

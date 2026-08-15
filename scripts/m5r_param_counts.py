@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+
+from utils.paths import analysis_dir
 from typing import Any
 
 import jax
@@ -28,24 +30,27 @@ from training.train import _build_agent, _build_env, _maybe_wrap_env_for_agent
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+from evaluation.protocol import MEDIUM_ENV
+
 CONFIG_ROOT = REPO_ROOT / "experiments" / "configs"
 RESULTS_ROOT = REPO_ROOT / "results"
-OUT_DIR = RESULTS_ROOT / "M5R" / "final"
+OUT_DIR = analysis_dir()
 
 # (display_label, config_path_relative_to_CONFIG_ROOT). Every target is the
-# config it was actually trained under. The four meta-RL variants use the
-# matched configs composed with the medium-difficulty env override, and the
-# references use the matched configs directly, so the counts this reports are
-# the counts the parameter-budget claim rests on.
+# config it was actually trained under, so the counts this reports are the
+# counts the parameter-budget claim rests on. Composed from the current config
+# set rather than written out: the paths used to name the superseded set, so
+# the audit reported the budget of configs nothing had been trained from.
+_SET = f"m5r_{MEDIUM_ENV}"
 TARGETS: list[tuple[str, str]] = [
-    ("rl2_concat",          "m5r_final/rl2_concat_e_final.yaml"),
-    ("rl2_hypernet",        "m5r_final/rl2_hypernet_e_final.yaml"),
-    ("varibad_concat",      "m5r_final/varibad_concat_e_final.yaml"),
-    ("varibad_hypernet",    "m5r_final/varibad_hypernet_e_final.yaml"),
-    ("regime_agnostic_ppo", "m5r_matched/regime_agnostic.yaml"),
-    ("stacked_obs_ppo",     "m5r_matched/stacked_obs.yaml"),
-    ("belief_ppo",          "m5r_matched/belief_ppo.yaml"),
-    ("oracle_ppo",          "m5r_matched/oracle_ppo.yaml"),
+    ("rl2_concat",          f"{_SET}/rl2_concat.yaml"),
+    ("rl2_hypernet",        f"{_SET}/rl2_hypernet.yaml"),
+    ("varibad_concat",      f"{_SET}/varibad_concat.yaml"),
+    ("varibad_hypernet",    f"{_SET}/varibad_hypernet.yaml"),
+    ("regime_agnostic_ppo", f"{_SET}/regime_agnostic.yaml"),
+    ("stacked_obs_ppo",     f"{_SET}/stacked_obs.yaml"),
+    ("belief_ppo",          f"{_SET}/belief_ppo.yaml"),
+    ("oracle_ppo",          f"{_SET}/oracle_ppo.yaml"),
 ]
 
 

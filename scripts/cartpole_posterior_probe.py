@@ -28,6 +28,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import cartpole_dir, experiment_dir
 from typing import Any
 
 import numpy as np
@@ -65,7 +67,7 @@ def _gap_closed_per_seed(
 def _probe_cell(
     experiment_name: str, n_rollouts: int, rollout_length: int, classifier: str,
 ) -> dict[str, Any]:
-    exp_dir = RESULTS_ROOT / experiment_name
+    exp_dir = experiment_dir(experiment_name)
     if not exp_dir.exists():
         raise FileNotFoundError(f"experiment dir missing: {exp_dir}")
     checkpoints = sorted(exp_dir.glob("checkpoint_seed_*.pkl"))
@@ -146,7 +148,7 @@ def _signal_pattern(
 
 
 def _load_per_seed_returns(experiment_name: str) -> list[float]:
-    p = RESULTS_ROOT / experiment_name / "metrics.json"
+    p = experiment_dir(experiment_name) / "metrics.json"
     with open(p) as f:
         m = json.load(f)
     return list(map(float, m["per_seed_final_return"]))
@@ -173,7 +175,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    out_dir = RESULTS_ROOT / "milestones" / "cartpole"
+    out_dir = cartpole_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     # Classifier-, sweep-, and axis-suffixed filename so all variants
     # coexist on disk.

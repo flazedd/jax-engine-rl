@@ -30,15 +30,15 @@ _CELL_COLORS = {
     "varibad_hypernet": "#73b8ad",
 }
 
-from utils.paths import project_fig_dir, results_root, resolve_data
+from utils.paths import analysis_dir, cartpole_dir, experiment_dir, fig_appendix_dir, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
-FIGURES_ROOT = project_fig_dir("milestones", "cartpole")
+FIGURES_ROOT = fig_appendix_dir()
 
 
 def _load(method: str) -> np.ndarray:
-    p = RESULTS_ROOT / f"m_cartpole_{method}" / "metrics.json"
+    p = experiment_dir(f"m_cartpole_{method}") / "metrics.json"
     with open(resolve_data(p)) as f:
         m = json.load(f)
     return np.asarray(m["per_seed_final_return"], dtype=float)
@@ -122,16 +122,16 @@ _METHOD_LABELS = {
 def plot_posterior_vs_performance(out_path: Path) -> bool:
     """Per-(method, seed) scatter of posterior_error vs gap_closed.
 
-    Mirrors the `figures/milestones/M6/rq3_posterior_vs_performance.png`
+    Mirrors the appendix `cartpole_posterior_vs_performance.png`
     layout: x = analytical_acc − method_acc (low → method belief
     decodes regime almost as well as analytical), y = gap_closed
     (0 = floor, 1 = oracle). Title carries the headline correlation
     + 95% bootstrap CI."""
     stats_path = (
-        RESULTS_ROOT / "milestones" / "cartpole"
+        cartpole_dir()
         / "stats_cartpole_posterior_vs_performance.json"
     )
-    if not stats_path.exists():
+    if not resolve_data(stats_path).exists():
         print(f"[cartpole_plots] skip scatter: missing {stats_path}", flush=True)
         return False
     with open(resolve_data(stats_path)) as f:
@@ -206,17 +206,17 @@ def plot_logistic_vs_mlp_side_by_side(out_path: Path) -> bool:
     """
     paths = {
         "logistic": (
-            RESULTS_ROOT / "milestones" / "cartpole"
+            cartpole_dir()
             / "stats_cartpole_posterior_vs_performance.json"
         ),
         "mlp": (
-            RESULTS_ROOT / "milestones" / "cartpole"
+            cartpole_dir()
             / "stats_cartpole_posterior_vs_performance_mlp.json"
         ),
     }
     stats_by_clf = {}
     for clf, p in paths.items():
-        if not p.exists():
+        if not resolve_data(p).exists():
             print(f"[cartpole_plots] skip side-by-side: missing {p}", flush=True)
             return False
         with open(resolve_data(p)) as f:
@@ -284,8 +284,8 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
     row = cartpole (inversion). Left column = logistic, right = MLP.
     The four panels share x and y conventions so the cross-env contrast
     is visible at a glance."""
-    M5R = REPO_ROOT / "results" / "M5R" / "final"
-    CP = RESULTS_ROOT / "milestones" / "cartpole"
+    M5R = analysis_dir()
+    CP = cartpole_dir()
     paths = {
         ("MM", "logistic"): M5R / "m5r_posterior_vs_performance.json",
         ("MM", "mlp"): M5R / "m5r_posterior_vs_performance_mlp.json",
@@ -294,7 +294,7 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
     }
     stats = {}
     for k, p in paths.items():
-        if not p.exists():
+        if not resolve_data(p).exists():
             print(f"[cartpole_plots] skip 2x2: missing {p}", flush=True)
             return False
         with open(resolve_data(p)) as f:
@@ -359,7 +359,7 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
 def plot_difficulty_sweep_returns(out_path: Path) -> bool:
     """7-method × 3-level line plot of mean returns. Mirrors M6's
     rq3_persistence_sweep / rq3_distinguishability_sweep figure style."""
-    sweep_path = RESULTS_ROOT / "milestones" / "cartpole" / "stats_cartpole_sweep.json"
+    sweep_path = cartpole_dir() / "stats_cartpole_sweep.json"
     if not sweep_path.exists():
         print(f"[cartpole_plots] skip sweep_returns: missing {sweep_path}", flush=True)
         return False
@@ -375,7 +375,7 @@ def plot_difficulty_sweep_returns(out_path: Path) -> bool:
 
     def get_seeds(method: str, level: str) -> np.ndarray:
         name = f"m_cartpole_{method}" if level == "medium" else f"m_cartpole_{method}_{level}"
-        with open(resolve_data(RESULTS_ROOT / name / "metrics.json")) as f:
+        with open(resolve_data(experiment_dir(name) / "metrics.json")) as f:
             return np.asarray(json.load(f)["per_seed_final_return"], dtype=float)
 
     means = {m: [float(get_seeds(m, l).mean()) for l in levels] for m in methods}
@@ -437,17 +437,17 @@ def plot_difficulty_sweep_scatter(out_path: Path) -> bool:
     at hard (where the envelope collapses)."""
     paths = {
         "logistic": (
-            RESULTS_ROOT / "milestones" / "cartpole"
+            cartpole_dir()
             / "stats_cartpole_posterior_vs_performance_sweep.json"
         ),
         "mlp": (
-            RESULTS_ROOT / "milestones" / "cartpole"
+            cartpole_dir()
             / "stats_cartpole_posterior_vs_performance_sweep_mlp.json"
         ),
     }
     stats_by = {}
     for clf, p in paths.items():
-        if not p.exists():
+        if not resolve_data(p).exists():
             print(f"[cartpole_plots] skip sweep_scatter: missing {p}", flush=True)
             return False
         with open(resolve_data(p)) as f:
@@ -525,7 +525,7 @@ def plot_axis_returns(out_path: Path, axis: str) -> bool:
             name = f"m_cartpole_{method}_{level}"
         else:
             name = f"m_cartpole_{method}_{axis}_{level}"
-        with open(resolve_data(RESULTS_ROOT / name / "metrics.json")) as f:
+        with open(resolve_data(experiment_dir(name) / "metrics.json")) as f:
             return np.asarray(json.load(f)["per_seed_final_return"], dtype=float)
 
     means = {m: [float(get_seeds(m, l).mean()) for l in levels] for m in methods}
@@ -590,7 +590,7 @@ def plot_two_axis_scatter_grid(out_path: Path) -> bool:
     persistence-logistic, persistence-mlp); columns = (easy, medium,
     hard). 12 panels total. Headline figure for the cartpole
     cross-axis robustness claim."""
-    cp = RESULTS_ROOT / "milestones" / "cartpole"
+    cp = cartpole_dir()
     sources = (
         ("Asymmetry · logistic",   cp / "stats_cartpole_posterior_vs_performance_sweep.json"),
         ("Asymmetry · MLP",        cp / "stats_cartpole_posterior_vs_performance_sweep_mlp.json"),
@@ -599,7 +599,7 @@ def plot_two_axis_scatter_grid(out_path: Path) -> bool:
     )
     stats_by = {}
     for label, p in sources:
-        if not p.exists():
+        if not resolve_data(p).exists():
             print(f"[cartpole_plots] skip 4x3 grid: missing {p}", flush=True)
             return False
         with open(resolve_data(p)) as f:

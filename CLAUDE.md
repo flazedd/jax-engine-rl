@@ -8,20 +8,20 @@ This file is the navigation hub. Full specifications live in `docs/`. **Load onl
 
 1. Read this file every session (it's small on purpose).
 2. Decide what you're working on, pick the relevant docs from the table below, and read those.
-3. When executing a specific milestone, read only that milestone's file from `docs/milestones/`, plus `contingency.md`.
+3. When running or changing the experimental programme, read `docs/pipeline.md` first.
 
 ## Where to look
 
 | For work on... | Read |
 |---|---|
+| Running the programme, the results layout, provenance, the dummy layer | `docs/pipeline.md` |
 | Understanding research questions, plot descriptions, what the thesis claims | `docs/research-questions.md` |
-| Running or debugging a specific milestone | `docs/milestones/m{n}.md` + `docs/milestones/contingency.md` |
-| Cross-milestone planning, the dependency graph, "when is the thesis done?" | `docs/milestones/overview.md` |
-| Statistical tests, pre-registered hypotheses, limitations, posterior-quality probe | `docs/methodology.md` |
-| Environment design (R1–R4), env-iteration process, action space justification | `docs/environment.md` |
-| Writing agent code, implementing hypernet / exploration bonus, JSON result schemas, plotting modules, known pitfalls | `docs/implementation.md` |
-| Setting up uv, YAML configs with `extends:`, git workflow, tests, run modes, JAX performance rules, script output format, hyperparameter discipline | `docs/conventions.md` |
-| Writing or editing any milestone figure — naming, legends, y-axis, bar labels, compute-budget footer, reference lines | `docs/plotting.md` |
+| Statistical protocol, comparison sets, pre-registered hypotheses | `docs/methodology.md` + `evaluation/protocol.py` |
+| Environment design (R1–R4), env-iteration process, action space | `docs/environment.md` |
+| Writing agent code, JSON result schemas, plotting modules, known pitfalls | `docs/implementation.md` |
+| uv, YAML configs with `extends:`, tests, run modes, JAX performance rules | `docs/conventions.md` |
+| Writing or editing any figure — naming, legends, axes, compute footer | `docs/plotting.md` |
+| Why something is the way it is (M0–M7 history, rejected env designs) | `docs/_archive/` |
 
 Never read more than 2–3 docs in a single session unless the task genuinely spans all of them.
 
@@ -30,7 +30,7 @@ Never read more than 2–3 docs in a single session unless the task genuinely sp
 **Problem.** Regime-switching market making is a POMDP where a latent HMM regime governs fill dynamics. Regime-agnostic PPO settles on a compromise policy; belief-conditioned methods can (in principle) do better. The thesis asks how much they actually close the gap, how they decompose the gap, and how their performance scales with difficulty.
 
 **Three research questions (details in `docs/research-questions.md`):**
-- **RQ1** — How does the optimality gap decompose into shared-network / inference / compromise-policy costs?
+- **RQ1** — How do RL² and VariBAD perform under each conditioning architecture, concatenation and hypernetwork?
 - **RQ2** — How much of each gap component do meta-RL methods close?
 - **RQ3** — How does method performance scale with problem difficulty, and does posterior approximation quality predict task performance?
 
@@ -50,7 +50,7 @@ Full ladder + ablation spec in `docs/research-questions.md` → "Method ladder".
 
 ## Reference levels (quick reference)
 
-Three reference performance levels, established in M3 (see `docs/milestones/m3.md`):
+Three reference performance levels (§3.4 of the thesis):
 
 | Level | Role | Regime info |
 |---|---|---|
@@ -60,7 +60,7 @@ Three reference performance levels, established in M3 (see `docs/milestones/m3.m
 
 Expected ordering: `regime_agnostic ≤ belief ≤ oracle`.
 
-Total optimality gap = `oracle − regime_agnostic`, decomposed 2-way into **inference cost** (`oracle − belief`) and **compromise-policy cost** (`belief − agnostic`). Meta-RL methods in M5 are evaluated against these components.
+The reference gap `oracle − regime_agnostic` decomposes into the **posterior-information component** (`oracle − belief`) and the **belief-to-policy component** (`belief − agnostic`). Both are estimated under the matched protocol, not theoretical bounds.
 
 ## Critical conventions (applied every turn)
 
@@ -71,27 +71,30 @@ These are the non-negotiable rules. Full discussion in `docs/conventions.md`.
 - **JSON is for decisions, PNG is for the human.** Every pass criterion is a JSON field with a threshold. Claude Code reads JSON, never PNGs.
 - **Every script writes a shared-schema summary JSON** and prints a single final line `[script] OK | key=val | output=path` (or `FAIL | reason=...`).
 - **YAML configs use `extends:` composition.** Base configs hold shared hyperparameters; experiment configs override minimally. See `docs/conventions.md` → "Configuration files (YAML)".
-- **Tune-once-freeze hyperparameters.** PPO core tuned in M1 then frozen project-wide. Method-specifics tuned in M4 then frozen. Never retune per experiment.
-- **Seed discipline.** 5 seeds for primary experiments, fixed values `{0, 1, 2, 3, 4}` across methods to enable paired statistical tests. Never delete seeds silently.
-- **Pre-registered primary hypotheses.** 6 for RQ2, 3 for RQ3. Everything else is exploratory. See `docs/methodology.md`.
-- **Git tag every passing milestone** (`git tag m{n}-passed`). Main branch always passes the latest milestone.
+- **Tune-once-freeze hyperparameters.** Optimiser settings are defaults and are never varied by method or environment; the entropy coefficient is the one documented exception (§3.8). Never retune per experiment.
+- **Seed discipline.** 20 seeds, numbered 0-19, shared across methods so every comparison is paired. The count lives in `evaluation/protocol.py`, not in prose. Never delete seeds silently.
+- **Three comparison sets**, corrected separately by Holm-Bonferroni: returns, behavioural diagnostics, belief quality. Sizes in `evaluation/protocol.py`. Everything else is descriptive.
+- **The dummy chain must be green before a real run.** `--dummy` proves the analysis and figure chain in seconds; preflight enforces it.
 - **JAX performance is not optional.** Shape-stable inputs, `lax.scan` / `vmap`, no Python loops in jit regions. See `docs/conventions.md` → "JAX performance discipline".
 
-## Current status
+## Current state
 
-(Update this section as milestones pass.)
+The repository is organised by the structure of the thesis, not by the order
+the work happened. `docs/pipeline.md` describes the layout, the programme
+phases and the provenance rules; `evaluation/protocol.py` holds the statistical
+constants that Table 3.5 and Table D.8 report.
 
-- [x] M0 — infrastructure skeleton
-- [x] M1 — PPO on AS baseline
-- [x] M2 — regime-switching env, R1–R4 verified on E6e_symmetric_kappa05 (current E_final; E2/E3 also passed)
-- [x] M3 — reference levels on E6e (agnostic=136.2, belief=168.5, oracle=180.1; gap=43.9, compromise=32.3 / inference=11.6)
-- [x] M4 — implementation validation (RL² & VariBAD clear PPO floor on bandit/gridworld/regime_bandit at full budget; see `results/milestones/M4/method_ranking.json`)
-- [x] M5 — ladder + factorial on MM (answers RQ2). Stage A failed initial pass (2026-04-25); recovery via Steps 1-5. **Step-4 full-budget 4-cell factorial complete (n=8 × 200 iter, 2026-04-27)**: RL² hypernet **168.56** / VariBAD hypernet **166.80** (both at Belief-PPO ceiling 168.5, +30-32 above floor 136.2, gap_closed_vs_belief 0.95-1.00); RL² concat 124.07 / VariBAD concat 110.32 (both below floor). Both primary hypotheses (`hypernet_beats_concat`) supported with Holm-corrected p=0.0156, |Δ|≈45-55, robust to LOO. **Posterior probe**: all 4 cells decode regime at 0.79-0.81 vs analytical 0.88 — concat and hypernet have equivalent belief decodability, integration is the bottleneck (decoupling finding). `ranking_stable: false` (5/8 seeds — instability confined to the tied hypernet cells); decisive scientific claims robust. Tagged `m5-passed` 2026-04-27 with caveat note in tag message. See `STEP4_FINDINGS.md`. **Update 2026-06-22: medium-env factorial re-run at n=20 × 300 iter (`m5r_final_eval`, data in `results/M5R/final/per_cell_env.json`); these n=20 numbers are what the thesis reports and supersede the n=8 Step-4 figures above.** Refs: regime-agnostic floor 137.98, Belief-PPO 168.81, Oracle-PPO 182.01. RL² hypernet 163.1 (gap_closed_vs_belief 0.81), VariBAD hypernet 163.5 (0.83) — close to but **below** the belief ceiling, not at it; RL² concat 118.68, VariBAD concat 108.87 (both below the floor). hypernet > concat holds for both methods with large margins; the thesis reports the ordering as leave-one-out-robust at n=20 (Results, RQ2 section). Deployed-hypernet 163.1 is the same value the transplant figure climbs above.
-- [x] M6 — difficulty sweep + decoupling (answers RQ3). 7 methods × 3 levels × 2 axes = 42 cells. **Decoupling generalises** (Pearson r = +0.026, CI [−0.103, +0.155] across n=192 cell × seed points). Family A `hypernet > concat` **12/12 supported** with massive effects (Holm-corrected p=0.0469, |Δ| spans +24 to +89). Persistence-easy re-run 2026-04-29 at diag=0.99 (was 0.995) to give meta-RL methods an in-episode learning signal; fixed Belief-PPO monotonicity. Tagged `m6-passed` 2026-04-29 with caveat: `interpretable_overall=false` because the gap_closed normalisation dips on persistence easy/medium for hypernet methods — a metric artifact, not a method failure (absolute returns are monotonic non-increasing for every reference and hypernet). See FINDINGS.md. **Update 2026-06-23: in-domain sweep redesigned and re-run at n=20, superseding the n=8 two-axis sweep above for the thesis.** New sweep is the distinguishability axis only, easy `s=2.0` / medium `s=1.0` (= medium env) / hard `s=0.75`, plus one coupled fast-persistence point (`P_ii=0.95`, `s=2.0`), all at n=20 × 300 iter (`scripts/sweep_redesign_n20.py`; data in `results/M5R/final/m5r_posterior_vs_performance[_mlp]_sweep_{distinguishability_easy,distinguishability_hard,coupled_fast}.json`, medium level reuses the M5 factorial). Integration ordering holds at every level: hypernet variants reach the Belief-PPO ceiling, concat variants sit below the regime-agnostic floor. Per-level posterior-vs-performance correlation (logistic, overall): easy +0.15, hard +0.47, coupled +0.19; decoupling flagged at each level. At n=20 the n=8 LOO arithmetic ceiling (min one-sided Wilcoxon p = 1/256, Holm×12 = 0.0469, so any single-seed drop broke the corrected-p check) no longer binds. Thesis figure `figures/m5r_sweep_n20.png` and the Robustness-and-Generalisation results section use this n=20 data; the older `results/milestones/M6/` n=8 sweep is retained for history only. **Update 2026-07-27: coupled instance re-tuned `P_ii=0.85`→`0.95` (dwell ~20) and its seven cells retrained at n=20×300, because the original `P_ii=0.85` failed R4 (analytical posterior-entropy decay 0.10 < 0.35 threshold — switching too fast for the posterior to concentrate). At `P_ii=0.95` all of R1–R4 pass (R4 decay 0.37) and the `hypernet>concat` ordering and belief-quality/performance decoupling replicate (hypernet ≈207–209 near Belief-PPO 215.6; concat 129–143 below regime-agnostic 158.0). `experiments/configs/envs/sweep_coupled_fast.yaml`, `results/M5R/final/per_cell_env.json` (`per_env.coupled_fast`), and `figures/m5r_sweep_n20.png` updated accordingly; hard level is `s=0.75`.**
-- [ ] M7 — supplementary ablations (optional)
-- [x] **Second-POMDP external-validity probe** (`CartPoleRegimeV1`, complete 2026-05-01). 7-method ladder × **2 difficulty axes × 3 levels each** (asymmetry: within-regime action-success contrast; persistence: HMM transition diagonal). Family A `hypernet > concat` **6/6 Holm-supported, 6/6 LOO-robust on each axis** (12/12 cells overall). Posterior-vs-performance correlation: pooled across asymmetry sweep r=+0.29/+0.15, across persistence sweep r=+0.49/+0.42 (logistic / MLP). **Inversion robust at every level on persistence (r=+0.30 to +0.68); robust at easy/medium on asymmetry (r=+0.47 to +0.64); attenuates only at asymmetry-hard where envelope collapses to +3.08.** Mechanistic finding: attenuation is driven by envelope size, not axis choice — both axes show the same pattern, asymmetry-hard just happens to compress the envelope further. Inversion is robust to (i) probe linearity, (ii) difficulty axis, (iii) difficulty level (where envelope ≥ ~6). See FINDINGS.md 2026-04-29 / -30 / -05-01 entries.
+One command reproduces everything the thesis reports:
 
-Current env version: `E_final = e6e_symmetric_kappa05` (symlink at `experiments/configs/envs/e_final.yaml`). E6e is symmetric within-regime fills (bid-side prob == ask-side prob) so regime no longer drives directional inventory drift, paired with κ=0.05 inventory penalty. Three regimes vary the per-regime (p_tight, p_wide) magnitudes so the optimal *action class* (sym vs favor_X) differs across regimes — but inventory does not leak regime info to a memoryless policy. M2 verify (40 iter × 256 envs × 3 seeds): agnostic=101.7, belief=127.3, oracle=141.1 → total gap 39.4 (compromise-policy cost 25.6, inference cost 13.8). Mid-mode (100 iter × 1 seed) gap was 47 vs E3's ~0. All R1–R4 pass. Replaces E3 because E3's regime-driven directional fills made inventory a near-sufficient statistic for regime, collapsing the empirical compromise gap to ~0 even though analytical compromise_VI predicted 21.
+```
+uv run python -m scripts.run_matched_programme            # full programme
+uv run python -m scripts.run_matched_programme --dummy    # whole chain on synthetic data, ~3s
+uv run python -m scripts.status                           # where a running programme is
+uv run python -m scripts.thesis_contract --strict         # artifacts against the protocol
+```
+
+The M0–M7 milestone log, including the environment-design iterations and the
+reasons several designs were rejected, is in `docs/_archive/milestone-history.md`.
 
 ## Glossary
 
@@ -127,6 +130,6 @@ Defined once here, used freely across all docs. Lives in `CLAUDE.md` (not a sepa
 **Project-internal**
 - **R1–R4** — the four problem requirements (policy divergence, locked-regime optimality, mixed-regime suboptimality, regime inferability) that any valid env parameterization must satisfy. See `docs/environment.md`.
 - **E0, E1, E2, ...** — iterations of the env design process, starting from vanilla AS (E0) and adding structural elements one at a time.
-- **M0–M7** — the project's progress milestones. See `docs/milestones/`.
+- **M0–M7** — the project's original progress milestones, retired. See `docs/_archive/`.
 - **RQ1, RQ2, RQ3** — the three research questions. See `docs/research-questions.md`.
 

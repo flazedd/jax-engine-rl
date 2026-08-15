@@ -25,6 +25,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import cartpole_dir, experiment_dir
 from typing import Any
 
 import numpy as np
@@ -94,7 +96,7 @@ def _build_cell_cfg(method: str, base_yaml: str, axis: str, level: str, mode: st
 
 
 def _read_metrics(experiment_name: str) -> dict[str, Any] | None:
-    p = RESULTS_ROOT / experiment_name / "metrics.json"
+    p = experiment_dir(experiment_name) / "metrics.json"
     if not p.exists():
         return None
     with open(p) as f:
@@ -255,7 +257,7 @@ def main() -> int:
     ]
 
     run = ScriptRun(script="cartpole_difficulty_sweep", run_mode=mode)
-    out_dir = RESULTS_ROOT / "milestones" / "cartpole"
+    out_dir = cartpole_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     # Per-axis stats filename so the asymmetry and persistence sweeps
     # coexist on disk (default 'asymmetry' keeps the legacy filename).

@@ -21,7 +21,7 @@ Outputs:
   results/env_validation_final/validation_table.json  # aggregated R1-R4 table
   results/env_validation_final/summary.json           # shared-schema run summary
   results/env_validation_final/figures/{label}/     # per-env M2 diagnostics
-  figures/milestones/M2/                            # reference-env diagnostics
+  figures/appendix/fig_M2_*.png                      # reference-env diagnostics
 
 Only `--full` (the default) reproduces the thesis numbers; the reduced modes
 cut the PPO budget far below what R2 and R3 need and will not clear the
@@ -42,13 +42,13 @@ from oracles.verify_requirements import (
     THRESHOLDS,
     verify,
 )
+from utils.paths import fig_targets, foundations_dir
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_ROOT = REPO_ROOT / "experiments" / "configs" / "envs"
 RESULTS_ROOT = REPO_ROOT / "results"
-FULL_OUT_DIR = RESULTS_ROOT / "env_validation_final"
-M2_FIG_DIR = FIGURES_ROOT / "milestones" / "M2"
+FULL_OUT_DIR = foundations_dir() / "env_validation"
 
 SCRIPT = "env_validation_final"
 
@@ -133,7 +133,7 @@ def _snapshot_figures(label: str, src: Path) -> None:
 
 
 def _restore_reference_figures(label: str) -> list[Path]:
-    """Put the reference env's figures back in figures/milestones/M2/.
+    """Put the reference env's figures back in the appendix figure tree.
 
     These are the ones the thesis appendix includes, so they must be the
     reference env's regardless of which env ran last.
@@ -141,9 +141,12 @@ def _restore_reference_figures(label: str) -> list[Path]:
     src = OUT_DIR / "figures" / label
     restored = []
     for png in sorted(src.glob("fig_M2_*.png")):
-        target = M2_FIG_DIR / png.name
-        shutil.copy(png, target)
-        restored.append(target)
+        # Both trees, from the one registry: these are appendix figures, and
+        # writing them to a milestone directory is what left the thesis copies
+        # outside the layout it mirrors.
+        for target in fig_targets(png.name):
+            shutil.copy(png, target)
+            restored.append(target)
     return restored
 
 
@@ -155,7 +158,10 @@ def _run_one(spec: dict[str, Any], run_mode: str) -> dict[str, Any]:
 
     print(f"\n[{SCRIPT}] === {label} ({spec['thesis_row']}) ===", flush=True)
     # Only a full-mode run may touch the committed figure directory.
-    fig_dir = M2_FIG_DIR if run_mode == "full" else OUT_DIR / "_figures_scratch"
+    # Every env renders into its own results directory; only the reference
+    # env's charts are copied into the figure tree afterwards, by
+    # _restore_reference_figures.
+    fig_dir = OUT_DIR / "figures" / label
     t0 = time.perf_counter()
     stats = verify(cfg_path, run_mode=run_mode, fig_dir=fig_dir)
     elapsed = time.perf_counter() - t0

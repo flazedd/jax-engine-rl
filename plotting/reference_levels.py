@@ -20,13 +20,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from plotting.style import COLORS, apply_style, polish
-from utils.paths import project_fig_dir, results_root, thesis_fig_dir, resolve_data
+from utils.paths import experiment_dir, fig_targets, project_fig_dir, resolve_data, results_root
 
 # Experiment directory -> label, in the order the ordering claim is made.
 REFERENCES = [
-    ("m5r_matched_regime_agnostic", "Regime-agnostic PPO"),
-    ("m5r_matched_belief", "Belief-PPO"),
-    ("m5r_matched_oracle", "Oracle-PPO"),
+    ("m5r_ref_regime_agnostic_e9", "Regime-agnostic PPO"),
+    ("m5r_ref_belief_e9", "Belief-PPO"),
+    ("m5r_ref_oracle_e9", "Oracle-PPO"),
 ]
 N_BOOT = 10_000
 
@@ -35,7 +35,7 @@ def _load(experiment: str) -> dict | None:
     # Resolve the source switch *before* the existence check: in a dummy run
     # only the .dummy.json sibling exists, so checking the real path first
     # would report the stage as missing.
-    p = resolve_data(results_root() / experiment / "metrics.json")
+    p = resolve_data(experiment_dir(experiment) / "metrics.json")
     if not p.exists():
         return None
     with open(p) as f:
@@ -50,7 +50,7 @@ def _boot_ci(vals: np.ndarray, seed: int = 0) -> tuple[float, float]:
 
 
 def _targets(name: str) -> list[Path]:
-    return [project_fig_dir("milestones", "M3") / name, thesis_fig_dir() / name]
+    return fig_targets(name)
 
 
 def plot_ceilings_bar(blocks: list[tuple[str, dict]]) -> None:
@@ -63,16 +63,17 @@ def plot_ceilings_bar(blocks: list[tuple[str, dict]]) -> None:
         mean = float(vals.mean())
         lo, hi = _boot_ci(vals, seed=i)
         ax.bar(i, mean, width=0.6, color=colour, edgecolor="white", linewidth=1.2,
-               yerr=[[max(0.0, mean - lo)], [max(0.0, hi - mean)]],
-               error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.2}, zorder=3)
+               yerr=[[max(0.0, mean - lo)], [max(0.0, hi - mean)]], capsize=4,
+               error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.2, "capthick": 1.2},
+               zorder=3)
         ax.annotate(f"{mean:.1f}", xy=(i, hi), xytext=(0, 6),
                     textcoords="offset points", ha="center", va="bottom",
                     fontsize=9, fontweight="bold", color="#333333")
     ax.set_xticks(range(len(blocks)))
     ax.set_xticklabels([lbl for lbl, _ in blocks])
-    ax.set_ylabel("Final-episode return")
+    ax.set_ylabel("Return at the end of training")
     n_seeds = len(blocks[0][1]["per_seed_final_return"])
-    ax.set_title(f"Reference levels, medium-difficulty RSMM (n = {n_seeds} seeds)")
+    ax.set_title(f"Reference levels, reference instance (n = {n_seeds} seeds)")
     polish(ax)
     fig.tight_layout()
     for t in _targets("fig_rq1_ceilings_bar.png"):
@@ -99,7 +100,7 @@ def plot_learning_curves(blocks: list[tuple[str, dict]]) -> None:
                             linewidth=0)
     ax.set_xlabel("Training iteration")
     ax.set_ylabel("Mean return")
-    ax.set_title("Reference levels over training, medium-difficulty RSMM")
+    ax.set_title("Reference levels over training, reference instance")
     ax.legend(frameon=False, loc="lower right")
     polish(ax)
     fig.tight_layout()

@@ -21,18 +21,18 @@ import numpy as np
 
 from evaluation.metrics import bootstrap_paired_mean_ci
 from evaluation import protocol as P
-from utils.paths import resolve_data, results_root
+from utils.paths import analysis_dir, experiment_dir, resolve_data, results_root
 from utils.script_output import ScriptRun
 
 # Adjacent pairs of the ordering, in the direction the thesis asserts.
 ADJACENT = [
-    ("belief_over_agnostic", "m5r_matched_belief", "m5r_matched_regime_agnostic"),
-    ("oracle_over_belief", "m5r_matched_oracle", "m5r_matched_belief"),
+    ("belief_over_agnostic", "m5r_ref_belief_e9", "m5r_ref_regime_agnostic_e9"),
+    ("oracle_over_belief", "m5r_ref_oracle_e9", "m5r_ref_belief_e9"),
 ]
 
 
 def _per_seed(experiment: str) -> np.ndarray | None:
-    p = resolve_data(results_root() / experiment / "metrics.json")
+    p = resolve_data(experiment_dir(experiment) / "metrics.json")
     if not p.exists():
         return None
     with open(p) as f:
@@ -74,7 +74,7 @@ def main() -> int:
                                  "(gap-closed) comparisons; raw returns remain "
                                  "reportable",
     }
-    out_dir = results_root() / "M5R" / "final"
+    out_dir = analysis_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "reference_ordering_gate.json"
     out_path.write_text(json.dumps(payload, indent=2))

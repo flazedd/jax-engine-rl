@@ -15,6 +15,8 @@ import sys
 import time
 from pathlib import Path
 
+from utils.paths import cartpole_dir, experiment_dir
+
 import numpy as np
 
 from evaluation.metrics import (
@@ -33,7 +35,7 @@ RESULTS_ROOT = REPO_ROOT / "results"
 
 def _load_seeds(method: str, level: str = "medium", axis: str = "asymmetry") -> np.ndarray:
     name = cartpole_experiment_name(method, axis, level)
-    p = RESULTS_ROOT / name / "metrics.json"
+    p = experiment_dir(name) / "metrics.json"
     with open(p) as f:
         m = json.load(f)
     return np.asarray(m["per_seed_final_return"], dtype=float)
@@ -74,7 +76,7 @@ def main() -> int:
     args = parser.parse_args()
 
     run = ScriptRun(script="cartpole_hypothesis_tests")
-    out_dir = RESULTS_ROOT / "milestones" / "cartpole"
+    out_dir = cartpole_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     is_sweep = set(args.levels) != {"medium"}
     sweep_suffix = "_sweep" if is_sweep else ""

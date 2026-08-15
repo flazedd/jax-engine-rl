@@ -37,11 +37,11 @@ _CELL_COLORS = {
     "varibad_hypernet": "#73b8ad",  # light teal
 }
 
-from utils.paths import project_fig_dir, results_root, resolve_data
+from utils.paths import fig_appendix_dir, foundations_dir, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
-FIGURES_ROOT = project_fig_dir("milestones", "M4")
+FIGURES_ROOT = fig_appendix_dir()
 
 
 def _budget_annotation(
@@ -72,8 +72,8 @@ _VARIANT_LABELS = {
 
 
 def _load_m4_floors() -> dict[str, float]:
-    path = RESULTS_ROOT / "milestones" / "M4" / "method_ranking.json"
-    if not path.exists():
+    path = foundations_dir() / "method_ranking.json"
+    if not resolve_data(path).exists():
         return {}
     with open(resolve_data(path)) as f:
         d = json.load(f)
@@ -85,8 +85,8 @@ def _load_m4_floors() -> dict[str, float]:
 
 
 def plot_factorial_toys(out_path: Path) -> bool:
-    stats_path = RESULTS_ROOT / "milestones" / "M5" / "stats_M5_factorial_toys.json"
-    if not stats_path.exists():
+    stats_path = foundations_dir() / "stats_M5_factorial_toys.json"
+    if not resolve_data(stats_path).exists():
         print(f"[m4_plots] skip factorial_toys: missing {stats_path}")
         return False
     with open(resolve_data(stats_path)) as f:

@@ -1,0 +1,22 @@
+# Convergence check at an extended budget. The 600-iteration arms were
+# still climbing at +2.9 to +4.4 return per 100 iterations, so the ordering
+# they show is partly a snapshot of which arm converged first. Written to a
+# separate experiment name so the 600-iteration curves survive as evidence.
+extends:
+- base/base_ppo.yaml
+- envs/e_final.yaml
+experiment_name: m5r_ref_stacked_obs_i1500_e_final
+iterations: 1500
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: market_making_v1_stacked_augmented
+  params:
+    stack_k: 4
+agent:
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 44

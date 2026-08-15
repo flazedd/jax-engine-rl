@@ -36,18 +36,19 @@ _CELL_BRAND = {
     "rl2_hypernet": "#2a9d8f", "varibad_hypernet": "#73b8ad",
 }
 
-from utils.paths import final_dir, project_fig_dir, results_root, thesis_fig_dir, resolve_data
+from evaluation.protocol import MEDIUM_ENV
+from utils.paths import experiment_dir, fig_targets, final_dir, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
 FINAL_DIR = final_dir()
-PROJECT_FIG_DIR = project_fig_dir("milestones", "M5R")
-THESIS_FIG_DIR = thesis_fig_dir()
-
-
 def _both_targets(name: str) -> list[Path]:
-    """Write figure to both the project milestones dir and the thesis figures dir."""
-    return [PROJECT_FIG_DIR / name, THESIS_FIG_DIR / name]
+    """Both destinations for a chart: the repo tree and the thesis tree.
+
+    The relative path comes from utils.paths.FIGURE_HOME, so a chart lands
+    under the research question it answers in both trees.
+    """
+    return fig_targets(name)
 
 CELLS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
 CELL_LABEL = {
@@ -58,13 +59,13 @@ CELL_LABEL = {
 }
 PERSISTENCE_LEVELS = (
     ("persistence_easy", "Easy ($P_{ii}=0.99$)"),
-    ("e_final", "Medium ($P_{ii}=0.98$)"),
+    (MEDIUM_ENV, "Medium ($P_{ii}=0.995$)"),
     ("persistence_hard", "Hard ($P_{ii}=0.96$)"),
     ("persistence_very_hard", "Very-hard ($P_{ii}=0.92$)"),
 )
 DISTINGUISHABILITY_LEVELS = (
     ("distinguishability_easy", "Easy"),
-    ("e_final", "Medium"),
+    (MEDIUM_ENV, "Medium"),
     ("distinguishability_hard", "Hard"),
 )
 # The figure the thesis includes as m5r_sweep_n20.png: the three
@@ -72,13 +73,13 @@ DISTINGUISHABILITY_LEVELS = (
 # is what its caption describes.
 THESIS_SWEEP_LEVELS = (
     ("distinguishability_easy", "Easy"),
-    ("e_final", "Medium"),
+    (MEDIUM_ENV, "Medium"),
     ("distinguishability_hard", "Hard"),
     ("coupled_fast", "Coupled fast persistence ($P_{ii}=0.95$)"),
 )
 KAPPA_LEVELS = (
     ("kappa02", "$\\kappa = 0.02$"),
-    ("e_final", "$\\kappa = 0.05$"),
+    (MEDIUM_ENV, "$\\kappa = 0.05$"),
     ("kappa10", "$\\kappa = 0.10$"),
     ("kappa20", "$\\kappa = 0.20$"),
 )
@@ -92,19 +93,37 @@ def _load() -> dict:
 def _load_probe(classifier: str = "logistic") -> dict | None:
     suffix = "" if classifier == "logistic" else f"_{classifier}"
     p = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}.json"
-    if not p.exists():
+    if not resolve_data(p).exists():
         return None
     with open(resolve_data(p)) as f:
         return json.load(f)
 
 
 def _load_stacked_obs() -> dict | None:
-    """Load stacked-obs sweep stats (mean / CI per env). None if missing."""
-    p = FINAL_DIR / "m5r_stacked_obs_sweep.json"
-    if not p.exists():
+    """Stacked-obs level, read from the matched reference run.
+
+    This used to read `m5r_stacked_obs_sweep.json`, which trains its own
+    stacked-obs agents on the unaugmented environment from a separately written
+    config, at a smaller budget and seed count. Drawing that beside arms trained
+    under the matched protocol compares agents that differ in inputs, budget and
+    seeds as though they differed only in method. The matched reference arm is
+    the one the protocol defines, so the figure reads it directly.
+    """
+    p = experiment_dir(f"m5r_ref_stacked_obs_{MEDIUM_ENV}") / "metrics.json"
+    if not resolve_data(p).exists():
         return None
     with open(resolve_data(p)) as f:
-        return json.load(f)
+        vals = np.asarray(json.load(f)["per_seed_final_return"], dtype=float)
+    if vals.size == 0:
+        return None
+    rng = np.random.default_rng(0)
+    boot = vals[rng.integers(0, vals.size, (10_000, vals.size))].mean(axis=1)
+    return {"by_env": {MEDIUM_ENV: {
+        "final_return_mean": float(vals.mean()),
+        "final_return_ci95": [float(np.percentile(boot, 2.5)),
+                              float(np.percentile(boot, 97.5))],
+        "n_seeds": int(vals.size),
+    }}}
 
 
 def _draw_refs(ax, refs: dict, label_x: float | None = None) -> None:
@@ -112,7 +131,7 @@ def _draw_refs(ax, refs: dict, label_x: float | None = None) -> None:
     is given (a data x-coordinate to the right of the bars), inline labels are
     placed there, left-aligned, as in the method-ladder figure."""
     # Shaded zones: floor -> belief (recoverable gap) and belief -> oracle (inference
-    # remainder), matching the ladder and transplant figures.
+    # remainder), matching the ladder figure.
     _fl, _be, _or = (refs.get("regime_agnostic_ppo"), refs.get("belief_ppo"),
                      refs.get("oracle_ppo"))
     if _fl is not None and _be is not None:
@@ -270,7 +289,7 @@ def plot_method_ladder(out_path: Path) -> None:
     apply_style()
     data = _load()
     stacked = _load_stacked_obs()
-    env_block = data["per_env"]["e_final"]
+    env_block = data["per_env"][MEDIUM_ENV]
     cells = env_block["cells"]
     refs = env_block["refs"]
     floor = refs["regime_agnostic_ppo"]
@@ -300,7 +319,7 @@ def plot_method_ladder(out_path: Path) -> None:
                     textcoords="offset points", ha="center", va="bottom",
                     fontsize=8.5, fontweight="bold", color="#333333")
 
-    stacked_cell = (stacked or {}).get("by_env", {}).get("e_final")
+    stacked_cell = (stacked or {}).get("by_env", {}).get(MEDIUM_ENV)
     if stacked_cell is not None:
         _bar(0.0, stacked_cell, C_STACK)
     for i_m, method in enumerate(["rl2", "varibad"]):
@@ -320,7 +339,7 @@ def plot_method_ladder(out_path: Path) -> None:
 
     ax.set_xticks([0, 1, 2])
     ax.set_xticklabels(["Stacked-obs", "RL²", "VariBAD"], fontsize=11)
-    ax.set_ylabel("Final-episode return", fontsize=11)
+    ax.set_ylabel("Return at the end of training", fontsize=11)
     ax.set_ylim(floor - 36, oracle + 7)
     ax.set_xlim(-0.55, 3.7)
     ax.grid(axis="y", alpha=0.25, linestyle=":")
@@ -345,6 +364,15 @@ def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
     apply_style()
     data = _load()
     stacked = _load_stacked_obs()
+    # Only plot levels that exist. Figure stages now run as soon as their
+    # dependencies land, so a sweep figure can be attempted before the sweep
+    # has produced its environments; dying on the first missing key would take
+    # every other figure in this module down with it.
+    available = set(data.get("per_env", {}))
+    axis_levels = tuple(lv for lv in axis_levels if lv[0] in available)
+    if not axis_levels:
+        print(f"[m5r_plots] skip {out_path.name}: none of its levels exist yet")
+        return
     n_panels = len(axis_levels)
     if n_panels == 4:
         nrows, ncols = 2, 2
@@ -424,14 +452,14 @@ def plot_posterior_vs_performance(
 
 def plot_m5r_learning_curves(out_path: Path) -> None:
     """Per-iteration learning curves for the four meta-RL cells on the
-    medium-difficulty environment, drawn from the matched-compute Stage C
+    reference instance, drawn from the matched-compute Stage C
     metrics. Reference horizontal lines for the regime-agnostic floor and
     the Belief-PPO and Oracle-PPO ceilings."""
     apply_style()
     fig, ax = plt.subplots(figsize=(11.0, 6.5))
 
     data = _load()
-    refs = data["per_env"]["e_final"]["refs"]
+    refs = data["per_env"][MEDIUM_ENV]["refs"]
     floor = refs["regime_agnostic_ppo"]
     belief = refs["belief_ppo"]
     oracle = refs["oracle_ppo"]
@@ -439,26 +467,32 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     # Colour by integration (concat = muted slate, hypernet = teal), method by
     # linestyle (RL² solid, VariBAD dashed), so "hypernet climbs, concat stays
     # low" reads at a glance.
+    # One colour per curve, all solid. Dash patterns were used to encode the
+    # method, but at the line width these curves need they are hard to tell
+    # apart, and the reader has to decode two channels at once. Hue keeps the
+    # ladder figure's convention, teal for hypernetwork and slate for
+    # concatenation, and shade separates the two methods within each family.
     cell_style = {
-        "rl2_concat":       (PALETTE["concat"], "-",  "RL² Concat"),
-        "rl2_hypernet":     (PALETTE["hyper"],  "-",  "RL² Hypernet"),
-        "varibad_concat":   (PALETTE["concat"], "--", "VariBAD Concat"),
-        "varibad_hypernet": (PALETTE["hyper"],  "--", "VariBAD Hypernet"),
+        "rl2_hypernet":     ("#1d7870", "-", "RL² Hypernet"),
+        "varibad_hypernet": ("#7ec8bd", "-", "VariBAD Hypernet"),
+        "rl2_concat":       ("#6b757d", "-", "RL² Concat"),
+        "varibad_concat":   ("#c3cad0", "-", "VariBAD Concat"),
     }
     cell_specs = [
         (cell, label, color, ls,
-         RESULTS_ROOT / f"m5r_final_{cell}_e_final" / "metrics.json")
+         experiment_dir(f"m5r_final_{cell}_{MEDIUM_ENV}") / "metrics.json")
         for cell, (color, ls, label) in cell_style.items()
     ]
     # Matched-family stacked-obs run, so its curve sits on the same per-step
     # tuple, optimiser settings, budget and capacity as the variant curves.
     cell_specs.append((
-        "stacked_obs", "Stacked-obs PPO", PALETTE["stacked"], ":",
-        RESULTS_ROOT / "m5r_matched_stacked_obs" / "metrics.json",
+        "stacked_obs", "Stacked-obs PPO", "#e09f3e", "-",
+        experiment_dir(f"m5r_ref_stacked_obs_{MEDIUM_ENV}") / "metrics.json",
     ))
     last_iter = 0
+    end_labels: list[tuple[int, float, str, str]] = []
     for cell_key, label, color, ls, m_path in cell_specs:
-        if not m_path.exists():
+        if not resolve_data(m_path).exists():
             continue
         with open(resolve_data(m_path)) as f:
             m = json.load(f)
@@ -478,25 +512,42 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
             lo, hi = mean.copy(), mean.copy()
         iters = np.arange(len(mean))
         last_iter = max(last_iter, len(mean) - 1)
-        ax.plot(iters, mean, color=color, label=label, linewidth=2.2, linestyle=ls)
-        ax.fill_between(iters, lo, hi, color=color, alpha=0.13)
+        # Thin lines and no confidence band: with six curves the bands overlap
+        # into a single wash that obscures the ordering the figure exists to
+        # show. Seed uncertainty is reported in the tables instead.
+        ax.plot(iters, mean, color=color, label=label, linewidth=1.3, linestyle=ls)
+        end_labels.append((len(mean) - 1, float(mean[-1]), label, color))
+
+    # Curves that finish close together would print their labels on top of one
+    # another, so the labels are pushed apart vertically and leadered back to the
+    # curve end. The reference lines label further right, clear of these.
+    span = max(oracle - floor, 1.0)
+    min_gap = 0.055 * span
+    placed: list[float] = []
+    for x_end, y_end, label, color in sorted(end_labels, key=lambda r: -r[1]):
+        y_lab = y_end
+        for prev in placed:
+            if abs(y_lab - prev) < min_gap:
+                y_lab = prev - min_gap
+        placed.append(y_lab)
+        ax.annotate(label, xy=(x_end, y_end), xytext=(x_end + 0.035 * last_iter, y_lab),
+                    textcoords="data", va="center", ha="left", fontsize=9,
+                    color=color, fontweight="bold", clip_on=False, zorder=6,
+                    arrowprops=dict(arrowstyle="-", color=color, lw=0.6,
+                                    alpha=0.5, shrinkA=0, shrinkB=0))
 
     ax.axhspan(floor, belief, color=PALETTE["hyper"], alpha=0.06, zorder=0)
-    xr = last_iter * 1.005
+    xr = last_iter * 1.20
     ref_line(ax, floor, "Regime-agnostic floor", x=xr, linestyle="-")
     ref_line(ax, belief, "Belief-PPO", x=xr, linestyle=(0, (1, 1.5)))
     ref_line(ax, oracle, "Oracle-PPO", x=xr, linestyle=(0, (6, 2)))
 
     ax.set_xlabel("Iteration", fontsize=12)
     ax.set_ylabel("Mean return across seeds", fontsize=12)
-    ax.set_xlim(0, last_iter * 1.16)
+    ax.set_xlim(0, last_iter * 1.30)
     ax.tick_params(axis="both", labelsize=11)
     polish(ax)
-    handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=5, fontsize=10,
-               bbox_to_anchor=(0.5, -0.005), frameon=True,
-               facecolor="white", edgecolor="#dddddd", framealpha=1.0)
-    fig.tight_layout(rect=[0, 0.06, 1, 0.98])
+    fig.tight_layout(rect=[0, 0.02, 1, 0.98])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
@@ -517,13 +568,13 @@ def _smooth_curve(arr, w):
     return out
 
 
-def _draw_probe_per_t(ax, classifier: str, env_label: str = "e_final") -> bool:
+def _draw_probe_per_t(ax, classifier: str, env_label: str = MEDIUM_ENV) -> bool:
     """Draw the per-timestep regime-decoding curves for one probe class onto
     `ax` (4 cells + analytical posterior + random-guess line). Returns False if
     the data is missing. Prefers the high-rollout file for stable curves."""
     suffix = "" if classifier == "logistic" else f"_{classifier}"
     hires = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}_hires.json"
-    if hires.exists():
+    if resolve_data(hires).exists():
         with open(resolve_data(hires)) as f:
             probe = json.load(f)
     else:
@@ -588,7 +639,7 @@ def _draw_probe_per_t(ax, classifier: str, env_label: str = "e_final") -> bool:
 
 
 def plot_m5r_probe_per_t(
-    out_path: Path, env_label: str = "e_final", classifier: str = "logistic",
+    out_path: Path, env_label: str = MEDIUM_ENV, classifier: str = "logistic",
 ) -> None:
     """Single-panel per-timestep regime-decoding curves for one probe class."""
     apply_style()
@@ -610,7 +661,7 @@ def plot_m5r_probe_per_t(
     print(f"[m5r_plots] wrote {out_path}")
 
 
-def plot_m5r_probe_per_t_combined(out_path: Path, env_label: str = "e_final") -> None:
+def plot_m5r_probe_per_t_combined(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
     """Linear and MLP probe per-timestep curves side by side, shared y-axis and a
     single shared legend below."""
     apply_style()
@@ -639,22 +690,8 @@ def plot_m5r_probe_per_t_combined(out_path: Path, env_label: str = "e_final") ->
 
 
 def main() -> int:
-    PROJECT_FIG_DIR.mkdir(parents=True, exist_ok=True)
-    THESIS_FIG_DIR.mkdir(parents=True, exist_ok=True)
     for target in _both_targets("m5r_method_ladder.png"):
         plot_method_ladder(target)
-    for target in _both_targets("m5r_persistence_sweep.png"):
-        plot_sweep(
-            PERSISTENCE_LEVELS,
-            "MarketMakingV1, persistence-axis difficulty sweep",
-            target,
-        )
-    for target in _both_targets("m5r_kappa_sweep.png"):
-        plot_sweep(
-            KAPPA_LEVELS,
-            "MarketMakingV1, inventory-penalty $\\kappa$ sweep",
-            target,
-        )
     for target in _both_targets("m5r_distinguishability_sweep.png"):
         plot_sweep(
             DISTINGUISHABILITY_LEVELS,

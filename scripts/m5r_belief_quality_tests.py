@@ -21,9 +21,9 @@ deliberately left uncorrected: they are reported next to these results but no
 claim rests on them alone.
 
 Reads:
-  results/M5R/final/m5r_posterior_vs_performance.json
+  results/analysis/m5r_posterior_vs_performance.json
 Writes:
-  results/M5R/final/m5r_belief_quality_tests.json
+  results/analysis/m5r_belief_quality_tests.json
 """
 from __future__ import annotations
 
@@ -45,8 +45,11 @@ from evaluation.metrics import (
 )
 from utils.script_output import ScriptRun
 
+from evaluation.protocol import MEDIUM_ENV
+from utils.paths import analysis_dir
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_ROOT = REPO_ROOT / "results" / "M5R" / "final"
+RESULTS_ROOT = analysis_dir()
 
 ALPHA = 0.05
 N_BOOT = 10_000
@@ -88,7 +91,7 @@ def _aligned(
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="scripts.m5r_belief_quality_tests")
-    parser.add_argument("--env-label", default="e_final")
+    parser.add_argument("--env-label", default=MEDIUM_ENV)
     parser.add_argument(
         "--probe",
         default=str(RESULTS_ROOT / "m5r_posterior_vs_performance.json"),

@@ -1,11 +1,16 @@
 # Plotting conventions
 
-Every milestone figure in this project is written for the thesis — not as
-a dev-time scratch plot. These rules apply to every figure under
-`figures/milestones/M{n}/` and to any new plot you add.
+Every figure in this project is written for the thesis, not as a dev-time
+scratch plot. These rules apply to every chart under `figures/results/RQ{n}/`
+and `figures/appendix/`, and to any new plot you add.
+
+Where a chart goes is not a plotter's decision: register it in
+`utils.paths.FIGURE_HOME` and save through `fig_targets(name)`, which returns
+its path in the repo tree and in the thesis tree. See `docs/pipeline.md` →
+"Figures".
 
 The **canonical implementation** lives in `plotting/style.py` (helpers) and
-`plotting/m5_plots.py` (worked examples). When in doubt, mirror those.
+`plotting/m5r_plots.py` (worked examples). When in doubt, mirror those.
 
 ---
 

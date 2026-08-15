@@ -23,12 +23,10 @@ import numpy as np
 from evaluation.action_distribution import regime_separation_per_seed
 from plotting.style import apply_style
 
-from utils.paths import project_fig_dir, results_root, thesis_fig_dir, resolve_data
+from utils.paths import analysis_dir, fig_targets, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
-PROJECT_FIG_DIR = project_fig_dir("milestones", "M5R")
-THESIS_FIG_DIR = thesis_fig_dir()
 
 # Fixed row order. The regime-agnostic agent sits at the top as the zero
 # anchor: it cannot observe the regime, so its three regime panels are
@@ -46,8 +44,8 @@ METHOD_ORDER = (
 
 
 def main() -> int:
-    stats_path = RESULTS_ROOT / "M5R" / "final" / "m5r_action_distributions.json"
-    if not stats_path.exists():
+    stats_path = analysis_dir() / "m5r_action_distributions.json"
+    if not resolve_data(stats_path).exists():
         print(f"[m5r_action_inv_heatmap] missing {stats_path}", flush=True)
         return 1
     with open(resolve_data(stats_path)) as f:
@@ -147,10 +145,7 @@ def main() -> int:
     cb.set_label("P(action | regime, inventory)", fontsize=9)
     cb.ax.tick_params(labelsize=8)
 
-    PROJECT_FIG_DIR.mkdir(parents=True, exist_ok=True)
-    THESIS_FIG_DIR.mkdir(parents=True, exist_ok=True)
-    for target_dir in (PROJECT_FIG_DIR, THESIS_FIG_DIR):
-        out_path = target_dir / "m5r_action_given_regime_inventory.png"
+    for out_path in fig_targets("m5r_action_given_regime_inventory.png"):
         fig.savefig(out_path, bbox_inches="tight")
         print(f"[m5r_action_inv_heatmap] wrote {out_path}", flush=True)
     plt.close(fig)

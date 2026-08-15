@@ -17,6 +17,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import analysis_dir, experiment_dir
 from typing import Any
 
 import numpy as np
@@ -70,7 +72,7 @@ def _materialise(env_label: str, env_yaml: str,
 
 
 def _read_metrics(experiment_name: str) -> dict[str, Any] | None:
-    p = RESULTS_ROOT / experiment_name / "metrics.json"
+    p = experiment_dir(experiment_name) / "metrics.json"
     if not p.exists():
         return None
     with open(p) as f:
@@ -96,7 +98,7 @@ def main() -> int:
     ap.add_argument("--num-seeds", type=int, default=12)
     args = ap.parse_args()
 
-    out_dir = RESULTS_ROOT / "M5R" / "final"
+    out_dir = analysis_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_path = out_dir / "m5r_stacked_obs_sweep_run.json"
     stats_path = out_dir / "m5r_stacked_obs_sweep.json"

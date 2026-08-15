@@ -3,7 +3,7 @@ extends:
 - base/base_ppo.yaml
 - envs/e_cartpole_v1.yaml
 experiment_name: m_cartpole_matched_belief
-iterations: 300
+iterations: 600
 parallel_envs: 512
 rollout_length: 128
 num_seeds: 20

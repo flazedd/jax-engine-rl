@@ -142,8 +142,18 @@ class ScriptRun:
         self,
         *,
         reason: str,
-        summary_path: str | os.PathLike[str],
+        summary_path: str | os.PathLike[str] | None = None,
     ) -> dict[str, Any]:
+        """Record a failure and print the FAIL line.
+
+        `summary_path` defaults to the script's own run file. It used to be
+        required, and ten callers omit it, so reporting a failure raised a
+        TypeError that replaced the real reason with a traceback about the
+        error reporter. A failure path that can itself fail is worse than none.
+        """
+        if summary_path is None:
+            from utils.paths import analysis_dir
+            summary_path = analysis_dir() / f"{self.script}_run.json"
         summary = write_summary(
             script=self.script,
             status="FAIL",

@@ -1,0 +1,58 @@
+# E9 - rare fills, high persistence. Reference env for the converged programme.
+#
+# e_final leaks the regime through u_t: the agent sees the previous reward, one
+# fill outcome identifies the regime in a median of 4 steps, and a memoryless
+# policy therefore reaches 151 against an oracle at 170. Simulating that floor
+# directly - a QMDP policy on the posterior implied by the last observation only,
+# with no accumulation - reproduces it, and says the gap is 14% of the optimum.
+#
+# Two changes, neither touching the reward function or u_t:
+#   fill rates x0.35   one observation becomes weakly diagnostic (ignorance after
+#                      one observation 85% -> 97%), while the ratios between
+#                      regimes, and so the optimal action in each, are unchanged
+#   persistence 0.995  regimes must outlast the ~25 steps an ideal filter needs;
+#                      at 0.98 they switch first and R4 inferability fails
+#
+# Simulated against the same one-step floor: oracle 55.1, floor 21.5, gap 61% of
+# the optimum. Spreads are deliberately not rescaled to recover the smaller
+# absolute returns - that hands more of the gap back to the memoryless policy and
+# cuts it to 42%. PPO normalises advantages, so the scale largely cancels.
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.05
+    gamma: 0.99
+    reset_inventory_range: 0
+    n_regimes: 3
+    transition_matrix:
+    - 0.995
+    - 0.0025
+    - 0.0025
+    - 0.0025
+    - 0.995
+    - 0.0025
+    - 0.0025
+    - 0.0025
+    - 0.995
+    regime_p_tight_bid:
+    - 0.105
+    - 0.28
+    - 0.175
+    regime_p_wide_bid:
+    - 0.2275
+    - 0.0175
+    - 0.007
+    regime_p_tight_ask:
+    - 0.105
+    - 0.28
+    - 0.175
+    regime_p_wide_ask:
+    - 0.2275
+    - 0.0175
+    - 0.007
+    initial_distribution:
+    - 0.333
+    - 0.333
+    - 0.334

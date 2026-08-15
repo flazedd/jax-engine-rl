@@ -1,0 +1,63 @@
+# E10 - e_final with the inventory penalty raised from 0.05 to 0.40.
+#
+# The reference levels on e_final sit 10.8 and 15.8 points apart, which is 0.23
+# episode standard deviations at the narrowest. Method differences have to be
+# resolved inside that, and they cannot be.
+#
+# kappa had never been varied: it sat at 0.05 through all of E0-E6e, while the
+# design search moved fill probabilities, symmetry and persistence. Raising it
+# makes inventory management matter, and the right inventory policy depends on
+# the fill rates, so the regime becomes worth more to know - without becoming
+# any easier to observe, because the fill probabilities are untouched.
+#
+# Predicted by the analytic ladder (QMDP over the true regime / the exact
+# posterior / the posterior from the last observation only), which reproduces
+# the measured 1500-iteration arms on e_final to within 8-11%:
+#
+#             agnostic  belief  oracle   gaps         min gap / sd
+#   kappa .05    163.7   179.5   190.3   15.8 / 10.8      0.23
+#   kappa .40     74.0   128.0   153.5   54.0 / 25.4      0.58
+#
+# Fill rates are unchanged, so returns stay in the 150 range and PPO loses no
+# signal. The larger action-value differences should also shorten training: the
+# learning curves on e_final are logarithmic because the advantage between
+# competing actions is small against the per-step reward noise.
+env:
+  name: market_making_v1
+  params:
+    inventory_max: 5
+    episode_length: 128
+    inventory_penalty: 0.4
+    gamma: 0.99
+    reset_inventory_range: 0
+    n_regimes: 3
+    transition_matrix:
+    - 0.98
+    - 0.01
+    - 0.01
+    - 0.01
+    - 0.98
+    - 0.01
+    - 0.01
+    - 0.01
+    - 0.98
+    regime_p_tight_bid:
+    - 0.3
+    - 0.8
+    - 0.5
+    regime_p_wide_bid:
+    - 0.65
+    - 0.05
+    - 0.02
+    regime_p_tight_ask:
+    - 0.3
+    - 0.8
+    - 0.5
+    regime_p_wide_ask:
+    - 0.65
+    - 0.05
+    - 0.02
+    initial_distribution:
+    - 0.333
+    - 0.333
+    - 0.334

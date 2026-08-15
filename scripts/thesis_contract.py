@@ -67,7 +67,9 @@ def _check_comparisons(payload, source: str, findings: list[dict]) -> int:
 
 def audit(root: Path) -> dict:
     findings: list[dict] = []
-    final = root / "M5R" / "final"
+    # Analyses moved out of the retired M5R/final layout; the audit was
+    # looking for its inputs where nothing has been written since.
+    final = root / "analysis"
     checked_comparisons = 0
 
     # --- the corrected sets ------------------------------------------------
@@ -118,7 +120,7 @@ def audit(root: Path) -> dict:
                 })
 
     # --- the budget --------------------------------------------------------
-    for experiment in ("m5r_matched_regime_agnostic", "m5r_matched_rl2_hypernet"):
+    for experiment in ("m5r_ref_regime_agnostic_e9", "m5r_final_rl2_hypernet_e9"):
         m = _load(root / experiment / "metrics.json")
         if m is None:
             continue

@@ -1,8 +1,8 @@
 extends:
 - m5r_base/rl2_hypernet.yaml
 - envs/e_final.yaml
-experiment_name: m5r_matched_rl2_hypernet
-iterations: 300
+experiment_name: m5r_final_rl2_hypernet_e_final
+iterations: 600
 parallel_envs: 512
 rollout_length: 128
 num_seeds: 20

@@ -35,16 +35,16 @@ from plotting.m3_plots import (
 )
 from utils.script_output import ScriptRun
 
-from utils.paths import project_fig_dir, results_root, resolve_data
+from utils.paths import fig_appendix_dir, experiment_dir, foundations_dir, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
-FIGURES_ROOT = project_fig_dir()
+FIGURES_ROOT = fig_appendix_dir()
 
 
 def regenerate_m0(run: ScriptRun) -> dict:
     experiment_dir = RESULTS_ROOT / "m0_dummy"
-    output = FIGURES_ROOT / "milestones" / "M0" / "fig_M0_dummy_learning_curve.png"
+    output = FIGURES_ROOT / "fig_M0_dummy_learning_curve.png"
     stats = plot_learning_curve(
         experiment_dir, output, title="M0 — dummy agent / dummy env (pipeline smoke test)"
     )
@@ -54,7 +54,7 @@ def regenerate_m0(run: ScriptRun) -> dict:
 
 def regenerate_m1(run: ScriptRun) -> dict:
     experiment_dir = RESULTS_ROOT / "m1_ppo_as"
-    fig_dir = FIGURES_ROOT / "milestones" / "M1"
+    fig_dir = FIGURES_ROOT
     curve_out = fig_dir / "fig_M1_ppo_learning_curve.png"
     policy_out = fig_dir / "fig_M1_ppo_policy_vs_as.png"
 
@@ -68,7 +68,7 @@ def regenerate_m1(run: ScriptRun) -> dict:
 
 
 def regenerate_m2(run: ScriptRun) -> dict:
-    stats_path = RESULTS_ROOT / "milestones" / "M2" / "stats_M2_requirements.json"
+    stats_path = foundations_dir() / "stats_M2_requirements.json"
     with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
 
@@ -76,7 +76,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
     env = MarketMakingV1(**stats["parameters"])
     vi = solve_value_iteration(env)
 
-    fig_dir = FIGURES_ROOT / "milestones" / "M2"
+    fig_dir = FIGURES_ROOT
     fig_dir.mkdir(parents=True, exist_ok=True)
 
     # R1 figures.
@@ -92,7 +92,7 @@ def regenerate_m2(run: ScriptRun) -> dict:
     # R2 figure — per-regime learning curves from per-experiment metrics.
     per_regime_metrics = []
     for r in range(env.n_regimes):
-        mpath = RESULTS_ROOT / f"m2_verify_{env_version}_per_regime_{r}" / "metrics.json"
+        mpath = experiment_dir(f"m2_verify_{env_version}_per_regime_{r}") / "metrics.json"
         with open(resolve_data(mpath)) as f:
             per_regime_metrics.append(json.load(f))
     per_regime_optima = np.asarray(
@@ -150,14 +150,14 @@ def regenerate_m2(run: ScriptRun) -> dict:
 
 
 def regenerate_m3(run: ScriptRun) -> dict:
-    stats_path = RESULTS_ROOT / "milestones" / "M3" / "stats_M3_reference_levels.json"
+    stats_path = foundations_dir() / "stats_M3_reference_levels.json"
     with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
 
     reference_levels = stats["reference_levels"]
     gap_components = stats["gap_components"]
 
-    fig_dir = FIGURES_ROOT / "milestones" / "M3"
+    fig_dir = FIGURES_ROOT
     fig_dir.mkdir(parents=True, exist_ok=True)
 
     # Per-method learning curves pulled from the per-experiment metrics.json.
@@ -168,7 +168,7 @@ def regenerate_m3(run: ScriptRun) -> dict:
         "belief_ppo": "m3_belief",
     }
     for method, exp_name in experiment_names.items():
-        mpath = RESULTS_ROOT / exp_name / "metrics.json"
+        mpath = experiment_dir(exp_name) / "metrics.json"
         with open(resolve_data(mpath)) as f:
             per_method_curves[method] = json.load(f)
 

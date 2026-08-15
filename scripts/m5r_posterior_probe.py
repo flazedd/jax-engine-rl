@@ -29,6 +29,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import analysis_dir, experiment_dir
 from typing import Any
 
 import numpy as np
@@ -40,7 +42,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = REPO_ROOT / "results"
 
 PROBED_METHODS = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
-PER_CELL_ENV_PATH = RESULTS_ROOT / "M5R" / "final" / "per_cell_env.json"
+PER_CELL_ENV_PATH = analysis_dir() / "per_cell_env.json"
 
 
 def _gap_closed_per_seed(
@@ -57,7 +59,7 @@ def _gap_closed_per_seed(
 def _probe_cell(
     experiment_name: str, n_rollouts: int, rollout_length: int, classifier: str,
 ) -> dict[str, Any]:
-    exp_dir = RESULTS_ROOT / experiment_name
+    exp_dir = experiment_dir(experiment_name)
     if not exp_dir.exists():
         raise FileNotFoundError(f"experiment dir missing: {exp_dir}")
     checkpoints = sorted(exp_dir.glob("checkpoint_seed_*.pkl"))
@@ -159,7 +161,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    out_dir = RESULTS_ROOT / "M5R" / "final"
+    out_dir = analysis_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = "" if args.classifier == "logistic" else f"_{args.classifier}"
     tag = f"_{args.tag}" if args.tag else ""

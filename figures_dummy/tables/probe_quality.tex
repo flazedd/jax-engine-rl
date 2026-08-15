@@ -1,0 +1,16 @@
+\begin{tabular}{lcccc}
+\hline
+\multicolumn{5}{c}{\textcolor{red}{\footnotesize DUMMY DATA, synthetic values, not a result}} \\
+\hline
+ & \multicolumn{2}{c}{\textbf{Decodability (acc)}}
+   & \multicolumn{2}{c}{\textbf{Belief quality ($D_{\mathrm{KL}}$)}} \\
+\textbf{Variant} & \textbf{Linear} & \textbf{MLP} & \textbf{Linear} & \textbf{MLP} \\
+\hline
+Analytical posterior & $0.861$ & $0.866$ & $\approx 0$ & $\approx 0$ \\
+\hline
+RL\textsuperscript{2} concat & $0.678$ & $0.787$ & $0.32$ & $0.24$ \\
+RL\textsuperscript{2} hypernet & -- & -- & -- & -- \\
+VariBAD concat & $0.542$ & $0.584$ & $0.61$ & $0.48$ \\
+VariBAD hypernet & -- & -- & -- & -- \\
+\hline
+\end{tabular}

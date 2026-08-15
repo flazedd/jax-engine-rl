@@ -16,6 +16,8 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from utils.paths import analysis_dir, experiment_dir
 from typing import Any
 
 import jax
@@ -37,14 +39,14 @@ N_INV_DIMS = 2 * INV_MAX + 1  # inventory one-hot block of the observation
 # per-step tuple, optimiser settings, budget and capacity. The pre-matched
 # `m3_*` runs train on the unaugmented observation and must not be used here.
 METHODS: list[tuple[str, str, str]] = [
-    ("regime_agnostic_ppo", "m5r_matched_regime_agnostic",     "none"),
-    ("belief_ppo",          "m5r_matched_belief",              "obs_belief"),
-    ("oracle_ppo",          "m5r_matched_oracle",              "obs_belief"),
-    ("stacked_obs_ppo",     "m5r_matched_stacked_obs",         "none"),
-    ("rl2_concat",          "m5r_final_rl2_concat_e_final",    "rl2"),
-    ("rl2_hypernet",        "m5r_final_rl2_hypernet_e_final",  "rl2"),
-    ("varibad_concat",      "m5r_final_varibad_concat_e_final",    "varibad"),
-    ("varibad_hypernet",    "m5r_final_varibad_hypernet_e_final",  "varibad"),
+    ("regime_agnostic_ppo", "m5r_ref_regime_agnostic_e9",     "none"),
+    ("belief_ppo",          "m5r_ref_belief_e9",              "obs_belief"),
+    ("oracle_ppo",          "m5r_ref_oracle_e9",              "obs_belief"),
+    ("stacked_obs_ppo",     "m5r_ref_stacked_obs_e9",         "none"),
+    ("rl2_concat",          "m5r_final_rl2_concat_e9",    "rl2"),
+    ("rl2_hypernet",        "m5r_final_rl2_hypernet_e9",  "rl2"),
+    ("varibad_concat",      "m5r_final_varibad_concat_e9",    "varibad"),
+    ("varibad_hypernet",    "m5r_final_varibad_hypernet_e9",  "varibad"),
 ]
 
 
@@ -94,7 +96,7 @@ def _probe_one(
     experiment_name: str, family: str, n_rollouts: int, rollout_length: int,
     swap_history: bool = False, hold_belief_fixed: bool = False,
 ) -> dict[str, Any]:
-    exp_dir = RESULTS_ROOT / experiment_name
+    exp_dir = experiment_dir(experiment_name)
     checkpoints = sorted(exp_dir.glob("checkpoint_seed_*.pkl"))
     seeds = [int(p.stem.split("_")[-1]) for p in checkpoints]
     if not seeds:
@@ -215,7 +217,7 @@ def main() -> int:
                              "measure covers every regime-carrying input")
     args = parser.parse_args()
 
-    out_dir = RESULTS_ROOT / "M5R" / "final"
+    out_dir = analysis_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = "_history_only" if args.hold_belief_fixed else (
         "_with_history" if args.swap_history else "")

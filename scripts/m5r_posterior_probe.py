@@ -75,6 +75,8 @@ def _probe_cell(
     method_briers: list[float] = []
     method_per_t: list[list[float]] = []
     analytical_per_t: list[list[float]] = []
+    method_per_t_kl: list[list[float]] = []
+    analytical_per_t_kl: list[list[float]] = []
     for seed in seeds:
         bundle = load_experiment(exp_dir, seed)
         result = probe_one_seed(
@@ -91,6 +93,12 @@ def _probe_cell(
         analytical_per_t.append(
             list(map(float, result["analytical"]["per_t_test_acc"]))
         )
+        method_per_t_kl.append(
+            list(map(float, result["method"]["per_t_test_kl_to_omega"]))
+        )
+        analytical_per_t_kl.append(
+            list(map(float, result["analytical"]["per_t_test_kl_to_omega"]))
+        )
     return {
         "seeds": seeds,
         "method_test_acc_per_seed": method_accs,
@@ -101,6 +109,8 @@ def _probe_cell(
         "method_brier_per_seed": method_briers,
         "method_per_t_test_acc_per_seed": method_per_t,
         "analytical_per_t_test_acc_per_seed": analytical_per_t,
+        "method_per_t_kl_per_seed": method_per_t_kl,
+        "analytical_per_t_kl_per_seed": analytical_per_t_kl,
     }
 
 
@@ -239,11 +249,16 @@ def main() -> int:
                 })
             method_per_t = np.asarray(probe["method_per_t_test_acc_per_seed"])
             analytical_per_t = np.asarray(probe["analytical_per_t_test_acc_per_seed"])
+            method_per_t_kl = np.asarray(probe["method_per_t_kl_per_seed"])
+            analytical_per_t_kl = np.asarray(probe["analytical_per_t_kl_per_seed"])
             per_method_per_env.setdefault(env_label, {})[method] = {
                 "n_seeds": int(method_per_t.shape[0]),
                 "method_per_t_test_acc_mean": method_per_t.mean(axis=0).tolist(),
                 "method_per_t_test_acc_per_seed": method_per_t.tolist(),
                 "analytical_per_t_test_acc_mean": analytical_per_t.mean(axis=0).tolist(),
+                "method_per_t_kl_mean": method_per_t_kl.mean(axis=0).tolist(),
+                "method_per_t_kl_per_seed": method_per_t_kl.tolist(),
+                "analytical_per_t_kl_mean": analytical_per_t_kl.mean(axis=0).tolist(),
                 "method_test_acc_mean": float(np.mean(probe["method_test_acc_per_seed"])),
                 "method_test_acc_per_seed": probe["method_test_acc_per_seed"],
                 "method_test_acc_ci95": [

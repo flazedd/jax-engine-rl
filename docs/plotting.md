@@ -26,29 +26,41 @@ The **canonical implementation** lives in `plotting/style.py` (helpers) and
 - **Method capitalization**: `Concat`, `Hypernetwork`, `Regime-agnostic
   PPO`, `Belief-PPO`, `Oracle-PPO`, `RL²`, `VariBAD`, `PPO floor`,
   `Stacked-obs PPO`. No `concat`, no `hypernet`, no `Hyper-network`.
-- **Title states the environment**: every title should make the data
-  source unambiguous, e.g. `MarketMakingV1 — reference levels and gap
-  decomposition`, `Toy environments — meta-RL methods clear the PPO
-  floor`.
-- **No rotated y-axis labels.** Don't set `ax.set_ylabel(...)` — the
-  90°-rotated text running up the side reads like vertical Compute and
-  hurts at-a-glance comprehension. Put the y-axis description as a
-  **second line in the title** instead:
-
-  ```python
-  ax.set_title(
-      "MarketMakingV1 — RL²/VariBAD × Concat/Hypernetwork\n"
-      "Final return (mean across n=8 seeds, 200 iter)"
-  )
-  ```
-
-  Multi-panel figures: use a 2-line `fig.suptitle(...)` and drop
-  per-panel ylabels. The x-axis label still uses `ax.set_xlabel(...)`
-  (it sits horizontally below the axis, so it does not have the
-  rotated-text problem).
+- **No baked-in figure title.** The thesis caption names the figure and
+  the environment, so a rendered title only repeats it in a second
+  typeface. Do not call `fig.suptitle(...)`, and do not put the
+  environment name, the seed count or the metric description into the
+  image. Panel titles are the exception: in a multi-panel figure a short
+  panel identifier such as `Linear probe` is what tells the two panels
+  apart, so keep those, `loc="left"`.
+- **Y-axis description goes in `ax.set_ylabel(...)`**, short and
+  horizontal-reading, e.g. `Return at the end of training`,
+  `Difference in probe test accuracy`. Multi-panel figures with a shared
+  y-axis label it on the leftmost panel only.
 - **X-axis labels are capitalized full words**: `Iteration`,
   `Inventory q`, `Timestep within episode`. Not lowercase, not
   abbreviated.
+
+## Colour
+
+The figures share one palette. Never fall back to the matplotlib default
+cycle, and never introduce a hue that is not on this list.
+
+- **Hue encodes the conditioning architecture**: teal for the
+  hypernetwork, slate for concatenation.
+- **Shade encodes the method within a hue**: the darker tone is RL², the
+  lighter is VariBAD. `#1d7870` / `#7ec8bd` for the teals, `#6b757d` /
+  `#c3cad0` for the slates.
+- **Amber `#e09f3e`** is the non-variant curve: the analytical posterior,
+  or Stacked-obs PPO.
+- **Deep navy `#264653`** is reserved for Oracle-PPO.
+- When architecture is the *plotted quantity* rather than a channel, as
+  in a hypernetwork-minus-concatenation difference, hue is free: stay in
+  the teal family and let shade carry the method, so the figure still
+  reads as part of the set.
+- Confidence bands take their curve's colour at `alpha≈0.13` with a thin
+  edge in the same colour. Where more than about four bands would
+  overlap, drop them and report seed uncertainty in the table instead.
 
 ## Legend
 
@@ -107,8 +119,10 @@ Rules:
 
 ## Compute-budget annotation
 
-Every chart shows the effort behind the stats — italic footer like
-*"Compute: 200 iter × 8 seeds × 512 envs × rollout 128"*. Use the helper:
+The compute budget is reported in the thesis caption, through the
+`\compute{seeds}{iters}{envs}{rollout}` macro, not rendered onto the
+figure. `budget_annotation` is kept as a no-op stub so existing call
+sites still run; do not add new ones. The historical form was:
 
 ```python
 from plotting.style import budget_annotation
@@ -151,18 +165,19 @@ Style: `linestyle="--", linewidth=1.0, alpha=0.6`, colours from the
 
 ## Quick checklist before committing a figure
 
-- [ ] Title has no `M{n}`, `Step`, `RQ`, or env-version suffix
-- [ ] Environment name is `MarketMakingV1` (or `Avellaneda–Stoikov
-      baseline` for M1)
-- [ ] **No `ax.set_ylabel(...)`** — y-axis description is on a second
-      line of the title
+- [ ] **No `fig.suptitle(...)`**; panel identifiers only, and no
+      environment name, seed count or metric text baked into the image
+- [ ] Colours come from the palette above, hue for architecture and
+      shade for method
+- [ ] Y-axis description is a short `ax.set_ylabel(...)`
 - [ ] X-axis label is capitalized full words
 - [ ] Legend sits outside the plot area, opaque white, lists every
       element
 - [ ] Bars have value labels below the lower CI cap
 - [ ] Y-axis honours the floor/oracle convention and is non-empty under
       smoke data
-- [ ] Italic compute-budget footer is present and matches reality
+- [ ] Compute budget is in the thesis caption via `\compute{...}`, not on
+      the figure
 - [ ] Reference lines (where applicable) include numeric values in their
       legend labels
 - [ ] `apply_style()` was called

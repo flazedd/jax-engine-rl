@@ -313,6 +313,8 @@ def train_probe(
         KL(omega || q) of the analytical belief from the probe softmax, i.e.
         distance of the recovered belief from the Bayes-optimal ceiling belief
       - per_t_test_acc: [T] per-timestep accuracy on test rollouts
+      - per_t_test_kl_to_omega (only if `omega_TND` given): [T] the same
+        forward KL restricted to each within-episode timestep
       - n_classes: number of regime classes seen in training
     """
     T, N, D = belief_TND.shape
@@ -361,6 +363,7 @@ def train_probe(
         test_brier = _brier(test_regime, test_proba, n_cols)
 
         kl_to_omega: float | None = None
+        per_t_kl: list[float] | None = None
         if omega_TND is not None:
             omega_test = omega_TND[:, test_rollout_idx, :].reshape(
                 -1, omega_TND.shape[-1]
@@ -369,6 +372,12 @@ def train_probe(
                 pad = np.zeros((omega_test.shape[0], n_cols - omega_test.shape[1]))
                 omega_test = np.concatenate([omega_test, pad], axis=1)
             kl_to_omega = _kl_omega_q(omega_test, test_proba)
+            # Both arrays were flattened from [T, N_test, ...] in that order, so
+            # they split back by timestep without refitting the probe.
+            n_test = test_rollout_idx.size
+            omega_t = omega_test.reshape(T, n_test, n_cols)
+            proba_t = test_proba.reshape(T, n_test, n_cols)
+            per_t_kl = [_kl_omega_q(omega_t[t], proba_t[t]) for t in range(T)]
 
         # Per-timestep accuracy on test rollouts.
         test_belief_TND = belief_TND[:, test_rollout_idx, :]  # [T, N_test, D]
@@ -388,6 +397,7 @@ def train_probe(
     }
     if kl_to_omega is not None:
         out["test_kl_to_omega"] = kl_to_omega
+        out["per_t_test_kl_to_omega"] = per_t_kl
     return out
 
 

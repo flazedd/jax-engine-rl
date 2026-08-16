@@ -36,6 +36,16 @@ _CELL_BRAND = {
     "rl2_hypernet": "#2a9d8f", "varibad_hypernet": "#73b8ad",
 }
 
+# The canonical variant palette (docs/plotting.md → Colour): hue for the
+# conditioning architecture, shade for the method, the darker tone being RL².
+# `_CELL_BRAND` predates it and orders the two slates the other way round; the
+# bar ladders still read from it.
+_VARIANT_COLOR = {
+    "rl2_hypernet": "#1d7870", "varibad_hypernet": "#7ec8bd",
+    "rl2_concat": "#6b757d", "varibad_concat": "#c3cad0",
+}
+
+from evaluation.action_distribution import regime_separation_per_seed
 from evaluation.protocol import MEDIUM_ENV
 from utils.paths import experiment_dir, fig_targets, final_dir, project_fig_dir, resolve_data, results_root
 
@@ -403,45 +413,79 @@ def plot_sweep(axis_levels: tuple, suptitle: str, out_path: Path) -> None:
 
 
 def plot_posterior_vs_performance(
-    out_path: Path, classifier: str = "logistic"
+    out_path: Path, classifier: str = "logistic", metric: str = "kl",
 ) -> None:
-    """Scatter of probe accuracy vs gap-closed.
+    """Scatter of belief quality against gap-closed, one point per run.
 
     `classifier="logistic"` plots the linear probe; `classifier="mlp"` plots
     the two-layer MLP probe. The two figures share axes ranges and styling
     so they can be displayed side by side.
+
+    `metric="kl"` puts the primary belief-quality measure on the x-axis, the
+    excess of the forward KL to the analytical posterior over that posterior's
+    own residual, so zero is a belief indistinguishable from it. `metric="acc"`
+    puts the secondary decodability measure there, as the shortfall in probe
+    accuracy against the same posterior, subtracted from one so that better
+    beliefs sit to the right in both cases.
     """
+    if metric not in ("kl", "acc"):
+        raise ValueError(f"metric must be 'kl' or 'acc', got {metric!r}")
     apply_style()
     probe = _load_probe(classifier)
     if probe is None:
         print(f"[m5r_plots] skip posterior_vs_performance ({classifier}): "
               "probe data missing")
         return
-    fig, ax = plt.subplots(figsize=FIGSIZE_STANDARD)
-    methods = ("rl2_concat", "rl2_hypernet", "varibad_concat", "varibad_hypernet")
-    by_method = {m: [] for m in methods}
+    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    by_method = {m: [] for m in CELLS}
     for p in probe["scatter_points"]:
         by_method.setdefault(p["method"], []).append(p)
-    for m in methods:
+    # Hue for the conditioning architecture, shade for the method, as in the
+    # learning-curve figure. Marker shape repeats the method, which a scatter
+    # needs because shade alone is hard to judge on isolated points.
+    marker = {"rl2_concat": "o", "rl2_hypernet": "o",
+              "varibad_concat": "^", "varibad_hypernet": "^"}
+    for m in CELLS:
         pts = by_method[m]
         if not pts:
             continue
-        xs = [1.0 - p["posterior_error"] for p in pts]
+        if metric == "kl":
+            xs = [p["belief_error_kl"] for p in pts]
+        else:
+            xs = [1.0 - p["posterior_error"] for p in pts]
         ys = [p["gap_closed"] for p in pts]
         ax.scatter(
-            xs, ys, color=COLORS[m], s=22, alpha=0.7,
-            edgecolor="black", linewidth=0.3, label=CELL_LABEL[m],
+            xs, ys, color=_VARIANT_COLOR[m], s=30, alpha=0.85, marker=marker[m],
+            edgecolor="#33403f", linewidth=0.4, label=CELL_LABEL[m],
         )
-    probe_label = "Linear-probe" if classifier == "logistic" else "MLP-probe"
-    ax.set_xlabel(f"{probe_label} regime-decoding accuracy")
-    ax.set_ylabel("Gap-closed vs.\\ Oracle")
-    # Shared x-range across the linear and MLP variants so the two figures
-    # are directly comparable when shown side by side. Data range is
-    # roughly [0.42, 0.92] across both probes; pad to [0.40, 0.95].
-    ax.set_xlim(0.40, 0.95)
-    ax.axhspan(-0.30, 0.30, color="#eeeeee", alpha=0.0)
-    ax.axhline(0.0, color="black", linewidth=0.5, alpha=0.5)
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=8,
+    probe_label = "linear probe" if classifier == "logistic" else "MLP probe"
+    # Shared x-range across the linear and MLP variants so the two figures are
+    # directly comparable when shown side by side, padded so that points at the
+    # end of the range are not clipped by the spine. Ranges across both probes:
+    # excess KL is roughly [0.06, 0.64], decodability [0.42, 0.95].
+    if metric == "kl":
+        ax.set_xlabel(f"Excess KL to the analytical posterior, {probe_label}")
+        ax.set_xlim(-0.02, 0.70)
+        ax.axvline(0.0, color=PALETTE["analytical"], linewidth=1.2,
+                   linestyle="--", label="Analytical posterior")
+    else:
+        ax.set_xlabel(f"Regime decodability against the analytical posterior, "
+                      f"{probe_label}")
+        ax.set_xlim(0.40, 1.02)
+        ax.axvline(1.0, color=PALETTE["analytical"], linewidth=1.2,
+                   linestyle="--", label="Analytical posterior")
+    ax.set_ylabel("Gap-closed fraction")
+    ax.axhline(0.0, color="#555555", linewidth=1.0,
+               label="Regime-agnostic floor")
+    # The pooled correlation is annotated rather than written into the thesis
+    # prose, which stays qualitative. It is a between-method relation: the
+    # within-method clouds carry no comparable trend.
+    r = probe["correlation_overall_kl" if metric == "kl" else "correlation_overall"]
+    ax.text(0.97, 0.96, f"Across all runs, r = {r:+.2f}".replace("-", "−"),
+            transform=ax.transAxes, ha="right", va="top", fontsize=9,
+            color="#444444")
+    polish(ax)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=9,
               frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0)
     fig.tight_layout()
     fig.subplots_adjust(right=0.72)
@@ -572,13 +616,7 @@ def _draw_probe_per_t(ax, classifier: str, env_label: str = MEDIUM_ENV) -> bool:
     """Draw the per-timestep regime-decoding curves for one probe class onto
     `ax` (4 cells + analytical posterior + random-guess line). Returns False if
     the data is missing. Prefers the high-rollout file for stable curves."""
-    suffix = "" if classifier == "logistic" else f"_{classifier}"
-    hires = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}_hires.json"
-    if resolve_data(hires).exists():
-        with open(resolve_data(hires)) as f:
-            probe = json.load(f)
-    else:
-        probe = _load_probe(classifier)
+    probe = _load_probe_for_per_t(classifier)
     if probe is None:
         return False
     env_block = probe.get("per_method_per_env", {}).get(env_label, {})
@@ -689,6 +727,250 @@ def plot_m5r_probe_per_t_combined(out_path: Path, env_label: str = MEDIUM_ENV) -
     print(f"[m5r_plots] wrote {out_path}")
 
 
+def _load_probe_for_per_t(classifier: str) -> dict | None:
+    """Probe results for the per-timestep figures, preferring the high-rollout
+    file when it exists so the curves are less sample-noisy."""
+    suffix = "" if classifier == "logistic" else f"_{classifier}"
+    hires = FINAL_DIR / f"m5r_posterior_vs_performance{suffix}_hires.json"
+    if resolve_data(hires).exists():
+        with open(resolve_data(hires)) as f:
+            return json.load(f)
+    return _load_probe(classifier)
+
+
+def _paired_delta_ci(delta_ST: np.ndarray, n_boot: int = 10_000) -> tuple:
+    """Mean paired difference per timestep and its bootstrap CI.
+
+    Resamples seeds, not timesteps: one seed contributes its whole curve to a
+    resample, which is what pairing across seeds means here.
+    """
+    n_seeds = delta_ST.shape[0]
+    rng = np.random.default_rng(0)
+    means = np.empty((n_boot, delta_ST.shape[1]))
+    step = 2000
+    for lo_i in range(0, n_boot, step):
+        idx = rng.integers(0, n_seeds, size=(min(step, n_boot - lo_i), n_seeds))
+        means[lo_i:lo_i + idx.shape[0]] = delta_ST[idx].mean(axis=1)
+    return (delta_ST.mean(axis=0),
+            np.percentile(means, 2.5, axis=0),
+            np.percentile(means, 97.5, axis=0))
+
+
+# The architecture contrast is the plotted quantity here, so a line identifies a
+# method. It keeps the colour and dash of that method's hypernetwork arm in the
+# levels figures, since the difference is taken in that arm's favour.
+# Shade separates the two methods, as in the learning-curve figure.
+_METHOD_DELTA_STYLE = {
+    "rl2": (_VARIANT_COLOR["rl2_hypernet"], "-", "RL²"),
+    "varibad": (_VARIANT_COLOR["varibad_hypernet"], "--", "VariBAD"),
+}
+
+
+# Per-timestep belief-quality series, primary metric first.
+_PER_T_METRIC = {
+    "kl": ("method_per_t_kl_per_seed",
+           "Difference in KL to the analytical posterior"),
+    "acc": ("method_per_t_test_acc_per_seed",
+            "Difference in probe test accuracy"),
+}
+
+
+def _draw_probe_delta_per_t(
+    ax, classifier: str, env_label: str = MEDIUM_ENV, metric: str = "acc",
+) -> bool:
+    """Draw hypernetwork-minus-concatenation belief quality at each
+    within-episode timestep, paired across seeds, for both methods."""
+    key, _ = _PER_T_METRIC[metric]
+    probe = _load_probe_for_per_t(classifier)
+    if probe is None:
+        return False
+    env_block = probe.get("per_method_per_env", {}).get(env_label, {})
+    if not env_block:
+        return False
+
+    smoothing_window = 9
+    drew = False
+    for method, (color, ls, label) in _METHOD_DELTA_STYLE.items():
+        hyper = env_block.get(f"{method}_hypernet")
+        concat = env_block.get(f"{method}_concat")
+        if hyper is None or concat is None:
+            continue
+        if key not in hyper or key not in concat:
+            print(f"[m5r_plots] skip {method} ({metric}): {key} missing, "
+                  "rerun scripts.m5r_posterior_probe")
+            continue
+        h = np.asarray(hyper[key])
+        c = np.asarray(concat[key])
+        if h.shape != c.shape:
+            print(f"[m5r_plots] skip {method}: unpaired seed counts "
+                  f"{h.shape[0]} vs {c.shape[0]}")
+            continue
+        mean, lo, hi = _paired_delta_ci(h - c)
+        ts = np.arange(mean.shape[0])
+        ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
+                label=label, linewidth=2.2, linestyle=ls)
+        # Two bands overlap over much of the episode, so each carries a thin
+        # edge in its own colour and the fill stays light enough to see through.
+        ax.fill_between(ts, _smooth_curve(lo, smoothing_window),
+                        _smooth_curve(hi, smoothing_window),
+                        facecolor=color, alpha=0.13, edgecolor=color,
+                        linewidth=0.8)
+        drew = True
+
+    if not drew:
+        return False
+    ax.axhline(0.0, color="#555555", linestyle="-", linewidth=1.0,
+               label="No difference between architectures")
+    ax.set_xlabel("Timestep within episode", fontsize=12)
+    ax.tick_params(axis="both", labelsize=11)
+    polish(ax)
+    return True
+
+
+def plot_m5r_probe_delta_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
+    """Paired architecture contrast in belief quality across the episode: both
+    metrics by row, both probe families by column.
+
+    The levels figure plots four variants against each other, where the
+    method-to-method separation dominates the architecture contrast the
+    comparison actually tests. This plots that contrast directly, with the
+    across-seed pairing the statistical protocol uses. The divergence row comes
+    first because it is the primary metric, and it runs the other way round:
+    a negative difference favours the hypernetwork there.
+    """
+    apply_style()
+    rows = [m for m in ("kl", "acc")]
+    cols = [("logistic", "Linear probe"), ("mlp", "MLP probe")]
+    fig, axes = plt.subplots(
+        len(rows), len(cols), figsize=(14.0, 8.4), sharex=True, sharey="row",
+    )
+    drew_any = False
+    for r, metric in enumerate(rows):
+        for c, (clf, title) in enumerate(cols):
+            ax = axes[r][c]
+            if _draw_probe_delta_per_t(ax, clf, env_label, metric=metric):
+                drew_any = True
+            if r == 0:
+                ax.set_title(title, fontsize=13, loc="left")
+            if r < len(rows) - 1:
+                ax.set_xlabel("")
+        axes[r][0].set_ylabel(_PER_T_METRIC[metric][1], fontsize=12)
+    if not drew_any:
+        print("[m5r_plots] skip probe_delta_per_t: no probe data")
+        plt.close(fig)
+        return
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels, loc="lower center", ncol=3, fontsize=10,
+        bbox_to_anchor=(0.5, -0.005), frameon=True,
+        facecolor="white", edgecolor="#dddddd", framealpha=1.0,
+    )
+    fig.tight_layout(rect=[0, 0.05, 1, 0.97])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def _diagnostic_separation_per_seed(diagnostic: str) -> dict[str, np.ndarray] | None:
+    """Per-seed separation score for one behavioural diagnostic, by method.
+
+    Both diagnostics score a policy on the same scale, zero for behaviour that
+    ignores the regime and one for behaviour that changes completely with it,
+    so the two figures share axes and reference lines.
+    """
+    if diagnostic == "action":
+        path = FINAL_DIR / "m5r_action_distributions.json"
+        if not resolve_data(path).exists():
+            return None
+        with open(resolve_data(path)) as f:
+            by_method = json.load(f)["by_method"]
+        # The separation statistic has one definition, in
+        # evaluation.action_distribution, so the figure and the hypothesis test
+        # cannot drift apart.
+        return {
+            m: regime_separation_per_seed(
+                np.asarray(b["per_seed_action_given_regime_inventory"]),
+                np.asarray(b["per_seed_inventory_counts"]),
+            )
+            for m, b in by_method.items()
+        }
+    if diagnostic == "swap":
+        path = FINAL_DIR / "m5r_belief_swap.json"
+        if not resolve_data(path).exists():
+            return None
+        with open(resolve_data(path)) as f:
+            by_method = json.load(f)["by_method"]
+        return {m: np.asarray(b["per_seed_separation"]) for m, b in by_method.items()}
+    raise ValueError(f"unknown diagnostic: {diagnostic!r}")
+
+
+def plot_m5r_diagnostic_separation(
+    out_path: Path, diagnostic: str = "action",
+) -> None:
+    """Per-seed separation score of each variant, paired within seed.
+
+    One point per run, a segment joining the two architectures of a seed, and
+    the reference levels behind them. The table reports the paired difference;
+    this shows the level each variant reaches and how far it sits from the
+    Belief-PPO reference, which a difference alone cannot say.
+    """
+    per_seed = _diagnostic_separation_per_seed(diagnostic)
+    if per_seed is None:
+        print(f"[m5r_plots] skip diagnostic_separation ({diagnostic}): data missing")
+        return
+    apply_style()
+    fig, ax = plt.subplots(figsize=(8.4, 5.2))
+
+    # Two method groups, the two architectures side by side inside each.
+    positions = {"rl2_concat": 0.0, "rl2_hypernet": 1.0,
+                 "varibad_concat": 2.4, "varibad_hypernet": 3.4}
+    rng = np.random.default_rng(0)
+    for method in ("rl2", "varibad"):
+        c = per_seed.get(f"{method}_concat")
+        h = per_seed.get(f"{method}_hypernet")
+        if c is None or h is None or c.shape != h.shape:
+            continue
+        x_c, x_h = positions[f"{method}_concat"], positions[f"{method}_hypernet"]
+        jitter = rng.uniform(-0.09, 0.09, size=c.shape[0])
+        # A segment is one seed's paired difference, which is what the Wilcoxon
+        # test consumes. Colouring it by direction makes the majority countable:
+        # in uniform grey the segments cross into a wash and the pairing, the
+        # reason overlapping clouds can still separate, is lost.
+        rising = h > c
+        for i in range(c.shape[0]):
+            ax.plot([x_c + jitter[i], x_h + jitter[i]], [c[i], h[i]],
+                    color="#2a9d8f" if rising[i] else PALETTE["accent2"],
+                    linewidth=0.9, alpha=0.5, zorder=3)
+        ax.text((x_c + x_h) / 2, 1.005,
+                f"{int(rising.sum())} of {c.shape[0]} seeds rise",
+                ha="center", va="bottom", fontsize=9, color="#444444")
+        for key, vals in ((f"{method}_concat", c), (f"{method}_hypernet", h)):
+            x = positions[key]
+            ax.scatter(x + jitter, vals, s=26, color=_VARIANT_COLOR[key],
+                       edgecolor="#33403f", linewidth=0.4, zorder=4)
+            ax.plot([x - 0.28, x + 0.28], [np.nanmean(vals)] * 2,
+                    color="#33403f", linewidth=2.0, zorder=5)
+
+    refs = {k: float(np.nanmean(per_seed[k]))
+            for k in ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo")
+            if k in per_seed}
+    ax.set_xlim(-0.6, 5.1)
+    _draw_refs(ax, refs, label_x=4.05)
+    ax.set_xticks(list(positions.values()))
+    ax.set_xticklabels(["RL²\nConcat", "RL²\nHypernet",
+                        "VariBAD\nConcat", "VariBAD\nHypernet"], fontsize=11)
+    ylabel = ("Regime separation of the action distribution"
+              if diagnostic == "action"
+              else "Behaviour change under a swapped belief")
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_ylim(-0.05, 1.12)
+    polish(ax)
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
 def main() -> int:
     for target in _both_targets("m5r_method_ladder.png"):
         plot_method_ladder(target)
@@ -714,6 +996,12 @@ def main() -> int:
     # called, so the figure it references had no producer.
     for target in _both_targets("m5r_probe_per_t_combined.png"):
         plot_m5r_probe_per_t_combined(target)
+    for target in _both_targets("m5r_probe_delta_per_t.png"):
+        plot_m5r_probe_delta_per_t(target)
+    for target in _both_targets("m5r_action_separation.png"):
+        plot_m5r_diagnostic_separation(target, diagnostic="action")
+    for target in _both_targets("m5r_belief_swap_separation.png"):
+        plot_m5r_diagnostic_separation(target, diagnostic="swap")
     for target in _both_targets("m5r_probe_per_t.png"):
         plot_m5r_probe_per_t(target, classifier="logistic")
     for target in _both_targets("m5r_probe_per_t_mlp.png"):

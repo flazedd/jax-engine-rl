@@ -160,7 +160,9 @@ FIGURE_HOME: dict[str, str] = {
     "fig_rq1_ceilings_bar.png": "results/RQ1",
     "m5r_method_ladder.png": "results/RQ1",
     # Chapter 5 — RQ2: belief formed versus belief used
-    "m5r_probe_per_t_combined.png": "results/RQ2",
+    "m5r_probe_delta_per_t.png": "results/RQ2",
+    "m5r_action_separation.png": "results/RQ2",
+    "m5r_belief_swap_separation.png": "results/RQ2",
     "m5r_posterior_vs_performance.png": "results/RQ2",
     "m5r_posterior_vs_performance_mlp.png": "results/RQ2",
     # Chapter 5 — RQ3: replication in-domain and in a second domain
@@ -195,6 +197,10 @@ FIGURE_HOME: dict[str, str] = {
     "fig_M1_ppo_policy_vs_as.png": "appendix",
     "fig_rq1_gap_fractions.png": "appendix",
     "m5r_distinguishability_sweep.png": "appendix",
+    # The two-panel levels figure: superseded in the main text by the paired
+    # architecture contrast, and covered per probe family by the two
+    # full-width appendix figures.
+    "m5r_probe_per_t_combined.png": "appendix",
 }
 
 

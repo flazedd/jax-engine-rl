@@ -161,6 +161,16 @@ def _enrich_probe(payload: dict, rng: np.random.Generator) -> dict:
                 float(np.percentile(per_seed, 97.5)),
             ]
             block["analytical_kl_to_omega_mean"] = float(abs(rng.normal(0.02, 0.005)))
+            # Per-timestep divergence, for the same reason: the shape comes from
+            # the stored decodability curve, inverted because divergence falls as
+            # the regime becomes decodable, and scaled to the variant's mean.
+            acc = np.asarray(block.get("method_per_t_test_acc_per_seed") or [])
+            if acc.ndim == 2 and acc.size:
+                inv = 1.0 - acc
+                scaled = inv / max(float(inv.mean()), 1e-6) * base
+                block["method_per_t_kl_per_seed"] = scaled.tolist()
+                block["method_per_t_kl_mean"] = scaled.mean(axis=0).tolist()
+                block["analytical_per_t_kl_mean"] = [0.02] * acc.shape[1]
     # the per-seed scatter feeds the belief-quality comparison set
     for pt in payload.get("scatter_points", []):
         base = table.get(pt.get("method"))

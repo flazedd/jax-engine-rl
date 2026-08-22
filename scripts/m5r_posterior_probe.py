@@ -277,6 +277,9 @@ def main() -> int:
                 "method_log_loss_mean": float(np.mean(probe["method_log_loss_per_seed"])),
                 "method_log_loss_per_seed": probe["method_log_loss_per_seed"],
                 "method_brier_mean": float(np.mean(probe["method_brier_per_seed"])),
+                # Per-seed, so the proper-score tables carry an interval across
+                # seeds without reading the scatter points back.
+                "method_brier_per_seed": probe["method_brier_per_seed"],
             }
             m_mean = float(np.mean(probe["method_test_acc_per_seed"]))
             a_mean = float(np.mean(probe["analytical_test_acc_per_seed"]))

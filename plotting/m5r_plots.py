@@ -871,6 +871,199 @@ def plot_m5r_probe_delta_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> N
     print(f"[m5r_plots] wrote {out_path}")
 
 
+# Levels figure for the primary belief-quality metric: hue and dash identify
+# the variant, as in the decodability levels figure of the appendix.
+_VARIANT_LEVEL_STYLE = {
+    "rl2_concat":       (_VARIANT_COLOR["rl2_concat"], "-"),
+    "rl2_hypernet":     (_VARIANT_COLOR["rl2_hypernet"], "-"),
+    "varibad_concat":   (_VARIANT_COLOR["varibad_concat"], "--"),
+    "varibad_hypernet": (_VARIANT_COLOR["varibad_hypernet"], "--"),
+}
+_VARIANT_LEVEL_LABEL = {
+    "rl2_concat": "RL\u00b2 Concat",
+    "rl2_hypernet": "RL\u00b2 Hypernetwork",
+    "varibad_concat": "VariBAD Concat",
+    "varibad_hypernet": "VariBAD Hypernetwork",
+}
+_ANALYTICAL_COLOR = "#e09f3e"
+
+
+def _draw_probe_kl_levels_per_t(
+    ax, classifier: str, env_label: str = MEDIUM_ENV, smoothing_window: int = 9,
+) -> bool:
+    """Draw the divergence to the analytical posterior at each within-episode
+    timestep, one curve per variant, with the posterior's own residual as the
+    reference a variant would sit on if its belief were indistinguishable."""
+    probe = _load_probe_for_per_t(classifier)
+    if probe is None:
+        return False
+    env_block = probe.get("per_method_per_env", {}).get(env_label, {})
+    if not env_block:
+        return False
+
+    key = _PER_T_METRIC["kl"][0]
+    drew = False
+    analytical_drawn = False
+    for cell in CELLS:
+        m = env_block.get(cell)
+        if m is None or key not in m:
+            print(f"[m5r_plots] skip {cell}: {key} missing, "
+                  "rerun scripts.m5r_posterior_probe")
+            continue
+        per_seed = np.asarray(m[key])
+        mean = per_seed.mean(axis=0)
+        ts = np.arange(mean.shape[0])
+        color, ls = _VARIANT_LEVEL_STYLE[cell]
+        ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
+                linestyle=ls, linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
+        if per_seed.shape[0] > 1:
+            rng = np.random.default_rng(0)
+            idx = rng.integers(0, per_seed.shape[0],
+                               size=(1000, per_seed.shape[0]))
+            boot = per_seed[idx].mean(axis=1)
+            lo = np.percentile(boot, 2.5, axis=0)
+            hi = np.percentile(boot, 97.5, axis=0)
+            ax.fill_between(ts, _smooth_curve(lo, smoothing_window),
+                            _smooth_curve(hi, smoothing_window),
+                            facecolor=color, alpha=0.12, edgecolor=color,
+                            linewidth=0.7)
+        if not analytical_drawn and "analytical_per_t_kl_mean" in m:
+            ana = np.asarray(m["analytical_per_t_kl_mean"])
+            ax.plot(np.arange(ana.shape[0]),
+                    _smooth_curve(ana, smoothing_window),
+                    color=_ANALYTICAL_COLOR, linestyle="-", linewidth=2.6,
+                    label="Analytical posterior residual")
+            analytical_drawn = True
+        drew = True
+
+    if not drew:
+        return False
+    ax.set_ylim(bottom=-0.015)
+    ax.tick_params(axis="both", labelsize=12)
+    polish(ax)
+    return True
+
+
+def _draw_probe_acc_levels_per_t(
+    ax, classifier: str, env_label: str = MEDIUM_ENV, smoothing_window: int = 9,
+) -> bool:
+    """Draw regime decodability at each within-episode timestep, one curve per
+    variant, against the analytical posterior and the random-guess rate."""
+    probe = _load_probe_for_per_t(classifier)
+    if probe is None:
+        return False
+    env_block = probe.get("per_method_per_env", {}).get(env_label, {})
+    if not env_block:
+        return False
+
+    key = _PER_T_METRIC["acc"][0]
+    drew = False
+    analytical_drawn = False
+    for cell in CELLS:
+        m = env_block.get(cell)
+        if m is None or key not in m:
+            continue
+        per_seed = np.asarray(m[key])
+        mean = per_seed.mean(axis=0)
+        ts = np.arange(mean.shape[0])
+        color, ls = _VARIANT_LEVEL_STYLE[cell]
+        ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
+                linestyle=ls, linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
+        if per_seed.shape[0] > 1:
+            rng = np.random.default_rng(0)
+            idx = rng.integers(0, per_seed.shape[0],
+                               size=(1000, per_seed.shape[0]))
+            boot = per_seed[idx].mean(axis=1)
+            ax.fill_between(
+                ts,
+                _smooth_curve(np.percentile(boot, 2.5, axis=0), smoothing_window),
+                _smooth_curve(np.percentile(boot, 97.5, axis=0), smoothing_window),
+                facecolor=color, alpha=0.12, edgecolor=color, linewidth=0.7)
+        if not analytical_drawn and "analytical_per_t_test_acc_mean" in m:
+            ana = np.asarray(m["analytical_per_t_test_acc_mean"])
+            # Align the reference to the same information horizon as the
+            # variants: shift right one step and anchor the first step at
+            # chance, so every curve starts with zero observations in hand.
+            ana = np.concatenate(([1.0 / 3.0], ana[:-1]))
+            ax.plot(np.arange(ana.shape[0]), _smooth_curve(ana, smoothing_window),
+                    color=_ANALYTICAL_COLOR, linestyle="-", linewidth=2.6,
+                    label="Analytical posterior")
+            analytical_drawn = True
+        drew = True
+
+    if not drew:
+        return False
+    ax.axhline(1.0 / 3, color="#999999", linestyle=":", linewidth=1.2,
+               label="Random guess")
+    ax.set_ylim(0.25, 1.0)
+    polish(ax)
+    return True
+
+
+def _probe_levels_figure(
+    out_path: Path, draw, ylabel: str, reference_labels: list[str],
+    env_label: str = MEDIUM_ENV,
+) -> None:
+    """Shared layout for the two per-timestep levels figures: one panel per
+    probe family, a shared y-axis, and one legend in variant order below."""
+    apply_style()
+    cols = [("logistic", "Linear probe"), ("mlp", "MLP probe")]
+    fig, axes = plt.subplots(1, len(cols), figsize=(10.6, 4.9), sharey=True)
+    drew_any = False
+    for ax, (clf, title) in zip(axes, cols):
+        if draw(ax, clf, env_label):
+            drew_any = True
+        ax.set_title(title, fontsize=14, loc="left")
+        ax.set_xlabel("Timestep within episode", fontsize=13)
+        ax.tick_params(axis="both", labelsize=12)
+    if not drew_any:
+        print(f"[m5r_plots] skip {out_path.name}: no probe data")
+        plt.close(fig)
+        return
+    axes[0].set_ylabel(ylabel, fontsize=13)
+
+    pairs = {}
+    for h, l in zip(*axes[0].get_legend_handles_labels()):
+        pairs.setdefault(l, h)
+    order = [_VARIANT_LEVEL_LABEL[c] for c in CELLS] + reference_labels
+    labels = [l for l in order if l in pairs]
+    fig.legend(
+        [pairs[l] for l in labels], labels, loc="lower center", ncol=3,
+        fontsize=12, bbox_to_anchor=(0.5, 0.0), frameon=True,
+        facecolor="white", edgecolor="#dddddd", framealpha=1.0,
+    )
+    fig.subplots_adjust(left=0.09, right=0.99, top=0.93, bottom=0.24, wspace=0.05)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def plot_m5r_probe_kl_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
+    """Divergence to the analytical posterior across the episode, in levels.
+
+    Levels rather than the paired difference, because the reader needs the
+    distance from the posterior before the contrast between architectures, and
+    a difference figure cannot show it. The paired contrast on both metrics is
+    the appendix figure.
+    """
+    _probe_levels_figure(
+        out_path, _draw_probe_kl_levels_per_t,
+        "KL to the analytical posterior",
+        ["Analytical posterior residual"], env_label,
+    )
+
+
+def plot_m5r_probe_acc_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
+    """Regime decodability across the episode, in levels, as the counterpart to
+    the divergence figure under the second of the two probe metrics."""
+    _probe_levels_figure(
+        out_path, _draw_probe_acc_levels_per_t,
+        "Probe test accuracy",
+        ["Analytical posterior", "Random guess"], env_label,
+    )
+
+
+
 def _diagnostic_separation_per_seed(diagnostic: str) -> dict[str, np.ndarray] | None:
     """Per-seed separation score for one behavioural diagnostic, by method.
 
@@ -998,6 +1191,10 @@ def main() -> int:
         plot_m5r_probe_per_t_combined(target)
     for target in _both_targets("m5r_probe_delta_per_t.png"):
         plot_m5r_probe_delta_per_t(target)
+    for target in _both_targets("m5r_probe_kl_per_t.png"):
+        plot_m5r_probe_kl_per_t(target)
+    for target in _both_targets("m5r_probe_acc_per_t.png"):
+        plot_m5r_probe_acc_per_t(target)
     for target in _both_targets("m5r_action_separation.png"):
         plot_m5r_diagnostic_separation(target, diagnostic="action")
     for target in _both_targets("m5r_belief_swap_separation.png"):

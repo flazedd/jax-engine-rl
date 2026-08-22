@@ -59,6 +59,13 @@ METRICS = [
     ("method_kl_to_omega", "lower"),
     ("method_test_acc", "higher"),
 ]
+# The proper scores of the protocol. They are computed on both probe families
+# and left uncorrected, as is every metric read from the MLP probe.
+ROBUSTNESS_METRICS = [
+    ("method_log_loss", "lower"),
+    ("method_brier", "lower"),
+]
+ALL_METRICS = METRICS + ROBUSTNESS_METRICS
 METHODS = ["rl2", "varibad"]
 
 
@@ -70,7 +77,7 @@ def _per_seed(
     for row in scatter:
         if row.get("env_label") != env_label:
             continue
-        for metric, _ in METRICS:
+        for metric, _ in ALL_METRICS:
             if metric in row:
                 out[(row["method"], metric)][int(row["seed"])] = float(row[metric])
     return out
@@ -89,6 +96,40 @@ def _aligned(
     )
 
 
+def _compare(
+    hyp_vals: np.ndarray, con_vals: np.ndarray, seeds: list[int],
+    method: str, metric: str, direction: str, probe: str,
+) -> dict:
+    """One paired hypernetwork-versus-concatenation comparison, in the fields
+    the protocol requires of any comparison a table reports."""
+    wil = paired_wilcoxon(hyp_vals, con_vals, alternative="two-sided")
+    mean_delta, lo, hi = bootstrap_paired_mean_ci(
+        hyp_vals, con_vals, n_boot=N_BOOT, alpha=ALPHA
+    )
+    # "Favours the hypernetwork" depends on the metric's direction, per
+    # the metric-direction convention of the protocol.
+    favours = mean_delta < 0 if direction == "lower" else mean_delta > 0
+    return {
+        "name": f"{method}_hypernet_vs_concat_{metric}",
+        "method": method,
+        "metric": metric,
+        "probe": probe,
+        "direction_favouring_hypernet": direction,
+        "n_pairs": int(hyp_vals.size),
+        "seeds": seeds,
+        "hypernet_mean": float(hyp_vals.mean()),
+        "concat_mean": float(con_vals.mean()),
+        "mean_paired_delta": mean_delta,
+        "delta_ci": [lo, hi],
+        "rank_biserial": rank_biserial(hyp_vals, con_vals),
+        "wilcoxon_p": wil["p"],
+        "wilcoxon_null_distribution": wil["null_distribution"],
+        "n_zero_dropped": wil["n_zero_dropped"],
+        "favours_hypernet": bool(favours),
+        "ci_excludes_zero": bool(lo > 0 or hi < 0),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="scripts.m5r_belief_quality_tests")
     parser.add_argument("--env-label", default=MEDIUM_ENV)
@@ -97,6 +138,11 @@ def main() -> int:
         default=str(RESULTS_ROOT / "m5r_posterior_vs_performance.json"),
         help="linear-probe output; the MLP probe is a robustness check and is "
              "not corrected here",
+    )
+    parser.add_argument(
+        "--probe-mlp",
+        default=str(RESULTS_ROOT / "m5r_posterior_vs_performance_mlp.json"),
+        help="MLP-probe output, whose comparisons are robustness checks",
     )
     args = parser.parse_args()
 
@@ -125,6 +171,7 @@ def main() -> int:
         return 1
 
     comparisons = []
+    pairs: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for method in METHODS:
         for metric, direction in METRICS:
             hyp_vals, con_vals, seeds = _aligned(
@@ -133,31 +180,10 @@ def main() -> int:
             if hyp_vals.size < 2:
                 run.fail(reason=f"too few paired seeds for {method}/{metric}")
                 return 1
-            wil = paired_wilcoxon(hyp_vals, con_vals, alternative="two-sided")
-            mean_delta, lo, hi = bootstrap_paired_mean_ci(
-                hyp_vals, con_vals, n_boot=N_BOOT, alpha=ALPHA
-            )
-            # "Favours the hypernetwork" depends on the metric's direction, per
-            # the metric-direction convention of the protocol.
-            favours_hypernet = mean_delta < 0 if direction == "lower" else mean_delta > 0
-            comparisons.append({
-                "name": f"{method}_hypernet_vs_concat_{metric}",
-                "method": method,
-                "metric": metric,
-                "direction_favouring_hypernet": direction,
-                "n_pairs": int(hyp_vals.size),
-                "seeds": seeds,
-                "hypernet_mean": float(hyp_vals.mean()),
-                "concat_mean": float(con_vals.mean()),
-                "mean_paired_delta": mean_delta,
-                "delta_ci": [lo, hi],
-                "rank_biserial": rank_biserial(hyp_vals, con_vals),
-                "wilcoxon_p": wil["p"],
-                "wilcoxon_null_distribution": wil["null_distribution"],
-                "n_zero_dropped": wil["n_zero_dropped"],
-                "favours_hypernet": bool(favours_hypernet),
-                "_pair": (hyp_vals, con_vals),
-            })
+            comp = _compare(hyp_vals, con_vals, seeds, method, metric,
+                            direction, "linear")
+            pairs[comp["name"]] = (hyp_vals, con_vals)
+            comparisons.append(comp)
 
     family_size = len(comparisons)
     holm = holm_bonferroni([c["wilcoxon_p"] for c in comparisons])
@@ -166,14 +192,39 @@ def main() -> int:
         comp["supported"] = bool(
             p_holm == p_holm and p_holm < ALPHA
         )  # NaN-safe: NaN != NaN
-        hyp_vals, con_vals = comp.pop("_pair")
+        hyp_vals, con_vals = pairs[comp["name"]]
         comp["stable_under_seed_omission"] = bool(leave_one_out_sensitivity(
             hyp_vals, con_vals, alpha=ALPHA, n_corrections=family_size,
             alternative="two-sided",
         )["stable_under_seed_omission"])
-        comp["ci_excludes_zero"] = bool(
-            comp["delta_ci"][0] > 0 or comp["delta_ci"][1] < 0
-        )
+
+    # The robustness family: the proper scores under the linear probe, and every
+    # metric under the MLP probe. Reported beside the corrected set and never
+    # corrected with it, so no claim can rest on them alone.
+    robustness: list[dict] = []
+    for probe_label, probe_path_str, metric_list in (
+        ("linear", args.probe, ROBUSTNESS_METRICS),
+        ("mlp", args.probe_mlp, ALL_METRICS),
+    ):
+        probe_file = Path(probe_path_str)
+        if not probe_file.exists():
+            print(f"[belief_quality] skip {probe_label} robustness: "
+                  f"{probe_file} missing", flush=True)
+            continue
+        with open(probe_file) as f:
+            other = json.load(f)
+        other_table = _per_seed(other.get("scatter_points", []), args.env_label)
+        for method in METHODS:
+            for metric, direction in metric_list:
+                hyp_vals, con_vals, seeds = _aligned(
+                    other_table, f"{method}_hypernet", f"{method}_concat", metric
+                )
+                if hyp_vals.size < 2:
+                    print(f"[belief_quality] skip {probe_label}/{method}/{metric}: "
+                          "too few paired seeds", flush=True)
+                    continue
+                robustness.append(_compare(hyp_vals, con_vals, seeds, method,
+                                           metric, direction, probe_label))
 
     n_supported = sum(1 for c in comparisons if c["supported"])
     payload = {
@@ -189,6 +240,7 @@ def main() -> int:
         ],
         "n_supported": n_supported,
         "comparisons": comparisons,
+        "robustness_comparisons": robustness,
     }
 
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -209,6 +261,7 @@ def main() -> int:
     run.ok(
         key_stats={
             "family_size": family_size,
+            "n_robustness": len(robustness),
             "n_supported": n_supported,
             "elapsed_min": round((time.perf_counter() - t0) / 60, 2),
         },

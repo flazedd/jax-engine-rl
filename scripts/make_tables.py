@@ -70,57 +70,107 @@ def _fmt(x, nd=3, plus=False):
 # ---------------------------------------------------------------------------
 
 
-def probe_quality() -> str | None:
-    lin = _load(FINAL() / "m5r_posterior_vs_performance.json")
-    mlp = _load(FINAL() / "m5r_posterior_vs_performance_mlp.json")
-    if lin is None:
+# The four per-measurement probe tables of the posterior-quality probe, in the
+# order the methodology defines the metrics. Each is self-contained: the level
+# each architecture reaches, the paired difference between them, and the test
+# the protocol requires of a reported comparison.
+_PROBE_METRIC_LABEL = {
+    "method_test_acc": ("probe_decodability", 3),
+    "method_kl_to_omega": ("probe_kl", 3),
+    "method_log_loss": ("probe_log_loss", 3),
+    "method_brier": ("probe_brier", 3),
+}
+_METHOD_LABEL = {"rl2": "RL\\textsuperscript{2}", "varibad": "VariBAD"}
+_PROBE_LABEL = {"linear": "Linear", "mlp": "MLP"}
+
+
+def _fmt_p(p) -> str:
+    """A p-value, with a floor rather than a rounded zero."""
+    if p is None or (isinstance(p, float) and not np.isfinite(p)):
+        return "--"
+    if p < 0.001:
+        return "$<0.001$"
+    return f"${p:.3f}$"
+
+
+def _belief_rows(metric: str, nd: int, with_holm: bool) -> list[str] | None:
+    tests = _load(FINAL() / "m5r_belief_quality_tests.json")
+    if tests is None:
         return None
+    pool = list(tests.get("comparisons", []))
+    pool += list(tests.get("robustness_comparisons", []))
+    rows = []
+    for method in ("rl2", "varibad"):
+        for probe in ("linear", "mlp"):
+            # The corrected family predates the `probe` field, so an entry
+            # without one is the linear probe by construction.
+            hit = next(
+                (c for c in pool
+                 if c["method"] == method and c["metric"] == metric
+                 and c.get("probe", "linear") == probe),
+                None,
+            )
+            if hit is None:
+                continue
+            lo, hi = hit["delta_ci"]
+            cells = [
+                _METHOD_LABEL[method] if probe == "linear" else "",
+                _PROBE_LABEL[probe],
+                _fmt(hit["concat_mean"], nd),
+                _fmt(hit["hypernet_mean"], nd),
+                _fmt(hit["mean_paired_delta"], nd, plus=True),
+                f"$[{lo:+.{nd}f},\\ {hi:+.{nd}f}]$",
+                _fmt(hit["rank_biserial"], 2, plus=True),
+                _fmt_p(hit["wilcoxon_p"]),
+            ]
+            if with_holm:
+                cells.append(_fmt_p(hit.get("holm_corrected_p")))
+            rows.append(" & ".join(cells) + r" \\")
+        if method == "rl2" and rows:
+            rows.append(r"\cmidrule(l){2-%d}" % (9 if with_holm else 8))
+    return rows or None
 
-    def block(payload, key):
-        if payload is None:
-            return {}
-        per = payload.get("per_method_per_env", {}).get("e_final", {})
-        return {m: per.get(m, {}).get(key) for m, _ in VARIANTS}
 
-    acc_l, acc_m = block(lin, "method_test_acc_mean"), block(mlp, "method_test_acc_mean")
-    kl_l, kl_m = block(lin, "method_kl_to_omega_mean"), block(mlp, "method_kl_to_omega_mean")
-
-    def analytical(payload, key):
-        if payload is None:
-            return None
-        per = payload.get("per_method_per_env", {}).get("e_final", {})
-        for v in per.values():
-            if key in v:
-                return v[key]
-            seeds = v.get("analytical_test_acc_per_seed")
-            if key == "acc" and seeds:
-                return float(np.mean(seeds))
+def _belief_table(metric: str, with_holm: bool = True) -> str | None:
+    """One metric's table. The Holm column is dropped for the proper scores,
+    which the protocol never corrects, so it would be a column of dashes."""
+    _, nd = _PROBE_METRIC_LABEL[metric]
+    rows = _belief_rows(metric, nd, with_holm)
+    if rows is None:
         return None
-
-    a_l = analytical(lin, "acc")
-    a_m = analytical(mlp, "acc") or a_l
-
-    rows = [
-        "Analytical posterior & " + _fmt(a_l) + " & " + _fmt(a_m)
-        + " & $\\approx 0$ & $\\approx 0$ \\\\",
-        "\\hline",
-    ]
-    for key, label in VARIANTS:
-        rows.append(
-            f"{label} & {_fmt(acc_l.get(key))} & {_fmt(acc_m.get(key))} "
-            f"& {_fmt(kl_l.get(key), 2)} & {_fmt(kl_m.get(key), 2)} \\\\"
-        )
+    n_cols = 9 if with_holm else 8
+    head = (r"Method & Probe & Concatenation & Hypernetwork & $\bar{d}$ & "
+            r"$95\%$ CI & $r$ & $p$")
+    if with_holm:
+        head += r" & $p_{\text{Holm}}$"
     body = "\n".join(rows)
-    return f"""\\begin{{tabular}}{{lcccc}}
-\\hline
-{_banner(5)} & \\multicolumn{{2}}{{c}}{{\\textbf{{Decodability (acc)}}}}
-   & \\multicolumn{{2}}{{c}}{{\\textbf{{Belief quality ($D_{{\\mathrm{{KL}}}}$)}}}} \\\\
-\\textbf{{Variant}} & \\textbf{{Linear}} & \\textbf{{MLP}} & \\textbf{{Linear}} & \\textbf{{MLP}} \\\\
-\\hline
-{body}
-\\hline
-\\end{{tabular}}
-"""
+    spec = "ll" + "r" * (n_cols - 2)
+    return (
+        "\\setlength{\\tabcolsep}{4pt}\n"
+        f"\\begin{{tabular}}{{{spec}}}\n"
+        "\\toprule\n"
+        f"{_banner(n_cols)}{head} \\\\\n"
+        "\\midrule\n"
+        f"{body}\n"
+        "\\bottomrule\n"
+        "\\end{tabular}\n"
+    )
+
+
+def probe_decodability() -> str | None:
+    return _belief_table("method_test_acc")
+
+
+def probe_kl() -> str | None:
+    return _belief_table("method_kl_to_omega")
+
+
+def probe_log_loss() -> str | None:
+    return _belief_table("method_log_loss", with_holm=False)
+
+
+def probe_brier() -> str | None:
+    return _belief_table("method_brier", with_holm=False)
 
 
 def integration_gap() -> str | None:
@@ -246,7 +296,10 @@ def cartpole_inversion() -> str | None:
 
 
 TABLES = {
-    "probe_quality": probe_quality,
+    "probe_decodability": probe_decodability,
+    "probe_kl": probe_kl,
+    "probe_log_loss": probe_log_loss,
+    "probe_brier": probe_brier,
     "integration_gap": integration_gap,
     "cartpole_effects": cartpole_effects,
     "cartpole_inversion": cartpole_inversion,

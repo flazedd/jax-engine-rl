@@ -160,7 +160,8 @@ FIGURE_HOME: dict[str, str] = {
     "fig_rq1_ceilings_bar.png": "results/RQ1",
     "m5r_method_ladder.png": "results/RQ1",
     # Chapter 5 — RQ2: belief formed versus belief used
-    "m5r_probe_delta_per_t.png": "results/RQ2",
+    "m5r_probe_kl_per_t.png": "results/RQ2",
+    "m5r_probe_acc_per_t.png": "results/RQ2",
     "m5r_action_separation.png": "results/RQ2",
     "m5r_belief_swap_separation.png": "results/RQ2",
     "m5r_posterior_vs_performance.png": "results/RQ2",
@@ -176,6 +177,8 @@ FIGURE_HOME: dict[str, str] = {
     "fig_M2_R4_belief_ppo_gap.png": "appendix",
     "fig_M2_R4_posterior_entropy.png": "appendix",
     "factorial_toys.png": "appendix",
+    # the paired per-timestep contrast supports the levels figure of RQ2
+    "m5r_probe_delta_per_t.png": "appendix",
     # Appendix B — second domain
     "cartpole_difficulty_sweep_returns.png": "appendix",
     "cartpole_difficulty_sweep_scatter.png": "appendix",

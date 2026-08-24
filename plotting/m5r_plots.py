@@ -431,12 +431,28 @@ def plot_posterior_vs_performance(
     if metric not in ("kl", "acc"):
         raise ValueError(f"metric must be 'kl' or 'acc', got {metric!r}")
     apply_style()
+    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    if not _draw_posterior_vs_performance(ax, classifier, metric):
+        plt.close(fig)
+        return
+    polish(ax)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=9,
+              frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.72)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def _draw_posterior_vs_performance(ax, classifier: str, metric: str,
+                                   name_probe: bool = True) -> bool:
+    """Draw one probe family's scatter onto `ax`. False if its data is absent."""
     probe = _load_probe(classifier)
     if probe is None:
         print(f"[m5r_plots] skip posterior_vs_performance ({classifier}): "
               "probe data missing")
-        return
-    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+        return False
     by_method = {m: [] for m in CELLS}
     for p in probe["scatter_points"]:
         by_method.setdefault(p["method"], []).append(p)
@@ -458,19 +474,22 @@ def plot_posterior_vs_performance(
             xs, ys, color=_VARIANT_COLOR[m], s=30, alpha=0.85, marker=marker[m],
             edgecolor="#33403f", linewidth=0.4, label=CELL_LABEL[m],
         )
-    probe_label = "linear probe" if classifier == "logistic" else "MLP probe"
+    # In the two-panel figure the panel titles name the probe, so repeating it
+    # on both x-axes would say the same thing three times.
+    probe_label = ("linear probe" if classifier == "logistic" else "MLP probe")
+    suffix = f", {probe_label}" if name_probe else ""
     # Shared x-range across the linear and MLP variants so the two figures are
     # directly comparable when shown side by side, padded so that points at the
     # end of the range are not clipped by the spine. Ranges across both probes:
     # excess KL is roughly [0.06, 0.64], decodability [0.42, 0.95].
     if metric == "kl":
-        ax.set_xlabel(f"Excess KL to the analytical posterior, {probe_label}")
+        ax.set_xlabel(f"Excess KL to the analytical posterior{suffix}")
         ax.set_xlim(-0.02, 0.70)
         ax.axvline(0.0, color=PALETTE["analytical"], linewidth=1.2,
                    linestyle="--", label="Analytical posterior")
     else:
-        ax.set_xlabel(f"Regime decodability against the analytical posterior, "
-                      f"{probe_label}")
+        ax.set_xlabel("Regime decodability against the analytical posterior"
+                      + suffix)
         ax.set_xlim(0.40, 1.02)
         ax.axvline(1.0, color=PALETTE["analytical"], linewidth=1.2,
                    linestyle="--", label="Analytical posterior")
@@ -482,11 +501,37 @@ def plot_posterior_vs_performance(
     # coefficient rendered on the chart carries no interval, no seed count and
     # no test, so it reads as a stronger claim than the figure supports. The
     # value stays in the probe JSON for anyone who needs it.
-    polish(ax)
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=9,
-              frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0)
-    fig.tight_layout()
-    fig.subplots_adjust(right=0.72)
+    return True
+
+
+def plot_posterior_vs_performance_combined(
+    out_path: Path, metric: str = "kl",
+) -> None:
+    """Both probe families side by side, one shared legend below.
+
+    The two panels answer the same question through a different readout, so
+    they belong in one figure: a reader can see at a glance that the method
+    separation does not depend on which probe reads the belief out.
+    """
+    apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 5.4), sharey=True)
+    drew = False
+    for ax, (clf, title) in zip(axes, (("logistic", "Linear probe"),
+                                       ("mlp", "MLP probe"))):
+        if _draw_posterior_vs_performance(ax, clf, metric, name_probe=False):
+            drew = True
+        ax.set_title(title, fontsize=12, loc="left")
+        polish(ax)
+    if not drew:
+        plt.close(fig)
+        return
+    axes[1].set_ylabel("")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=3, fontsize=9,
+               bbox_to_anchor=(0.5, 0.0), frameon=True, facecolor="white",
+               edgecolor="#cccccc", framealpha=1.0)
+    fig.subplots_adjust(left=0.075, right=0.99, top=0.93, bottom=0.22,
+                        wspace=0.06)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
@@ -590,6 +635,82 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     ax.tick_params(axis="both", labelsize=11)
     polish(ax)
     fig.tight_layout(rect=[0, 0.02, 1, 0.98])
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+# The two targets of Table 5.5 are one sample of a whole function. This plots
+# that function, so the speed advantage can be inspected at every level both
+# architectures reach. The thesis does not currently carry the figure, so it is
+# defined but not called from main(); pass it a path to regenerate it.
+_SPEED_SMOOTH = 25
+
+
+def _threshold_curve(experiment: str) -> np.ndarray | None:
+    p = resolve_data(experiment_dir(experiment) / "metrics.json")
+    if not p.exists():
+        return None
+    with open(p) as f:
+        m = json.load(f)
+    per_seed = m.get("per_seed_mean_return_per_iter")
+    return None if per_seed is None else np.asarray(per_seed, dtype=float)
+
+
+def _iterations_to(curve: np.ndarray, target: float) -> float | None:
+    smoothed = np.convolve(curve, np.ones(_SPEED_SMOOTH) / _SPEED_SMOOTH, mode="valid")
+    idx = int(np.argmax(smoothed >= target))
+    return float(idx) if smoothed[idx] >= target else None
+
+
+def plot_m5r_speedup_sweep(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
+    """Speed advantage of the hypernetwork at every reachable target return."""
+    apply_style()
+    fig, ax = plt.subplots(figsize=(9.0, 4.6))
+    style = {"rl2": (_VARIANT_COLOR["rl2_hypernet"], "-", "RL\u00b2"),
+             "varibad": (_VARIANT_COLOR["varibad_hypernet"], "--", "VariBAD")}
+    drew = False
+    for method, (colour, ls, label) in style.items():
+        concat = _threshold_curve(f"m5r_final_{method}_concat_{env_label}")
+        hyper = _threshold_curve(f"m5r_final_{method}_hypernet_{env_label}")
+        if concat is None or hyper is None:
+            continue
+        # Only targets every seed of both arms reaches, so no run is censored
+        # and every point rests on the same 20 pairs.
+        top = min(np.convolve(c, np.ones(_SPEED_SMOOTH) / _SPEED_SMOOTH,
+                              mode="valid")[-1]
+                  for c in np.vstack([concat, hyper]))
+        targets = np.linspace(25.0, float(top), 40)
+        ratio, lo, hi = [], [], []
+        rng = np.random.default_rng(0)
+        for t in targets:
+            c = np.array([_iterations_to(x, t) for x in concat], dtype=float)
+            h = np.array([_iterations_to(x, t) for x in hyper], dtype=float)
+            per_seed = h / np.maximum(c, 1.0)
+            idx = rng.integers(0, per_seed.size, size=(2000, per_seed.size))
+            boot = np.median(per_seed[idx], axis=1)
+            ratio.append(float(np.median(per_seed)))
+            lo.append(float(np.percentile(boot, 2.5)))
+            hi.append(float(np.percentile(boot, 97.5)))
+        ax.plot(targets, ratio, color=colour, linestyle=ls, linewidth=2.2, label=label)
+        ax.fill_between(targets, lo, hi, facecolor=colour, alpha=0.13,
+                        edgecolor=colour, linewidth=0.7)
+        drew = True
+
+    if not drew:
+        print("[m5r_plots] skip speedup_sweep: no learning curves")
+        plt.close(fig)
+        return
+    ax.axhline(1.0, color="#555555", linewidth=1.0,
+               label="No difference between architectures")
+    ax.set_xlabel("Target return", fontsize=12)
+    ax.set_ylabel("Iterations, hypernetwork / concatenation", fontsize=12)
+    ax.set_ylim(0.0, 1.15)
+    ax.tick_params(axis="both", labelsize=11)
+    polish(ax)
+    ax.legend(loc="upper left", fontsize=10, frameon=True, facecolor="white",
+              edgecolor="#cccccc", framealpha=1.0)
+    fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
@@ -1000,13 +1121,19 @@ def _draw_probe_acc_levels_per_t(
 
 def _probe_levels_figure(
     out_path: Path, draw, ylabel: str, reference_labels: list[str],
-    env_label: str = MEDIUM_ENV,
+    env_label: str = MEDIUM_ENV, legend_right: bool = False,
 ) -> None:
     """Shared layout for the two per-timestep levels figures: one panel per
-    probe family, a shared y-axis, and one legend in variant order below."""
+    probe family, a shared y-axis, and one legend in variant order.
+
+    `legend_right` puts the legend beside the panels instead of below them,
+    which trades width for height. The figure is then shorter on the page, at
+    the cost of narrower panels.
+    """
     apply_style()
     cols = [("logistic", "Linear probe"), ("mlp", "MLP probe")]
-    fig, axes = plt.subplots(1, len(cols), figsize=(10.6, 4.9), sharey=True)
+    figsize = (12.4, 4.6) if legend_right else (10.6, 6.4)
+    fig, axes = plt.subplots(1, len(cols), figsize=figsize, sharey=True)
     drew_any = False
     for ax, (clf, title) in zip(axes, cols):
         if draw(ax, clf, env_label):
@@ -1025,12 +1152,22 @@ def _probe_levels_figure(
         pairs.setdefault(l, h)
     order = [_VARIANT_LEVEL_LABEL[c] for c in CELLS] + reference_labels
     labels = [l for l in order if l in pairs]
-    fig.legend(
-        [pairs[l] for l in labels], labels, loc="lower center", ncol=3,
-        fontsize=12, bbox_to_anchor=(0.5, 0.0), frameon=True,
-        facecolor="white", edgecolor="#dddddd", framealpha=1.0,
-    )
-    fig.subplots_adjust(left=0.09, right=0.99, top=0.93, bottom=0.24, wspace=0.05)
+    if legend_right:
+        fig.legend(
+            [pairs[l] for l in labels], labels, loc="center left", ncol=1,
+            fontsize=11, bbox_to_anchor=(0.775, 0.5), frameon=True,
+            facecolor="white", edgecolor="#dddddd", framealpha=1.0,
+        )
+        fig.subplots_adjust(left=0.08, right=0.76, top=0.91, bottom=0.16,
+                            wspace=0.05)
+    else:
+        fig.legend(
+            [pairs[l] for l in labels], labels, loc="lower center", ncol=3,
+            fontsize=12, bbox_to_anchor=(0.5, 0.0), frameon=True,
+            facecolor="white", edgecolor="#dddddd", framealpha=1.0,
+        )
+        fig.subplots_adjust(left=0.09, right=0.99, top=0.93, bottom=0.24,
+                            wspace=0.05)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
@@ -1163,30 +1300,17 @@ def plot_m5r_diagnostic_separation(
 
 
 def main() -> int:
+    # The difficulty-sweep figures are not produced: RQ3 is deferred, only the
+    # medium instance is run, and the sweep chart had collapsed to a one-panel
+    # duplicate of the method ladder. The decodability level figures are not
+    # produced either, superseded by the per-timestep levels figure the results
+    # chapter now carries.
     for target in _both_targets("m5r_method_ladder.png"):
         plot_method_ladder(target)
-    for target in _both_targets("m5r_distinguishability_sweep.png"):
-        plot_sweep(
-            DISTINGUISHABILITY_LEVELS,
-            "MarketMakingV1, distinguishability-axis difficulty sweep",
-            target,
-        )
-    for target in _both_targets("m5r_sweep_n20.png"):
-        plot_sweep(
-            THESIS_SWEEP_LEVELS,
-            "MarketMakingV1, in-domain difficulty study at $n=20$",
-            target,
-        )
     for target in _both_targets("m5r_posterior_vs_performance.png"):
-        plot_posterior_vs_performance(target, classifier="logistic")
-    for target in _both_targets("m5r_posterior_vs_performance_mlp.png"):
-        plot_posterior_vs_performance(target, classifier="mlp")
+        plot_posterior_vs_performance_combined(target)
     for target in _both_targets("m5r_learning_curves.png"):
         plot_m5r_learning_curves(target)
-    # The thesis includes the two-panel version; it was defined but never
-    # called, so the figure it references had no producer.
-    for target in _both_targets("m5r_probe_per_t_combined.png"):
-        plot_m5r_probe_per_t_combined(target)
     for target in _both_targets("m5r_probe_delta_per_t.png"):
         plot_m5r_probe_delta_per_t(target)
     for target in _both_targets("m5r_probe_kl_per_t.png"):
@@ -1197,10 +1321,6 @@ def main() -> int:
         plot_m5r_diagnostic_separation(target, diagnostic="action")
     for target in _both_targets("m5r_belief_swap_separation.png"):
         plot_m5r_diagnostic_separation(target, diagnostic="swap")
-    for target in _both_targets("m5r_probe_per_t.png"):
-        plot_m5r_probe_per_t(target, classifier="logistic")
-    for target in _both_targets("m5r_probe_per_t_mlp.png"):
-        plot_m5r_probe_per_t(target, classifier="mlp")
     return 0
 
 

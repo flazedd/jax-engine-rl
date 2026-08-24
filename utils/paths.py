@@ -165,9 +165,7 @@ FIGURE_HOME: dict[str, str] = {
     "m5r_action_separation.png": "results/RQ2",
     "m5r_belief_swap_separation.png": "results/RQ2",
     "m5r_posterior_vs_performance.png": "results/RQ2",
-    "m5r_posterior_vs_performance_mlp.png": "results/RQ2",
     # Chapter 5 — RQ3: replication in-domain and in a second domain
-    "m5r_sweep_n20.png": "results/RQ3",
     # learning curves support the time-to-threshold result of RQ1
     "m5r_learning_curves.png": "results/RQ1",
     # Appendix A — environment validity (R1–R4) and implementation validation
@@ -182,19 +180,15 @@ FIGURE_HOME: dict[str, str] = {
     # Appendix B — second domain
     # Appendix C — supporting RSMM charts
     "m5r_action_given_regime_inventory.png": "appendix",
-    "m5r_probe_per_t.png": "appendix",
-    "m5r_probe_per_t_mlp.png": "appendix",
     # Produced but not included: kept in the appendix tree so the two-folder
     # rule holds, and deliberately absent from every .tex.
     "fig_M0_dummy_learning_curve.png": "appendix",
     "fig_M1_ppo_learning_curve.png": "appendix",
     "fig_M1_ppo_policy_vs_as.png": "appendix",
     "fig_rq1_gap_fractions.png": "appendix",
-    "m5r_distinguishability_sweep.png": "appendix",
     # The two-panel levels figure: superseded in the main text by the paired
     # architecture contrast, and covered per probe family by the two
     # full-width appendix figures.
-    "m5r_probe_per_t_combined.png": "appendix",
 }
 
 

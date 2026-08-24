@@ -195,22 +195,75 @@ def _run_family_b(per_cell_env: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _within_variant_correlation(points: list[dict[str, Any]], error_key: str,
+                                n_boot: int = N_BOOT,
+                                alpha: float = ALPHA) -> dict[str, Any]:
+    """The belief-quality against return relation with the variant held fixed.
+
+    The pooled correlation over every run is a between-variant quantity: it is
+    reproduced almost exactly by the four variant means, so treating its eighty
+    points as independent overstates the precision. Centring both variables
+    within variant removes that between-variant variation and leaves the
+    question a reader actually asks, whether a run with a better belief earns
+    more than its siblings. The bootstrap resamples whole seeds, because the
+    same seed appears once in every variant.
+    """
+    by_variant: dict[str, dict[int, tuple[float, float]]] = {}
+    for p in points:
+        by_variant.setdefault(p["method"], {})[int(p["seed"])] = (
+            float(p[error_key]), float(p["gap_closed"]))
+    variants = sorted(by_variant)
+    if len(variants) < 2:
+        return {"n_seeds": 0, "correlation": float("nan"),
+                "ci": [float("nan"), float("nan")]}
+    seeds = sorted(set.intersection(*(set(v) for v in by_variant.values())))
+    xs = np.array([[by_variant[v][s][0] for v in variants] for s in seeds])
+    ys = np.array([[by_variant[v][s][1] for v in variants] for s in seeds])
+    xc = xs - xs.mean(axis=0, keepdims=True)
+    yc = ys - ys.mean(axis=0, keepdims=True)
+
+    def _r(a: np.ndarray, b: np.ndarray) -> float:
+        if np.std(a) == 0 or np.std(b) == 0:
+            return 0.0
+        return float(np.corrcoef(a.ravel(), b.ravel())[0, 1])
+
+    rng = np.random.default_rng(0)
+    boot = np.array([
+        _r(xc[idx], yc[idx])
+        for idx in rng.integers(0, len(seeds), size=(n_boot, len(seeds)))
+    ])
+    r_hat = _r(xc, yc)
+    lo, hi = np.percentile(boot, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return {
+        "n_seeds": len(seeds), "n_variants": len(variants),
+        "correlation": r_hat, "r_squared": r_hat ** 2,
+        "ci": [float(lo), float(hi)],
+        "decoupling_supported": bool(lo > -DECOUPLING_THRESHOLD
+                                     and hi < DECOUPLING_THRESHOLD),
+    }
+
+
 def _family_c_from_probe(probe_path: Path) -> dict[str, Any] | None:
     if not probe_path.exists():
         return None
     with open(probe_path) as f:
         probe = json.load(f)
     points = probe.get("scatter_points", [])
-    arr_pe = np.asarray([p["posterior_error"] for p in points], dtype=float)
+    # Belief error is the excess forward KL over the probe's own residual on the
+    # analytical posterior, the primary belief metric of Section 3.9.3. This
+    # test read `posterior_error`, the accuracy-based measure, which the probe
+    # demoted to a secondary metric.
+    error_key = ("belief_error_kl" if points and "belief_error_kl" in points[0]
+                 else "posterior_error")
+    arr_pe = np.asarray([p[error_key] for p in points], dtype=float)
     arr_gc = np.asarray([p["gap_closed"] for p in points], dtype=float)
+
+    def _within(ci) -> bool:
+        return (not any(np.isnan(ci))
+                and ci[0] > -DECOUPLING_THRESHOLD and ci[1] < DECOUPLING_THRESHOLD)
+
     overall = _bootstrap_correlation_ci(arr_pe, arr_gc)
-    if any(np.isnan(overall["ci"])):
-        decoupling_supported = False
-    else:
-        decoupling_supported = (
-            overall["ci"][0] > -DECOUPLING_THRESHOLD
-            and overall["ci"][1] < DECOUPLING_THRESHOLD
-        )
+    decoupling_supported = _within(overall["ci"])
     by_method: dict[str, list[dict[str, Any]]] = {}
     for p in points:
         by_method.setdefault(p["method"], []).append(p)
@@ -218,12 +271,21 @@ def _family_c_from_probe(probe_path: Path) -> dict[str, Any] | None:
     for method, pts in by_method.items():
         pe = np.asarray([p["posterior_error"] for p in pts], dtype=float)
         gc = np.asarray([p["gap_closed"] for p in pts], dtype=float)
-        per_method[method] = _bootstrap_correlation_ci(pe, gc)
+        ci = _bootstrap_correlation_ci(pe, gc)
+        # An equivalence test needs an interval inside the threshold, which at
+        # this seed count it cannot reach even when the estimate is near zero.
+        # Recording both keeps "not shown to be decoupled" distinct from
+        # "shown to be coupled".
+        ci["decoupling_supported"] = _within(ci["ci"])
+        ci["estimate_within_threshold"] = abs(ci["correlation"]) < DECOUPLING_THRESHOLD
+        per_method[method] = ci
     return {
         "classifier": probe.get("classifier", "logistic"),
         "n_scatter_points": probe.get("n_scatter_points"),
         "overall": overall,
+        "within_variant": _within_variant_correlation(points, error_key),
         "per_method": per_method,
+        "belief_error_metric": error_key,
         "decoupling_supported": decoupling_supported,
         "decoupling_threshold": DECOUPLING_THRESHOLD,
     }

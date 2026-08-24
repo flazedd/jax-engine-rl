@@ -73,11 +73,21 @@ def audit(root: Path) -> dict:
     checked_comparisons = 0
 
     # --- the corrected sets ------------------------------------------------
+    # Every set declared in the protocol, not a subset of them. Two sets had
+    # no artifact and were therefore not audited at all, which is exactly the
+    # state a contract check exists to make visible.
     set_files = {
         "returns_rsmm": final / "m5r_hypothesis_tests.json",
+        "returns_method": final / "m5r_method_return_tests.json",
+        "time_to_threshold": final / "m5r_time_to_threshold_tests.json",
         "diagnostics": final / "m5r_diagnostic_tests.json",
         "belief_quality": final / "m5r_belief_quality_tests.json",
+        "belief_quality_mlp": final / "m5r_belief_quality_mlp_tests.json",
     }
+    undeclared = set(P.COMPARISON_SETS) - set(set_files)
+    if undeclared:
+        findings.append({"kind": "set_not_audited", "sets": sorted(undeclared),
+                         "note": "declared in the protocol but not checked here"})
     for key, path in set_files.items():
         expected = P.COMPARISON_SETS[key]
         payload = _load(path)
@@ -104,6 +114,22 @@ def audit(root: Path) -> dict:
         findings.append({"kind": "missing_artifact", "set": "probe",
                          "path": str(final / "m5r_posterior_vs_performance.json")})
     else:
+        # The probe buffer is a protocol constant, and a probe run at a smaller
+        # buffer still writes a well-formed artifact. That is exactly how the
+        # linear and non-linear probes came to be reported at different sample
+        # sizes, so the size is checked rather than assumed.
+        n_roll = probe.get("n_rollouts")
+        roll_len = probe.get("rollout_length")
+        if n_roll is not None and roll_len is not None:
+            timesteps = int(n_roll) * int(roll_len)
+            if timesteps != P.PROBE_TIMESTEPS:
+                findings.append({
+                    "kind": "probe_buffer_size",
+                    "expected_timesteps": P.PROBE_TIMESTEPS,
+                    "found_timesteps": timesteps,
+                    "n_rollouts": n_roll, "rollout_length": roll_len,
+                    "note": "the probe ran at a buffer the protocol does not specify",
+                })
         if probe.get("classifier") != P.PRIMARY_PROBE:
             findings.append({"kind": "probe_classifier",
                              "expected": P.PRIMARY_PROBE,

@@ -45,6 +45,7 @@ from evaluation.metrics import (
 )
 from utils.script_output import ScriptRun
 
+from evaluation import protocol as P
 from evaluation.protocol import MEDIUM_ENV
 from utils.paths import analysis_dir
 
@@ -206,6 +207,7 @@ def main() -> int:
     # metric under the MLP probe. Reported beside the corrected set and never
     # corrected with it, so no claim can rest on them alone.
     robustness: list[dict] = []
+    mlp_pairs: dict[str, tuple] = {}
     for probe_label, probe_path_str, metric_list in (
         ("linear", args.probe, ROBUSTNESS_METRICS),
         ("mlp", args.probe_mlp, ALL_METRICS),
@@ -227,8 +229,29 @@ def main() -> int:
                     print(f"[belief_quality] skip {probe_label}/{method}/{metric}: "
                           "too few paired seeds", flush=True)
                     continue
-                robustness.append(_compare(hyp_vals, con_vals, seeds, method,
-                                           metric, direction, probe_label))
+                comp = _compare(hyp_vals, con_vals, seeds, method, metric,
+                                direction, probe_label)
+                if probe_label == "mlp":
+                    mlp_pairs[comp["name"]] = (hyp_vals, con_vals)
+                robustness.append(comp)
+
+    # The MLP probe reads out the same two metrics over the same two methods, so
+    # it is corrected the same way, within its own family. Every other
+    # robustness entry stays uncorrected.
+    mlp_family = [c for c in robustness
+                  if c["probe"] == "mlp" and c["metric"] in dict(METRICS)]
+    mlp_size = P.COMPARISON_SETS["belief_quality_mlp"].size
+    if mlp_family:
+        for comp, p_holm in zip(mlp_family,
+                                holm_bonferroni([c["wilcoxon_p"] for c in mlp_family])):
+            comp["holm_corrected_p"] = p_holm
+            comp["comparison_set"] = "belief_quality_mlp"
+            comp["supported"] = bool(p_holm == p_holm and p_holm < ALPHA)
+            hyp_vals, con_vals = mlp_pairs[comp["name"]]
+            comp["stable_under_seed_omission"] = bool(leave_one_out_sensitivity(
+                hyp_vals, con_vals, alpha=ALPHA, n_corrections=mlp_size,
+                alternative="two-sided",
+            )["stable_under_seed_omission"])
 
     n_supported = sum(1 for c in comparisons if c["supported"])
     payload = {
@@ -252,6 +275,23 @@ def main() -> int:
     with open(stats_path, "w") as f:
         json.dump(payload, f, indent=2)
     run.add_output(str(stats_path))
+
+    # The MLP set gets its own artifact, like every other comparison set, so the
+    # contract checks it as a set rather than re-reading the linear one.
+    mlp_path = RESULTS_ROOT / "m5r_belief_quality_mlp_tests.json"
+    with open(mlp_path, "w") as f:
+        json.dump({
+            "comparison_set": "belief_quality_mlp",
+            "probe_source": args.probe_mlp,
+            "classifier": P.ROBUSTNESS_PROBE,
+            "env_label": args.env_label,
+            "alternative": "two-sided",
+            "alpha": ALPHA,
+            "family_size": mlp_size,
+            "n_supported": sum(1 for c in mlp_family if c["supported"]),
+            "comparisons": mlp_family,
+        }, f, indent=2)
+    run.add_output(str(mlp_path))
 
     for c in comparisons:
         print(

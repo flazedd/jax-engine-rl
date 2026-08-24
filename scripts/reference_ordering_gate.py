@@ -1,11 +1,13 @@
 """The prerequisite check Chapter 4 runs before any variant is interpreted.
 
 Every claim in the thesis is read against the reference scale, and the
-gap-closed fraction divides by `oracle - agnostic`. If that ordering does not
-hold on an instance, the denominator is at or below zero and the normalised
-metric is undefined or misleading. Chapter 4 states the check as: the lower
-bootstrap confidence bound on each adjacent paired difference is positive,
-which is stronger than eyeballing two separate intervals.
+gap-closed fraction of Section 3.9.1 divides by `belief - agnostic`. The gate
+checks both adjacent differences rather than that one: the first is the
+denominator, and the second establishes the rest of the ordering the scale
+asserts, `agnostic < belief < oracle`. If either fails on an instance the
+normalised metric is undefined or misleading. Chapter 4 states the check as:
+the lower bootstrap confidence bound on each adjacent paired difference is
+positive, which is stronger than eyeballing two separate intervals.
 
 It runs early and it is allowed to fail. A failure here means the instance is
 excluded from normalised comparisons, not that the programme is broken, so the

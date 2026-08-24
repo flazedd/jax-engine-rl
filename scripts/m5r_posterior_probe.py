@@ -35,6 +35,7 @@ from typing import Any
 
 import numpy as np
 
+from evaluation import protocol as P
 from evaluation.posterior_probe import load_experiment, probe_one_seed
 from utils.script_output import ScriptRun
 
@@ -46,14 +47,20 @@ PER_CELL_ENV_PATH = analysis_dir() / "per_cell_env.json"
 
 
 def _gap_closed_per_seed(
-    per_seed_return: list[float], floor_mean: float | None, oracle_mean: float | None,
+    per_seed_return: list[float], floor_mean: float | None, ceiling_mean: float | None,
 ) -> list[float]:
-    if floor_mean is None or oracle_mean is None:
+    """The gap-closed fraction of Section 3.9.1, one value per seed.
+
+    The ceiling is Belief-PPO, not Oracle-PPO. Dividing by the oracle gap
+    instead puts this figure on a different scale from every other gap-closed
+    number the thesis reports, under the same axis label.
+    """
+    if floor_mean is None or ceiling_mean is None:
         return [float("nan")] * len(per_seed_return)
-    if np.isnan(floor_mean) or np.isnan(oracle_mean) or oracle_mean == floor_mean:
+    if np.isnan(floor_mean) or np.isnan(ceiling_mean) or ceiling_mean == floor_mean:
         return [float("nan")] * len(per_seed_return)
     arr = np.asarray(per_seed_return, dtype=float)
-    return ((arr - floor_mean) / (oracle_mean - floor_mean)).tolist()
+    return ((arr - floor_mean) / (ceiling_mean - floor_mean)).tolist()
 
 
 def _probe_cell(
@@ -155,7 +162,11 @@ def _decoupling_diagnostic(
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="scripts.m5r_posterior_probe")
-    parser.add_argument("--n-rollouts", type=int, default=200)
+    # The protocol fixes the probe buffer at PROBE_TIMESTEPS, so the default
+    # is derived rather than typed: a bare run and the programme run then
+    # produce the same numbers, which a hard-coded 200 did not.
+    parser.add_argument("--n-rollouts", type=int,
+                        default=P.PROBE_TIMESTEPS // P.ROLLOUT_LENGTH)
     parser.add_argument("--rollout-length", type=int, default=128)
     parser.add_argument(
         "--classifier", choices=["logistic", "mlp"], default="logistic",
@@ -198,7 +209,7 @@ def main() -> int:
             continue
         refs = env_block.get("refs", {})
         floor = refs.get("regime_agnostic_ppo")
-        oracle = refs.get("oracle_ppo")
+        ceiling = refs.get("belief_ppo")
         cells = env_block.get("cells", {})
         for method in PROBED_METHODS:
             cell = cells.get(method)
@@ -218,7 +229,7 @@ def main() -> int:
                 failed.append(experiment_name)
                 continue
             gc_per_seed = _gap_closed_per_seed(
-                cell["per_seed_final_return"], floor, oracle,
+                cell["per_seed_final_return"], floor, ceiling,
             )
             for seed, m_acc, a_acc, m_kl, a_kl, m_ll, m_br, gc in zip(
                 probe["seeds"], probe["method_test_acc_per_seed"],

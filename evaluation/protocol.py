@@ -100,10 +100,13 @@ COMPARISON_SETS = {
     # some multiplicities and not others. Every member survives correction, so
     # declaring them changes no conclusion, only the consistency of the
     # procedure.
+    # Revised after the first analysis: the target is now the regime-agnostic
+    # reference return rather than two chosen values per method, so the set is
+    # two comparisons rather than four. Appendix C records the change.
     "time_to_threshold": ComparisonSet(
         "time_to_threshold",
-        "iterations to reach a target return, two methods over two targets",
-        4,
+        "iterations to reach the regime-agnostic reference return, one per method",
+        2,
     ),
     "returns_method": ComparisonSet(
         "returns_method",
@@ -121,6 +124,16 @@ COMPARISON_SETS = {
         "belief_quality",
         "belief quality: forward KL and decodability under the linear probe, "
         "over both methods",
+        4,
+    ),
+    # The same two metrics read out by the non-linear probe. Corrected within
+    # itself rather than pooled with the linear set: pooling would apply an
+    # eight-way correction to four claimed hypotheses and weaken them for no
+    # gain. Declared after the first analysis; Appendix C records that.
+    "belief_quality_mlp": ComparisonSet(
+        "belief_quality_mlp",
+        "belief quality under the MLP probe: forward KL and decodability, over "
+        "both methods",
         4,
     ),
 }

@@ -34,6 +34,7 @@ from typing import Any
 
 import numpy as np
 
+from evaluation import protocol as P
 from evaluation.posterior_probe import load_experiment
 from evaluation.posterior_probe_cartpole import probe_one_seed_cartpole
 from scripts.cartpole_names import cartpole_experiment_name
@@ -156,7 +157,11 @@ def _load_per_seed_returns(experiment_name: str) -> list[float]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="scripts.cartpole_posterior_probe")
-    parser.add_argument("--n-rollouts", type=int, default=200)
+    # The protocol fixes the probe buffer at PROBE_TIMESTEPS, so the default
+    # is derived rather than typed: a bare run and the programme run then
+    # produce the same numbers, which a hard-coded 200 did not.
+    parser.add_argument("--n-rollouts", type=int,
+                        default=P.PROBE_TIMESTEPS // P.ROLLOUT_LENGTH)
     parser.add_argument("--rollout-length", type=int, default=128)
     parser.add_argument(
         "--classifier", choices=["logistic", "mlp"], default="logistic",

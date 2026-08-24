@@ -1237,7 +1237,7 @@ def plot_m5r_diagnostic_separation(
 ) -> None:
     """Per-seed separation score of each variant, paired within seed.
 
-    One point per run, a segment joining the two architectures of a seed, and
+    One point per run, the mean of each variant as a bar, and
     the reference levels behind them. The table reports the paired difference;
     this shows the level each variant reaches and how far it sits from the
     Belief-PPO reference, which a difference alone cannot say.
@@ -1260,15 +1260,11 @@ def plot_m5r_diagnostic_separation(
             continue
         x_c, x_h = positions[f"{method}_concat"], positions[f"{method}_hypernet"]
         jitter = rng.uniform(-0.09, 0.09, size=c.shape[0])
-        # A segment is one seed's paired difference, which is what the Wilcoxon
-        # test consumes. Colouring it by direction makes the majority countable:
-        # in uniform grey the segments cross into a wash and the pairing, the
-        # reason overlapping clouds can still separate, is lost.
+        # No segment joining a seed's two points. The count they carried is a
+        # column of the diagnostics table, and the shape of each cloud is
+        # legible from the points alone; twenty crossing lines per method were
+        # obscuring it.
         rising = h > c
-        for i in range(c.shape[0]):
-            ax.plot([x_c + jitter[i], x_h + jitter[i]], [c[i], h[i]],
-                    color="#2a9d8f" if rising[i] else PALETTE["accent2"],
-                    linewidth=0.9, alpha=0.5, zorder=3)
         ax.text((x_c + x_h) / 2, 1.005,
                 f"{int(rising.sum())} of {c.shape[0]} seeds rise",
                 ha="center", va="bottom", fontsize=9, color="#444444")

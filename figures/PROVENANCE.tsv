@@ -17,8 +17,8 @@ results/RQ1/fig_rq1_learning_curves.png	2026-08-24T12:54:18	real
 results/RQ1/m5r_learning_curves.png	2026-08-24T18:29:16	real
 results/RQ1/m5r_method_ladder.png	2026-08-24T18:29:15	real
 results/RQ1/m5r_speedup_sweep.png	2026-08-24T18:25:03	real
-results/RQ2/m5r_action_separation.png	2026-08-24T18:29:18	real
-results/RQ2/m5r_belief_swap_separation.png	2026-08-24T18:29:18	real
+results/RQ2/m5r_action_separation.png	2026-08-24T22:08:29	real
+results/RQ2/m5r_belief_swap_separation.png	2026-08-24T22:08:29	real
 results/RQ2/m5r_posterior_vs_performance.png	2026-08-24T20:29:27	real
 results/RQ2/m5r_posterior_vs_performance_mlp.png	2026-08-24T16:16:37	real
 results/RQ2/m5r_probe_acc_per_t.png	2026-08-24T20:12:53	real

@@ -157,7 +157,7 @@ def experiment_dir(name: str) -> Path:
 # against one list.
 FIGURE_HOME: dict[str, str] = {
     # Chapter 5 — RQ1: performance under each conditioning architecture
-    "fig_rq1_ceilings_bar.png": "results/RQ1",
+    "fig_rq1_learning_curves.png": "results/RQ1",
     "m5r_method_ladder.png": "results/RQ1",
     # Chapter 5 — RQ2: belief formed versus belief used
     "m5r_probe_kl_per_t.png": "results/RQ2",
@@ -180,16 +180,7 @@ FIGURE_HOME: dict[str, str] = {
     # the paired per-timestep contrast supports the levels figure of RQ2
     "m5r_probe_delta_per_t.png": "appendix",
     # Appendix B — second domain
-    "cartpole_difficulty_sweep_returns.png": "appendix",
-    "cartpole_difficulty_sweep_scatter.png": "appendix",
-    "cartpole_method_ladder.png": "appendix",
-    "cartpole_persistence_sweep_returns.png": "appendix",
-    "cartpole_posterior_vs_performance.png": "appendix",
-    "cartpole_posterior_vs_performance_logistic_vs_mlp.png": "appendix",
-    "cartpole_two_axis_scatter_grid.png": "appendix",
-    "cross_env_decoupling_vs_inversion_2x2.png": "appendix",
     # Appendix C — supporting RSMM charts
-    "fig_rq1_learning_curves.png": "appendix",
     "m5r_action_given_regime_inventory.png": "appendix",
     "m5r_probe_per_t.png": "appendix",
     "m5r_probe_per_t_mlp.png": "appendix",

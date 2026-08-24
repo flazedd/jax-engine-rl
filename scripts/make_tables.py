@@ -13,8 +13,6 @@ same whether or not anything has been trained.
 Writes into <thesis>/tables/:
   probe_quality.tex        decodability and belief quality, both probe families
   integration_gap.tex      within-method conditioning gap on the medium instance
-  cartpole_effects.tex     CartPole hypernet-minus-concat return ranges
-  cartpole_inversion.tex   CartPole probe inversion at medium difficulty
 """
 from __future__ import annotations
 
@@ -24,11 +22,10 @@ from pathlib import Path
 
 import numpy as np
 
-from utils.paths import analysis_dir, cartpole_dir, is_dummy, resolve_data, results_root, thesis_fig_dir
+from utils.paths import analysis_dir, is_dummy, resolve_data, results_root, thesis_fig_dir
 from utils.script_output import ScriptRun
 
 FINAL = lambda: analysis_dir()          # noqa: E731
-CARTPOLE = lambda: cartpole_dir()  # noqa: E731
 
 VARIANTS = [
     ("rl2_concat", "RL\\textsuperscript{2} concat"),
@@ -113,6 +110,9 @@ def _belief_rows(metric: str, nd: int, with_holm: bool) -> list[str] | None:
             if hit is None:
                 continue
             lo, hi = hit["delta_ci"]
+            # Section 3.10 fixes what a results table carries: the level, the
+            # paired difference, its interval, the seed count and the corrected
+            # p. The raw p and the effect size stay in the Appendix D artefacts.
             cells = [
                 _METHOD_LABEL[method] if probe == "linear" else "",
                 _PROBE_LABEL[probe],
@@ -120,14 +120,13 @@ def _belief_rows(metric: str, nd: int, with_holm: bool) -> list[str] | None:
                 _fmt(hit["hypernet_mean"], nd),
                 _fmt(hit["mean_paired_delta"], nd, plus=True),
                 f"$[{lo:+.{nd}f},\\ {hi:+.{nd}f}]$",
-                _fmt(hit["rank_biserial"], 2, plus=True),
-                _fmt_p(hit["wilcoxon_p"]),
+                f"${hit['seeds_favouring_hypernet']}/{hit['n_pairs']}$",
             ]
             if with_holm:
                 cells.append(_fmt_p(hit.get("holm_corrected_p")))
             rows.append(" & ".join(cells) + r" \\")
         if method == "rl2" and rows:
-            rows.append(r"\cmidrule(l){2-%d}" % (9 if with_holm else 8))
+            rows.append(r"\cmidrule(l){2-%d}" % (8 if with_holm else 7))
     return rows or None
 
 
@@ -138,9 +137,9 @@ def _belief_table(metric: str, with_holm: bool = True) -> str | None:
     rows = _belief_rows(metric, nd, with_holm)
     if rows is None:
         return None
-    n_cols = 9 if with_holm else 8
+    n_cols = 8 if with_holm else 7
     head = (r"Method & Probe & Concatenation & Hypernetwork & $\bar{d}$ & "
-            r"$95\%$ CI & $r$ & $p$")
+            r"$95\%$ CI & Seeds favouring")
     if with_holm:
         head += r" & $p_{\text{Holm}}$"
     body = "\n".join(rows)
@@ -217,92 +216,12 @@ def integration_gap() -> str | None:
 """
 
 
-def _cartpole_ranges(axis: str):
-    suffix = "" if axis == "asymmetry" else f"_{axis}"
-    payload = _load(CARTPOLE() / f"stats_cartpole_hypothesis_tests_sweep{suffix}.json")
-    if payload is None:
-        return {}
-    out: dict[str, list[float]] = {}
-    fam = payload.get("family_a") or payload.get("hypotheses") or []
-    entries = fam if isinstance(fam, list) else list(fam.values())
-    # family_a may be {"hypotheses": [...]} or a bare list of records
-    flat = []
-    for e in entries:
-        flat.extend(e) if isinstance(e, list) else flat.append(e)
-    for r in flat:
-        if not isinstance(r, dict) or "delta_mean" not in r:
-            continue
-        name = r.get("name", "")
-        method = "rl2" if name.startswith("rl2") else (
-            "varibad" if name.startswith("varibad") else None)
-        delta = r.get("delta_mean", r.get("mean_paired_delta"))
-        if method and delta is not None:
-            out.setdefault(method, []).append(float(delta))
-    return out
-
-
-def cartpole_effects() -> str | None:
-    rows = []
-    for axis, label in (("asymmetry", "Asymmetry"), ("persistence", "Persistence")):
-        rng = _cartpole_ranges(axis)
-        if not rng:
-            continue
-        cells = []
-        for m in ("rl2", "varibad"):
-            v = rng.get(m)
-            cells.append(f"${min(v):+.2f}$ to ${max(v):+.2f}$" if v else "--")
-        rows.append(f"{label} & {cells[0]} & {cells[1]} \\\\")
-    if not rows:
-        return None
-    body = "\n\\midrule\n".join(rows)
-    return f"""\\begin{{tabular}}{{lcc}}
-\\toprule
-{_banner(3)}Axis & RL\\textsuperscript{{2}} (hypernet$-$concat) & VariBAD (hypernet$-$concat) \\\\
-\\midrule
-{body}
-\\bottomrule
-\\end{{tabular}}
-"""
-
-
-def cartpole_inversion() -> str | None:
-    payload = _load(CARTPOLE() / "stats_cartpole_posterior_vs_performance.json")
-    if payload is None:
-        return None
-    import collections
-    acc = collections.defaultdict(list)
-    for pt in payload.get("scatter_points", []):
-        if "method_test_acc" in pt:
-            acc[pt["method"]].append(float(pt["method_test_acc"]))
-    means = {k: float(np.mean(v)) for k, v in acc.items() if v}
-    rows = []
-    for method, label in (("rl2", "RL\\textsuperscript{2}"), ("varibad", "VariBAD")):
-        c = means.get(f"{method}_concat")
-        h = means.get(f"{method}_hypernet")
-        if c is None and h is None:
-            continue
-        rows.append(f"{label} & {_fmt(c, 2)} & {_fmt(h, 2)} \\\\")
-    if not rows:
-        return None
-    body = "\n".join(rows)
-    return f"""\\begin{{tabular}}{{lcc}}
-\\toprule
-{_banner(3)}Method & concat decodability & hypernet decodability \\\\
-\\midrule
-{body}
-\\bottomrule
-\\end{{tabular}}
-"""
-
-
 TABLES = {
     "probe_decodability": probe_decodability,
     "probe_kl": probe_kl,
     "probe_log_loss": probe_log_loss,
     "probe_brier": probe_brier,
     "integration_gap": integration_gap,
-    "cartpole_effects": cartpole_effects,
-    "cartpole_inversion": cartpole_inversion,
 }
 
 

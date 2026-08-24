@@ -477,13 +477,11 @@ def plot_posterior_vs_performance(
     ax.set_ylabel("Gap-closed fraction")
     ax.axhline(0.0, color="#555555", linewidth=1.0,
                label="Regime-agnostic floor")
-    # The pooled correlation is annotated rather than written into the thesis
-    # prose, which stays qualitative. It is a between-method relation: the
-    # within-method clouds carry no comparable trend.
-    r = probe["correlation_overall_kl" if metric == "kl" else "correlation_overall"]
-    ax.text(0.97, 0.96, f"Across all runs, r = {r:+.2f}".replace("-", "−"),
-            transform=ax.transAxes, ha="right", va="top", fontsize=9,
-            color="#444444")
+    # The pooled correlation is deliberately not annotated. It is a
+    # between-method relation that the within-method clouds contradict, and a
+    # coefficient rendered on the chart carries no interval, no seed count and
+    # no test, so it reads as a stronger claim than the figure supports. The
+    # value stays in the probe JSON for anyone who needs it.
     polish(ax)
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), fontsize=9,
               frameon=True, facecolor="white", edgecolor="#cccccc", framealpha=1.0)

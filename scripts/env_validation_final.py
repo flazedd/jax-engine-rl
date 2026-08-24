@@ -42,7 +42,8 @@ from oracles.verify_requirements import (
     THRESHOLDS,
     verify,
 )
-from utils.paths import fig_targets, foundations_dir
+from plotting import record_figure_provenance
+from utils.paths import fig_targets, foundations_dir, is_dummy
 from utils.script_output import ScriptRun
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -68,33 +69,26 @@ def _out_dir_for(run_mode: str) -> Path:
 # `thesis_row` is the row label as it appears there; `expected` is the measured
 # value the thesis prints, rounded to 2dp, checked against on every re-run.
 ENVS: list[dict[str, Any]] = [
+    # The reference instance the thesis reports on. `e_final` is its
+    # predecessor, kept as the second row because Table 3.3 contrasts the two:
+    # it is the instance whose R3 a memoryless agent could already satisfy.
     {
-        "label": "e_final",
-        "config": "e_final.yaml",
+        "label": "e9",
+        "config": "e9_rare_fills.yaml",
         "thesis_row": "Medium-difficulty, reference",
-        "expected": {"R1": 1.00, "R2": 0.91, "R3": 0.75, "R4": 0.50},
+        "expected": {"R1": 1.00, "R2": 0.97, "R3": 0.76, "R4": 0.59},
         "reference_env": True,
     },
     {
-        "label": "sweep_dist_easy",
-        "config": "sweep_dist_easy.yaml",
-        "thesis_row": "Distinguishability easy",
-        "expected": {"R1": 1.00, "R2": 0.93, "R3": 0.64, "R4": 0.59},
+        "label": "e_final",
+        "config": "e_final.yaml",
+        "thesis_row": "Predecessor",
+        "expected": {"R1": 1.00, "R2": 0.91, "R3": 0.92, "R4": 0.50},
         "reference_env": False,
-    },
-    {
-        "label": "sweep_dist_hard",
-        "config": "sweep_dist_hard.yaml",
-        "thesis_row": "Distinguishability hard",
-        "expected": {"R1": 1.00, "R2": 0.89, "R3": 0.88, "R4": 0.45},
-        "reference_env": False,
-    },
-    {
-        "label": "sweep_coupled_fast",
-        "config": "sweep_coupled_fast.yaml",
-        "thesis_row": "Coupled fast persistence",
-        "expected": {"R1": 1.00, "R2": 0.93, "R3": 0.63, "R4": 0.37},
-        "reference_env": False,
+        # The predecessor is in the table precisely because it fails R3 on
+        # matched-tuple agents. A failing row here is the reported result, not a
+        # broken run, so it must not fail the script.
+        "expect_fail": ["R3"],
     },
 ]
 
@@ -129,7 +123,27 @@ def _snapshot_figures(label: str, src: Path) -> None:
     dest = OUT_DIR / "figures" / label
     dest.mkdir(parents=True, exist_ok=True)
     for png in sorted(src.glob("fig_M2_*.png")):
-        shutil.copy(png, dest / png.name)
+        target = dest / png.name
+        # In the reduced modes OUT_DIR is the same directory verify() wrote to,
+        # so the copy would be a file onto itself and raise.
+        if png.resolve() == target.resolve():
+            continue
+        shutil.copy(png, target)
+
+
+def _png_written(png: Path) -> str:
+    """The generation time the savefig hook wrote into the PNG, so a copy
+    reports when the chart was made rather than when it was moved."""
+    try:
+        from PIL import Image
+
+        with Image.open(png) as im:
+            stamped = dict(im.text).get("thesis-written")
+        if stamped:
+            return stamped
+    except Exception:
+        pass
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _restore_reference_figures(label: str) -> list[Path]:
@@ -146,6 +160,11 @@ def _restore_reference_figures(label: str) -> list[Path]:
         # outside the layout it mirrors.
         for target in fig_targets(png.name):
             shutil.copy(png, target)
+            # A copy bypasses the savefig hook, so the manifest of the tree
+            # being written to would otherwise never learn about these.
+            record_figure_provenance(
+                target, _png_written(png), "dummy" if is_dummy() else "real",
+            )
             restored.append(target)
     return restored
 
@@ -306,7 +325,13 @@ def main() -> int:
     ):
         restored = _restore_reference_figures(reference)
 
-    failed_reqs = [r["label"] for r in rows if not r["all_pass"]]
+    def _unexpected_failure(row: dict) -> bool:
+        spec = next((e for e in ENVS if e["label"] == row["label"]), {})
+        allowed = set(spec.get("expect_fail", ()))
+        failing = {k for k, ok in row.get("pass", {}).items() if not ok}
+        return bool(failing - allowed)
+
+    failed_reqs = [r["label"] for r in rows if _unexpected_failure(r)]
     drifted = [r["label"] for r in rows if r["table_mismatches"]]
 
     summary = {

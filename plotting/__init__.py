@@ -4,17 +4,20 @@ Installs one global behaviour: every figure saved anywhere in the codebase is
 stamped, at ``Figure.savefig`` rather than per plotting module, because a new
 module can forget a convention but cannot forget the save call.
 
-Two stamps:
+Provenance travels with every figure, but not on its face. The generation time
+is written into the PNG metadata as ``thesis-written`` and appended to a
+``PROVENANCE.tsv`` at the root of each figure tree, so a stale chart is still
+detectable without printing a date onto a thesis figure. This project has
+already had seven-week-old charts pass for current ones, which is why the
+record is kept at all.
 
-* **A timestamp**, always. A figure sitting in the thesis carries no other
-  indication of when it was produced, and this project has already had
-  seven-week-old charts pass for current ones. Small and grey, bottom left.
-* **A DUMMY overlay**, when the process is part of a dummy programme run. A
-  synthetic figure reaching the thesis unlabelled is the one failure mode of a
-  dummy run that would actually cost something.
+Two overlays remain available:
 
-Set ``THESIS_FIG_STAMP=0`` to suppress the timestamp for a final build, where
-the date belongs in the document rather than on every chart.
+* **A timestamp**, off by default. Set ``THESIS_FIG_STAMP=1`` while iterating
+  to see at a glance which charts a rerun actually refreshed.
+* **A DUMMY overlay**, whenever the process is part of a dummy programme run,
+  and not suppressible. A synthetic figure reaching the thesis unlabelled is
+  the one failure mode of a dummy run that would actually cost something.
 """
 from __future__ import annotations
 
@@ -31,7 +34,41 @@ def _is_dummy() -> bool:
 
 
 def _stamp_enabled() -> bool:
-    return os.environ.get("THESIS_FIG_STAMP", "1") != "0"
+    # Off by default: the date belongs in the manifest and in the file's own
+    # metadata, not rendered onto a figure that goes into the document.
+    return os.environ.get("THESIS_FIG_STAMP", "0") == "1"
+
+
+def record_figure_provenance(target, written: str, source: str) -> None:
+    """Append this figure to the PROVENANCE.tsv of the tree it was written to.
+
+    Keyed by the path relative to that tree's `figures/` root, so the same
+    chart written to the repo tree and the thesis tree is one row in each and
+    a rerun replaces its own row rather than accumulating history.
+    """
+    from pathlib import Path
+
+    if not isinstance(target, (str, os.PathLike)):
+        return
+    path = Path(target)
+    root = next((p for p in path.parents if p.name == "figures"), None)
+    if root is None:
+        return
+    try:
+        key = str(path.relative_to(root))
+        manifest = root / "PROVENANCE.tsv"
+        rows = {}
+        if manifest.exists():
+            for line in manifest.read_text().splitlines()[1:]:
+                parts = line.split("\t")
+                if len(parts) == 3:
+                    rows[parts[0]] = parts
+        rows[key] = [key, written, source]
+        body = "\n".join("\t".join(r) for r in sorted(rows.values()))
+        manifest.write_text("figure\twritten\tsource\n" + body + "\n")
+    except Exception:
+        # Provenance must never be the reason a figure fails to save.
+        pass
 
 
 def _savefig_stamped(self, *args, **kwargs):
@@ -41,9 +78,13 @@ def _savefig_stamped(self, *args, **kwargs):
     # was regenerated: the twins changed, the comparison stopped matching, and
     # nothing said so. A PNG text chunk survives copying and regeneration.
     meta = dict(kwargs.pop("metadata", None) or {})
-    meta.setdefault("thesis-source", "dummy" if _is_dummy() else "real")
-    meta.setdefault("thesis-written", time.strftime("%Y-%m-%dT%H:%M:%S"))
+    source = "dummy" if _is_dummy() else "real"
+    written = time.strftime("%Y-%m-%dT%H:%M:%S")
+    meta.setdefault("thesis-source", source)
+    meta.setdefault("thesis-written", written)
     kwargs["metadata"] = meta
+    if args:
+        record_figure_provenance(args[0], written, source)
 
     if not getattr(self, "_thesis_stamped", False):
         if _stamp_enabled():

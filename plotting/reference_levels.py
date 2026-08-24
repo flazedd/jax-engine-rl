@@ -49,6 +49,26 @@ def _boot_ci(vals: np.ndarray, seed: int = 0) -> tuple[float, float]:
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
 
 
+def _boot_mean_ci_per_iteration(
+    per_seed_curve: np.ndarray, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Pointwise 95% bootstrap CIs for a mean learning curve.
+
+    Resampling whole seed-curves preserves the within-run temporal dependence.
+    The resulting bands quantify uncertainty in the mean at each iteration;
+    they are not seed-to-seed percentile ranges and are not simultaneous bands
+    over the full curve.
+    """
+    rng = np.random.default_rng(seed)
+    n_seeds = per_seed_curve.shape[0]
+    indices = rng.integers(0, n_seeds, size=(N_BOOT, n_seeds))
+    boot_means = per_seed_curve[indices].mean(axis=1)
+    return (
+        np.percentile(boot_means, 2.5, axis=0),
+        np.percentile(boot_means, 97.5, axis=0),
+    )
+
+
 def _targets(name: str) -> list[Path]:
     return fig_targets(name)
 
@@ -73,13 +93,16 @@ def plot_ceilings_bar(blocks: list[tuple[str, dict]]) -> None:
     ax.set_xticklabels([lbl for lbl, _ in blocks])
     ax.set_ylabel("Return at the end of training")
     n_seeds = len(blocks[0][1]["per_seed_final_return"])
-    ax.set_title(f"Reference levels, reference instance (n = {n_seeds} seeds)")
     polish(ax)
     fig.tight_layout()
-    for t in _targets("fig_rq1_ceilings_bar.png"):
-        t.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(t, dpi=200)
-        print(f"[reference_levels] wrote {t}")
+    # Repo tree only. The thesis dropped this chart: the learning curves carry
+    # the same three levels at their right edge and Table 5.1 carries the paired
+    # separations, so including it would print one claim three times. It is kept
+    # here because it remains the fastest read of the level ordering.
+    t = project_fig_dir("appendix") / "fig_rq1_ceilings_bar.png"
+    t.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(t, dpi=200)
+    print(f"[reference_levels] wrote {t}")
     plt.close(fig)
 
 
@@ -88,25 +111,46 @@ def plot_learning_curves(blocks: list[tuple[str, dict]]) -> None:
     fig, ax = plt.subplots(figsize=(7.6, 4.2))
     palette = [COLORS.get("floor", "#b4bcc2"), COLORS.get("belief", "#2a9d8f"),
                COLORS.get("oracle", "#264653")]
-    for (label, m), colour in zip(blocks, palette):
+    ends: list[tuple[float, float, str, str]] = []
+    last_iter = 0
+    for seed, ((label, m), colour) in enumerate(zip(blocks, palette)):
         curve = np.asarray(m["mean_return_per_iter"], dtype=float)
-        ax.plot(np.arange(curve.size), curve, label=label, color=colour, linewidth=1.8)
+        ax.plot(np.arange(curve.size), curve, color=colour, linewidth=1.8)
         per_seed = m.get("per_seed_mean_return_per_iter")
         if per_seed:
             arr = np.asarray(per_seed, dtype=float)
-            lo = np.percentile(arr, 2.5, axis=0)
-            hi = np.percentile(arr, 97.5, axis=0)
+            lo, hi = _boot_mean_ci_per_iteration(arr, seed=seed)
             ax.fill_between(np.arange(curve.size), lo, hi, color=colour, alpha=0.15,
                             linewidth=0)
+        last_iter = max(last_iter, int(curve.size) - 1)
+        ends.append((float(curve.size - 1), float(curve[-1]), label, colour))
+
+    # Labels at the right end of each curve rather than a legend box, matching
+    # the variant learning curves: with three curves that never cross, naming
+    # each where it ends is read without a colour lookup.
+    span = max((e[1] for e in ends), default=1.0) - min((e[1] for e in ends), default=0.0)
+    min_gap = 0.06 * (span or 1.0)
+    placed: list[float] = []
+    for x_end, y_end, label, colour in sorted(ends, key=lambda e: -e[1]):
+        y_lab = y_end
+        if placed and abs(y_lab - placed[-1]) < min_gap:
+            y_lab = placed[-1] - min_gap
+        placed.append(y_lab)
+        ax.annotate(label, xy=(x_end, y_end),
+                    xytext=(x_end + 0.035 * last_iter, y_lab),
+                    textcoords="data", va="center", ha="left", fontsize=9,
+                    color=colour, fontweight="bold", clip_on=False, zorder=6,
+                    arrowprops=dict(arrowstyle="-", color=colour, lw=0.6,
+                                    alpha=0.5, shrinkA=0, shrinkB=0))
+
     ax.set_xlabel("Training iteration")
     ax.set_ylabel("Mean return")
-    ax.set_title("Reference levels over training, reference instance")
-    ax.legend(frameon=False, loc="lower right")
+    ax.set_xlim(0, last_iter * 1.30)
     polish(ax)
     fig.tight_layout()
     for t in _targets("fig_rq1_learning_curves.png"):
         t.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(t, dpi=200)
+        fig.savefig(t, dpi=600)
         print(f"[reference_levels] wrote {t}")
     plt.close(fig)
 

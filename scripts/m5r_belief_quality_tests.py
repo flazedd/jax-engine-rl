@@ -109,7 +109,11 @@ def _compare(
     # "Favours the hypernetwork" depends on the metric's direction, per
     # the metric-direction convention of the protocol.
     favours = mean_delta < 0 if direction == "lower" else mean_delta > 0
+    # Seeds favouring the hypernetwork, in the metric's own direction. The
+    # protocol reports this beside the interval instead of an effect size.
+    per_seed = (hyp_vals < con_vals) if direction == "lower" else (hyp_vals > con_vals)
     return {
+        "seeds_favouring_hypernet": int(per_seed.sum()),
         "name": f"{method}_hypernet_vs_concat_{metric}",
         "method": method,
         "metric": metric,

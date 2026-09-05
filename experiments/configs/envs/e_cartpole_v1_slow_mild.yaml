@@ -1,0 +1,29 @@
+# E_cartpole_v1, slow_mild — slow-evidence candidate. Milder asymmetry on top of the doubled noise, so both the per-step evidence and the number of steps it must be pooled over move together.
+#
+# The regime is inferred from the theta-dot transition, whose two hypotheses,
+# push delivered and push failed, sit about 0.27 rad/s apart. Raising the
+# process noise to 0.4 leaves that separation at roughly 0.7 SD per step, so the
+# posterior needs tens of observations rather than a handful. A K-step window
+# cannot accumulate that far; the analytical filter can. Asymmetry stays at the
+# wide level so the control value of the regime, and the oracle gap with it, is
+# untouched. Persistence 0.995 keeps the regime still long enough for the
+# accumulation to pay.
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.4
+
+    n_regimes: 3
+    regime_action_success: [
+      0.90, 0.35,
+      0.80, 0.80,
+      0.35, 0.90,
+    ]
+    transition_matrix: [
+      0.995, 0.0025, 0.0025,
+      0.0025, 0.995, 0.0025,
+      0.0025, 0.0025, 0.995,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

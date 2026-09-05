@@ -1,0 +1,23 @@
+# Stacked-observation PPO: the memory baseline. Reads the last K per-step
+# tuples rather than one, so it holds a fixed window of history without an
+# inferred belief. Width from the parameter-budget match below; the stacked
+# observation is K times wider than the reference input, so a narrower hidden
+# layer keeps the arm at the family's budget.
+extends:
+- base/base_ppo.yaml
+- envs/e_cartpole_v1_spread.yaml
+experiment_name: m_cartpole_matched_stacked_obs
+iterations: 2000
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 20
+seed_base: 0
+env:
+  name: cartpole_regime_v1_stacked_augmented
+  params:
+    stack_k: 4
+agent:
+  params:
+    epochs: 4
+    minibatch_envs: 32
+    hidden_dim: 55

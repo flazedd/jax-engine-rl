@@ -101,6 +101,51 @@ def print_fail_line(script: str, *, reason: str) -> None:
     print(f"[{script}] FAIL | reason={reason}", flush=True)
 
 
+def print_table(
+    headers: Iterable[str],
+    rows: Iterable[Iterable[Any]],
+    *,
+    title: str | None = None,
+    note: str | None = None,
+    align: str | None = None,
+) -> None:
+    """Print an aligned table for a person to read.
+
+    The `[script] OK | k=v` line stays the machine-readable contract; this is
+    the half a reader needs, and a pipe-separated line of eleven numbers is not
+    it. Columns size themselves to their contents. `align` is one character per
+    column, "l" or "r", defaulting to left for the first and right for the rest,
+    which is what a label-then-numbers table wants.
+    """
+    headers = [str(h) for h in headers]
+    body = [[("" if c is None else str(c)) for c in row] for row in rows]
+    n = len(headers)
+    if align is None:
+        align = "l" + "r" * (n - 1)
+    widths = [len(h) for h in headers]
+    for row in body:
+        for i, cell in enumerate(row[:n]):
+            widths[i] = max(widths[i], len(cell))
+
+    def fmt(cells: list[str]) -> str:
+        out = []
+        for i, cell in enumerate(cells[:n]):
+            out.append(cell.ljust(widths[i]) if align[i] == "l"
+                       else cell.rjust(widths[i]))
+        return "  " + "  ".join(out)
+
+    rule = "  " + "  ".join("-" * w for w in widths)
+    if title:
+        print(f"\n{title}", flush=True)
+    print(fmt(headers), flush=True)
+    print(rule, flush=True)
+    for row in body:
+        print(fmt(row), flush=True)
+    if note:
+        print(f"  {note}", flush=True)
+    print("", flush=True)
+
+
 @dataclass
 class ScriptRun:
     """Context helper: captures start time, collects outputs, writes summary on exit."""

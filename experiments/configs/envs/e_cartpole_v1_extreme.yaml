@@ -1,0 +1,24 @@
+# E_cartpole_v1, extreme-reference candidate — pushes both axes past their easy
+# level: near-deterministic per-direction success (0.99 / 0.10) and a regime
+# that almost never switches within an episode (diag = 0.995, mean duration
+# ≈ 200 steps against a 128-step episode). The upper end of the screen, kept
+# only if it separates the reference levels further than the wide candidate.
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.2
+
+    n_regimes: 3
+    regime_action_success: [
+      0.99, 0.10,
+      0.80, 0.80,
+      0.10, 0.99,
+    ]
+    transition_matrix: [
+      0.995, 0.0025, 0.0025,
+      0.0025, 0.995, 0.0025,
+      0.0025, 0.0025, 0.995,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

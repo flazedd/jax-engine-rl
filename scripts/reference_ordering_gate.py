@@ -15,6 +15,7 @@ gate reports per-instance rather than aborting everything.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -23,14 +24,33 @@ import numpy as np
 
 from evaluation.metrics import bootstrap_paired_mean_ci
 from evaluation import protocol as P
-from utils.paths import analysis_dir, experiment_dir, resolve_data, results_root
+from utils.paths import (
+    analysis_dir, cartpole_dir, experiment_dir, resolve_data, results_root,
+)
 from utils.script_output import ScriptRun
 
-# Adjacent pairs of the ordering, in the direction the thesis asserts.
-ADJACENT = [
-    ("belief_over_agnostic", "m5r_ref_belief_e9", "m5r_ref_regime_agnostic_e9"),
-    ("oracle_over_belief", "m5r_ref_oracle_e9", "m5r_ref_belief_e9"),
-]
+# Adjacent pairs of the ordering, in the direction the thesis asserts, per
+# family. The cartpole family is gated on the same criterion: it carries the
+# same reference scale, and its appendix reports the same normalised metric.
+FAMILIES = {
+    "market_making": {
+        "adjacent": [
+            ("belief_over_agnostic", "m5r_ref_belief_e9",
+             "m5r_ref_regime_agnostic_e9"),
+            ("oracle_over_belief", "m5r_ref_oracle_e9", "m5r_ref_belief_e9"),
+        ],
+        "out_name": "reference_ordering_gate.json",
+    },
+    "cartpole": {
+        "adjacent": [
+            ("belief_over_agnostic", "m_cartpole_matched_belief",
+             "m_cartpole_matched_regime_agnostic"),
+            ("oracle_over_belief", "m_cartpole_matched_oracle",
+             "m_cartpole_matched_belief"),
+        ],
+        "out_name": "reference_ordering_gate_cartpole.json",
+    },
+}
 
 
 def _per_seed(experiment: str) -> np.ndarray | None:
@@ -42,9 +62,15 @@ def _per_seed(experiment: str) -> np.ndarray | None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(prog="scripts.reference_ordering_gate")
+    parser.add_argument("--family", choices=sorted(FAMILIES),
+                        default="market_making")
+    args = parser.parse_args()
+    family = FAMILIES[args.family]
+
     run = ScriptRun(script="reference_ordering_gate")
     checks = []
-    for name, hi_exp, lo_exp in ADJACENT:
+    for name, hi_exp, lo_exp in family["adjacent"]:
         hi, lo = _per_seed(hi_exp), _per_seed(lo_exp)
         if hi is None or lo is None:
             run.fail(reason=f"missing reference metrics for {name}")
@@ -76,19 +102,21 @@ def main() -> int:
                                  "(gap-closed) comparisons; raw returns remain "
                                  "reportable",
     }
-    out_dir = analysis_dir()
+    payload["family"] = args.family
+    out_dir = analysis_dir() if args.family == "market_making" else cartpole_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "reference_ordering_gate.json"
+    out_path = out_dir / family["out_name"]
     out_path.write_text(json.dumps(payload, indent=2))
     run.add_output(str(out_path))
 
     if not all_pass:
         run.fail(reason="reference ordering does not hold; gap-closed fraction "
                         "is not interpretable on this instance",
-                 summary_path=out_dir / "reference_ordering_gate_run.json")
+                 summary_path=out_dir / f"{out_path.stem}_run.json")
         return 1
-    run.ok(key_stats={"ordering_holds": True, "n_checks": len(checks)},
-           summary_path=out_dir / "reference_ordering_gate_run.json")
+    run.ok(key_stats={"ordering_holds": True, "n_checks": len(checks),
+                      "family": args.family},
+           summary_path=out_dir / f"{out_path.stem}_run.json")
     return 0
 
 

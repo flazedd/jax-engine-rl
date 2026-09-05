@@ -46,12 +46,62 @@ _VARIANT_COLOR = {
 }
 
 from evaluation.action_distribution import regime_separation_per_seed
+from envs.market_making_v1 import MarketMakingV1
+from oracles.value_iteration import _transition_tables, finite_horizon_policy
 from evaluation.protocol import MEDIUM_ENV
+from training.config import _load_yaml_with_extends
 from utils.paths import experiment_dir, fig_targets, final_dir, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
 FINAL_DIR = final_dir()
+
+
+def _exact_full_information_diagnostics() -> dict[str, float]:
+    """Scores for the exact full-information policy on the two behaviour plots.
+
+    The action score uses the figure's usual locked-regime occupancy weighting.
+    The belief-swap score averages the same maximum total-variation distance
+    uniformly over all episode steps and inventory states, since the exact
+    policy has no learned belief vectors or recorded observation histories.
+    """
+    config = _load_yaml_with_extends(
+        REPO_ROOT / "experiments/configs/m5r_e9/oracle_ppo.yaml"
+    )
+    env = MarketMakingV1(**config["env"]["params"])
+    policy = finite_horizon_policy(env)
+    P, _R = _transition_tables(env)
+    n_t, n_inv, n_reg = policy.shape
+    n_actions = 3
+
+    # Expected occupancy in episodes with each regime locked, then the
+    # action distribution at each inventory level under the time-dependent
+    # exact policy.
+    tables = np.zeros((n_reg, n_inv, n_actions), dtype=float)
+    counts = np.zeros((n_reg, n_inv), dtype=float)
+    for r in range(n_reg):
+        d = np.zeros(n_inv, dtype=float)
+        d[env.inventory_max] = 1.0
+        for t in range(n_t):
+            counts[r] += d
+            for q in range(n_inv):
+                tables[r, q, policy[t, q, r]] += d[q]
+            transition = np.empty((n_inv, n_inv), dtype=float)
+            for q in range(n_inv):
+                transition[q] = P[q, r, policy[t, q, r]].sum(axis=1)
+            d = d @ transition
+    tables = np.divide(tables, counts[..., None], out=np.zeros_like(tables),
+                       where=counts[..., None] > 0)
+    action = float(regime_separation_per_seed(tables[None], counts[None])[0])
+
+    # For a fixed (step, inventory) situation, changing the known regime makes
+    # the deterministic exact policy either keep the same action (TV=0) or
+    # choose another one (TV=1).
+    swap = float(np.mean([
+        1.0 if len(set(policy[t, q].tolist())) > 1 else 0.0
+        for t in range(n_t) for q in range(n_inv)
+    ]))
+    return {"action": action, "swap": swap}
 def _both_targets(name: str) -> list[Path]:
     """Both destinations for a chart: the repo tree and the thesis tree.
 
@@ -149,20 +199,23 @@ def _draw_refs(ax, refs: dict, label_x: float | None = None) -> None:
     if _be is not None and _or is not None:
         ax.axhspan(_be, _or, color=PALETTE["hyper"], alpha=0.04, zorder=0)
     label_map = {
-        "regime_agnostic_ppo": "Regime-agnostic floor",
+        "regime_agnostic_ppo": "Regime-agnostic-PPO",
         "belief_ppo": "Belief-PPO",
         "oracle_ppo": "Oracle-PPO",
+        "exact_full_information": "Full-information optimum",
     }
     # Brand convention: reference lines in neutral grey, distinguished by linestyle.
     color_map = {
         "regime_agnostic_ppo": "#555555",
         "belief_ppo": "#555555",
         "oracle_ppo": "#555555",
+        "exact_full_information": "#555555",
     }
     style_map = {
         "regime_agnostic_ppo": "-",
         "belief_ppo": (0, (1, 1.5)),
         "oracle_ppo": (0, (6, 2)),
+        "exact_full_information": (0, (2, 1)),
     }
     for key, label in label_map.items():
         v = refs.get(key)
@@ -297,14 +350,34 @@ def plot_method_ladder(out_path: Path) -> None:
     against muted baselines, with the floor-to-ceiling gap shaded as the
     recoverable region so the story reads at a glance."""
     apply_style()
-    data = _load()
-    stacked = _load_stacked_obs()
-    env_block = data["per_env"][MEDIUM_ENV]
-    cells = env_block["cells"]
-    refs = env_block["refs"]
-    floor = refs["regime_agnostic_ppo"]
-    belief = refs["belief_ppo"]
-    oracle = refs["oracle_ppo"]
+    evaluation_path = FINAL_DIR / "m5r_post_training_evaluation.json"
+    use_evaluation = resolve_data(evaluation_path).exists()
+    if use_evaluation:
+        with open(resolve_data(evaluation_path)) as handle:
+            evaluation = json.load(handle)["methods"]
+        cells = evaluation
+        floor = evaluation["regime_agnostic_ppo"]["evaluation_return_mean"]
+        belief = evaluation["belief_ppo"]["evaluation_return_mean"]
+        oracle = evaluation["oracle_ppo"]["evaluation_return_mean"]
+        stacked_cell = evaluation["stacked_obs_ppo"]
+        mean_key, ci_key = "evaluation_return_mean", "evaluation_return_ci95"
+        # Exact expected undiscounted return over 128 steps for the E9 RSMM
+        # configuration, computed by finite_horizon_optimum in
+        # oracles.value_iteration.  It is directly comparable with the plotted
+        # fresh-episode returns, which are also undiscounted sums of rewards.
+        exact_full_information = 55.2634352214474
+    else:
+        data = _load()
+        stacked = _load_stacked_obs()
+        env_block = data["per_env"][MEDIUM_ENV]
+        cells = env_block["cells"]
+        refs = env_block["refs"]
+        floor = refs["regime_agnostic_ppo"]
+        belief = refs["belief_ppo"]
+        oracle = refs["oracle_ppo"]
+        stacked_cell = (stacked or {}).get("by_env", {}).get(MEDIUM_ENV)
+        mean_key, ci_key = "final_return_mean", "final_return_ci95"
+        exact_full_information = None
 
     C_HYPER = "#2a9d8f"   # vivid teal — the heroes
     C_CONCAT = "#b4bcc2"  # muted slate — falls short
@@ -320,8 +393,8 @@ def plot_method_ladder(out_path: Path) -> None:
     bw = 0.34
 
     def _bar(x, cell, color):
-        m = cell["final_return_mean"]
-        lo, hi = cell["final_return_ci95"]
+        m = cell[mean_key]
+        lo, hi = cell[ci_key]
         ax.bar(x, m, bw, yerr=[[m - lo], [hi - m]], capsize=4, color=color,
                edgecolor="white", linewidth=1.2, zorder=3,
                error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.2})
@@ -329,7 +402,6 @@ def plot_method_ladder(out_path: Path) -> None:
                     textcoords="offset points", ha="center", va="bottom",
                     fontsize=8.5, fontweight="bold", color="#333333")
 
-    stacked_cell = (stacked or {}).get("by_env", {}).get(MEDIUM_ENV)
     if stacked_cell is not None:
         _bar(0.0, stacked_cell, C_STACK)
     for i_m, method in enumerate(["rl2", "varibad"]):
@@ -339,9 +411,13 @@ def plot_method_ladder(out_path: Path) -> None:
 
     # Reference lines with inline labels at the right edge (no legend clutter).
     xr = 2.62
-    for v, lab, ls in [(oracle, "Oracle-PPO", (0, (6, 2))),
+    reference_lines = []
+    if exact_full_information is not None:
+        reference_lines.append((exact_full_information, "Full-information optimum", (0, (2, 1))))
+    reference_lines += [(oracle, "Oracle-PPO", (0, (6, 2))),
                        (belief, "Belief-PPO", (0, (1, 1.5))),
-                       (floor, "Regime-agnostic floor", "solid")]:
+                       (floor, "Regime-agnostic-PPO", "solid")]
+    for v, lab, ls in reference_lines:
         ax.axhline(v, color="#555555", linewidth=1.1, linestyle=ls, zorder=2)
         ax.text(xr, v, f" {lab}", va="center", ha="left", fontsize=8.5,
                 color="#444444", zorder=4,
@@ -349,8 +425,9 @@ def plot_method_ladder(out_path: Path) -> None:
 
     ax.set_xticks([0, 1, 2])
     ax.set_xticklabels(["Stacked-obs", "RL²", "VariBAD"], fontsize=11)
-    ax.set_ylabel("Return at the end of training", fontsize=11)
-    ax.set_ylim(floor - 36, oracle + 7)
+    ax.set_ylabel("Return on fresh evaluation episodes" if use_evaluation
+                  else "Return at the end of training", fontsize=11)
+    ax.set_ylim(floor - 36, max(oracle, exact_full_information or oracle) + 7)
     ax.set_xlim(-0.55, 3.7)
     ax.grid(axis="y", alpha=0.25, linestyle=":")
     ax.grid(axis="x", visible=False)
@@ -495,7 +572,7 @@ def _draw_posterior_vs_performance(ax, classifier: str, metric: str,
                    linestyle="--", label="Analytical posterior")
     ax.set_ylabel("Gap-closed fraction")
     ax.axhline(0.0, color="#555555", linewidth=1.0,
-               label="Regime-agnostic floor")
+               label="Regime-agnostic-PPO")
     # The pooled correlation is deliberately not annotated. It is a
     # between-method relation that the within-method clouds contradict, and a
     # coefficient rendered on the chart carries no interval, no seed count and
@@ -540,8 +617,9 @@ def plot_posterior_vs_performance_combined(
 def plot_m5r_learning_curves(out_path: Path) -> None:
     """Per-iteration learning curves for the four meta-RL cells on the
     reference instance, drawn from the matched-compute Stage C
-    metrics. Reference horizontal lines for the regime-agnostic floor and
-    the Belief-PPO and Oracle-PPO ceilings."""
+    metrics. Reference horizontal lines for the regime-agnostic floor,
+    the trained Belief-PPO and Oracle-PPO agents, and the exact
+    full-information optimum."""
     apply_style()
     fig, ax = plt.subplots(figsize=(11.0, 6.5))
 
@@ -550,6 +628,9 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     floor = refs["regime_agnostic_ppo"]
     belief = refs["belief_ppo"]
     oracle = refs["oracle_ppo"]
+    # Exact expected undiscounted return over 128 steps for E9; see the
+    # corresponding note in plot_method_ladder.
+    exact_full_information = 55.2634352214474
 
     # Colour by integration (concat = muted slate, hypernet = teal), method by
     # linestyle (RL² solid, VariBAD dashed), so "hypernet climbs, concat stays
@@ -608,7 +689,7 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
     # Curves that finish close together would print their labels on top of one
     # another, so the labels are pushed apart vertically and leadered back to the
     # curve end. The reference lines label further right, clear of these.
-    span = max(oracle - floor, 1.0)
+    span = max(exact_full_information - floor, 1.0)
     min_gap = 0.055 * span
     placed: list[float] = []
     for x_end, y_end, label, color in sorted(end_labels, key=lambda r: -r[1]):
@@ -625,9 +706,11 @@ def plot_m5r_learning_curves(out_path: Path) -> None:
 
     ax.axhspan(floor, belief, color=PALETTE["hyper"], alpha=0.06, zorder=0)
     xr = last_iter * 1.20
-    ref_line(ax, floor, "Regime-agnostic floor", x=xr, linestyle="-")
+    ref_line(ax, floor, "Regime-agnostic-PPO", x=xr, linestyle="-")
     ref_line(ax, belief, "Belief-PPO", x=xr, linestyle=(0, (1, 1.5)))
     ref_line(ax, oracle, "Oracle-PPO", x=xr, linestyle=(0, (6, 2)))
+    ref_line(ax, exact_full_information, "Full-information optimum", x=xr,
+             linestyle=(0, (2, 1)))
 
     ax.set_xlabel("Iteration", fontsize=12)
     ax.set_ylabel("Mean return across seeds", fontsize=12)
@@ -1278,6 +1361,7 @@ def plot_m5r_diagnostic_separation(
     refs = {k: float(np.nanmean(per_seed[k]))
             for k in ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo")
             if k in per_seed}
+    refs["exact_full_information"] = _exact_full_information_diagnostics()[diagnostic]
     ax.set_xlim(-0.6, 5.1)
     _draw_refs(ax, refs, label_x=4.05)
     ax.set_xticks(list(positions.values()))

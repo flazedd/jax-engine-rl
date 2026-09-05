@@ -119,6 +119,12 @@ def _build_env(cfg: ExperimentConfig):
         return RL2ObsEnv(inner=OracleObsEnv(inner=CartPoleRegimeV1(**cfg.env.params)))
     if cfg.env.name == "cartpole_regime_v1_belief_augmented":
         return RL2ObsEnv(inner=BeliefObsEnv(inner=CartPoleRegimeV1(**cfg.env.params)))
+    if cfg.env.name == "cartpole_regime_v1_stacked_augmented":
+        # Stack sits outside the augmentation, as on market making, so the
+        # window holds the last K tuples rather than the last K states.
+        params = dict(cfg.env.params)
+        k = int(params.pop("stack_k", 4))
+        return StackObsEnv(inner=RL2ObsEnv(inner=CartPoleRegimeV1(**params)), k=k)
     raise ValueError(f"unknown env: {cfg.env.name!r}")
 
 

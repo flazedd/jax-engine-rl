@@ -36,11 +36,9 @@ import numpy as np
 
 from evaluation import protocol as P
 from evaluation.metrics import (
-    bootstrap_paired_mean_ci,
+    bootstrap_independent_mean_ci,
     holm_bonferroni,
-    leave_one_out_sensitivity,
-    paired_wilcoxon,
-    rank_biserial,
+    permutation_mean_test,
 )
 from utils.paths import analysis_dir, experiment_dir, resolve_data
 from utils.script_output import ScriptRun
@@ -52,8 +50,8 @@ SMOOTH_WINDOW = 25
 # One target, shared by both methods: the return the regime-agnostic agent
 # reaches at the end of training. A defined reference level rather than a chosen
 # number removes the target as a degree of freedom, and the same target for both
-# methods makes the two comparable. A run that never reaches it inside the
-# budget is right-censored, and its pair is dropped with the count reported.
+# methods makes the two comparisons comparable. A run that never reaches it is
+# assigned the end of the training budget, so every run remains in the analysis.
 THRESHOLD_TARGET_REF = "regime_agnostic_ppo"
 METHODS = ("rl2", "varibad")
 ARCHITECTURES = ("concat", "hypernet")
@@ -87,23 +85,19 @@ def _first_reach(curve: np.ndarray, target: float) -> int | None:
 
 def _compare(better: np.ndarray, worse: np.ndarray, name: str,
              family_size: int) -> dict:
-    """One paired comparison, in the fields REQUIRED_COMPARISON_FIELDS names."""
-    wil = paired_wilcoxon(better, worse, alternative=P.ALTERNATIVE)
-    mean, lo, hi = bootstrap_paired_mean_ci(better, worse, n_boot=N_BOOT,
-                                            alpha=ALPHA)
-    loo = leave_one_out_sensitivity(better, worse, alpha=ALPHA,
-                                    n_corrections=family_size,
-                                    alternative=P.ALTERNATIVE)
+    """One comparison of two independently trained groups."""
+    perm = permutation_mean_test(better, worse)
+    mean, lo, hi = bootstrap_independent_mean_ci(better, worse, n_boot=N_BOOT,
+                                                  alpha=ALPHA)
     return {
         "name": name,
-        "n_pairs": int(better.size),
-        "mean_paired_delta": mean,
+        "n_method": int(better.size),
+        "n_baseline": int(worse.size),
+        "mean_difference": mean,
         "delta_ci": [lo, hi],
-        "rank_biserial": rank_biserial(better, worse),
-        "wilcoxon_p": wil["p"],
-        "wilcoxon_null_distribution": wil["null_distribution"],
-        "n_zero_dropped": wil["n_zero_dropped"],
-        "stable_under_seed_omission": bool(loo["stable_under_seed_omission"]),
+        "permutation_p": perm["p"],
+        "permutation_null_distribution": perm["null_distribution"],
+        "n_permutations": perm["n_permutations"],
         "ci_excludes_zero": bool(lo > 0 or hi < 0),
     }
 
@@ -111,7 +105,7 @@ def _compare(better: np.ndarray, worse: np.ndarray, name: str,
 def _finalise(comparisons: list[dict], key: str) -> dict:
     expected = P.COMPARISON_SETS[key]
     for comp, p_holm in zip(comparisons,
-                            holm_bonferroni([c["wilcoxon_p"] for c in comparisons])):
+                            holm_bonferroni([c["permutation_p"] for c in comparisons])):
         comp["holm_corrected_p"] = p_holm
         comp["supported"] = bool(p_holm == p_holm and p_holm < ALPHA)
     return {
@@ -151,10 +145,9 @@ def time_to_threshold_tests(env_label: str, target: float) -> dict | None:
             return None
         reach_c = [_first_reach(c, target) for c in concat]
         reach_h = [_first_reach(c, target) for c in hyper]
-        paired = [i for i in range(len(reach_c))
-                  if reach_c[i] is not None and reach_h[i] is not None]
-        c_it = np.asarray([reach_c[i] for i in paired], dtype=float)
-        h_it = np.asarray([reach_h[i] for i in paired], dtype=float)
+        budget = max(len(curve) for curve in np.vstack([concat, hyper]))
+        c_it = np.asarray([budget if value is None else value for value in reach_c], dtype=float)
+        h_it = np.asarray([budget if value is None else value for value in reach_h], dtype=float)
         comp = _compare(h_it, c_it, f"{method}_hypernet_vs_concat", size)
         comp["method"] = method
         comp["target_return"] = float(target)
@@ -162,9 +155,8 @@ def time_to_threshold_tests(env_label: str, target: float) -> dict | None:
         comp["smoothing_window"] = SMOOTH_WINDOW
         comp["concat_mean_iterations"] = float(c_it.mean())
         comp["hypernet_mean_iterations"] = float(h_it.mean())
-        comp["seeds_faster_under_hypernet"] = int((h_it < c_it).sum())
-        # Pairs where either arm never reaches the target inside the budget.
-        comp["n_censored_pairs"] = int(len(reach_c) - len(paired))
+        comp["runs_faster_under_hypernet"] = int((h_it < c_it).sum())
+        comp["n_censored_runs"] = int(sum(r is None for r in reach_c) + sum(r is None for r in reach_h))
         comp["censored_concat"] = int(sum(1 for r in reach_c if r is None))
         comp["censored_hypernet"] = int(sum(1 for r in reach_h if r is None))
         comparisons.append(comp)
@@ -219,7 +211,7 @@ def main() -> int:
         for c in payload["comparisons"]:
             lo, hi = c["delta_ci"]
             print(f"[{payload['comparison_set']}] {c['name']}: "
-                  f"d_bar={c['mean_paired_delta']:+.2f} CI[{lo:+.2f},{hi:+.2f}] "
+                  f"mean difference={c['mean_difference']:+.2f} CI[{lo:+.2f},{hi:+.2f}] "
                   f"p_holm={c['holm_corrected_p']:.4g} "
                   f"supported={c['supported']}", flush=True)
 

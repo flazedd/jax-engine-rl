@@ -67,6 +67,7 @@ FAMILIES: dict[str, dict[str, Any]] = {
         "base_obs": 4,
         "methods": [
             ("regime_agnostic", "m_cartpole_matched/regime_agnostic.yaml", "reference"),
+            ("stacked_obs", "m_cartpole_matched/stacked_obs.yaml", "stacked"),
             ("belief_ppo", "m_cartpole_matched/belief_ppo.yaml", "regime"),
             ("oracle_ppo", "m_cartpole_matched/oracle_ppo.yaml", "regime"),
             ("rl2_concat", "m_cartpole_matched/rl2_concat.yaml", "meta"),

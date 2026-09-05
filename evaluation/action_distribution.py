@@ -179,7 +179,12 @@ def regime_separation_per_seed(
     At each inventory level, the largest total-variation distance between two
     regimes' action distributions; then a weighted average over inventory
     levels. Zero means the policy plays the same action distribution whatever
-    the regime, which is what the regime-agnostic agent must score.
+    the regime. The regime-agnostic agent does not have to score exactly zero:
+    under the matched protocol it reads the augmented tuple
+    [obs, prev_action, prev_reward, prev_done] (see envs/wrappers/rl2_obs.py),
+    and prev_reward carries fill evidence, so a seed that reacts to it
+    separates the regimes slightly at fixed inventory. Its measured level, not
+    zero, is the reference the figures draw.
 
     Inventory is held fixed inside the comparison because the regime shifts the
     inventory distribution a policy occupies. A policy conditioning on

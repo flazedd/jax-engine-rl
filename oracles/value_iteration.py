@@ -309,6 +309,25 @@ def finite_horizon_optimum(env: MarketMakingV1) -> float:
     dist = np.asarray(env.initial_distribution, dtype=np.float64)
     return float(V.reshape(n_inv, n_reg)[init] @ dist)
 
+
+def finite_horizon_policy(env: MarketMakingV1, gamma: float = 1.0) -> np.ndarray:
+    """Return the exact time-dependent full-information policy.
+
+    ``policy[t, inventory, regime]`` is the action that maximises expected
+    return from step ``t`` onward.  The default ``gamma=1`` matches the
+    undiscounted episode-return scale used in the thesis evaluation figures.
+    """
+    P, R = _transition_tables(env)
+    n_inv, n_reg, _n_act, _, _ = P.shape
+    P_flat = P.reshape(n_inv, n_reg, N_ACTIONS, n_inv * n_reg)
+    V = np.zeros(n_inv * n_reg, dtype=np.float64)
+    policy = np.empty((env.episode_length, n_inv, n_reg), dtype=np.int64)
+    for t in range(env.episode_length - 1, -1, -1):
+        Q = R + gamma * P_flat @ V
+        policy[t] = np.argmax(Q, axis=-1)
+        V = Q.max(axis=-1).reshape(-1)
+    return policy
+
 def compromise_policy_expected_returns(
     env: MarketMakingV1, vi: VIResult | None = None
 ) -> tuple[np.ndarray, float, np.ndarray]:

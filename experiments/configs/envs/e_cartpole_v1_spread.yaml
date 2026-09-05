@@ -1,0 +1,37 @@
+# E_cartpole_v1, spread — the instance selected to separate all four arms of the
+# ladder, not only the reference triple. Chosen by
+# scripts.cartpole_evidence_screen over 108 candidates on asymmetry, process
+# noise and persistence.
+#
+# The three arms below the oracle differ only in how much of the regime each can
+# know: the prior for regime-agnostic, a K-step window for stacked-obs, the full
+# history for Belief-PPO. Measured on this instance those sit at 0.294, 0.568
+# and 0.839 identification accuracy, so both steps are open, +0.273 and +0.272.
+# The previous instance, wide, left the second step at +0.213 with the first at
+# +0.330, which is the imbalance this one corrects.
+#
+# Persistence is the strongest lever on that second step and is also what
+# empties an episode of regime changes, so it is held at 0.995 rather than the
+# 0.999 the search prefers: 0.995 keeps a switch in about half of all episodes,
+# 0.999 leaves 88 percent of them with none, which would not be a
+# regime-switching problem. Asymmetry is at the sharpest setting screened, which
+# also maximises what the true regime is worth and so the oracle step.
+env:
+  name: cartpole_regime_v1
+  params:
+    episode_length: 128
+    gamma: 0.99
+    angular_velocity_noise_std: 0.3
+
+    n_regimes: 3
+    regime_action_success: [
+      0.99, 0.10,
+      0.80, 0.80,
+      0.10, 0.99,
+    ]
+    transition_matrix: [
+      0.995, 0.0025, 0.0025,
+      0.0025, 0.995, 0.0025,
+      0.0025, 0.0025, 0.995,
+    ]
+    initial_distribution: [0.333, 0.333, 0.334]

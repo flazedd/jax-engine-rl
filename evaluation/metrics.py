@@ -107,6 +107,62 @@ def bootstrap_paired_mean_ci(
     return mean, lo, hi
 
 
+def bootstrap_independent_mean_ci(
+    method: list[float] | np.ndarray,
+    baseline: list[float] | np.ndarray,
+    n_boot: int = 10_000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, float]:
+    """Difference in sample means with a percentile bootstrap interval.
+
+    The two groups are resampled separately.  Reusing a seed value in two
+    training configurations makes a run reproducible; it does not make the
+    two trained policies a matched statistical pair.
+    """
+    a = np.asarray(method, dtype=float)
+    b = np.asarray(baseline, dtype=float)
+    mean = float(a.mean() - b.mean())
+    if a.size <= 1 or b.size <= 1:
+        return mean, mean, mean
+    rng = np.random.default_rng(seed)
+    a_idx = rng.integers(0, a.size, size=(n_boot, a.size))
+    b_idx = rng.integers(0, b.size, size=(n_boot, b.size))
+    boot = a[a_idx].mean(axis=1) - b[b_idx].mean(axis=1)
+    lo = float(np.percentile(boot, 100 * alpha / 2))
+    hi = float(np.percentile(boot, 100 * (1 - alpha / 2)))
+    return mean, lo, hi
+
+
+def permutation_mean_test(
+    method: list[float] | np.ndarray,
+    baseline: list[float] | np.ndarray,
+    n_permutations: int = 100_000,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Two-sided random-label permutation test for a difference in means."""
+    a = np.asarray(method, dtype=float)
+    b = np.asarray(baseline, dtype=float)
+    observed = float(a.mean() - b.mean())
+    pooled = np.concatenate([a, b])
+    n_a = a.size
+    rng = np.random.default_rng(seed)
+    count = 0
+    for _ in range(n_permutations):
+        shuffled = rng.permutation(pooled)
+        diff = shuffled[:n_a].mean() - shuffled[n_a:].mean()
+        count += abs(diff) >= abs(observed)
+    return {
+        "p": float((count + 1) / (n_permutations + 1)),
+        "statistic": observed,
+        "n_method": int(a.size),
+        "n_baseline": int(b.size),
+        "n_permutations": n_permutations,
+        "null_distribution": "random-label permutation",
+        "alternative": "two-sided",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Paired Wilcoxon
 # ---------------------------------------------------------------------------
@@ -344,27 +400,22 @@ def primary_hypothesis_test(
 ) -> dict[str, Any]:
     """Run the full primary-hypothesis decision of the thesis protocol.
 
-    Two-sided paired Wilcoxon, Holm correction across `family_size`, the mean
-    paired difference `d_bar` with its percentile bootstrap CI, and the
-    matched-pairs rank-biserial effect size.
+    A two-sided random-label permutation test, Holm correction across
+    `family_size`, and the difference between sample means with its percentile
+    bootstrap interval.
 
     `supported` is the Holm-corrected p alone: the protocol treats the test as
     the inferential decision and the interval as the statement of magnitude and
     precision, not as a second gate. `ci_excludes_zero` is reported alongside so
     a reader can see both.
     """
-    wil = paired_wilcoxon(method, baseline, alternative=alternative)
+    perm = permutation_mean_test(method, baseline)
     p_corr = (
-        float("nan") if np.isnan(wil["p"]) else min(1.0, wil["p"] * family_size)
+        float("nan") if np.isnan(perm["p"]) else min(1.0, perm["p"] * family_size)
     )
-    mean, lo, hi = bootstrap_paired_mean_ci(
+    mean, lo, hi = bootstrap_independent_mean_ci(
         method, baseline, n_boot=n_boot, alpha=alpha
     )
-    median, med_lo, med_hi = bootstrap_paired_delta_ci(
-        method, baseline, n_boot=n_boot, alpha=alpha
-    )
-    delta = cliffs_delta(method, baseline)
-    r_rb = rank_biserial(method, baseline)
 
     if alternative == "greater":
         ci_excludes_zero = lo > 0
@@ -376,18 +427,14 @@ def primary_hypothesis_test(
     return {
         "mean_paired_delta": mean,
         "delta_ci": [lo, hi],
-        "median_paired_delta": median,
-        "median_delta_ci": [med_lo, med_hi],
-        "wilcoxon_p": wil["p"],
-        "wilcoxon_statistic": wil["statistic"],
-        "wilcoxon_null_distribution": wil["null_distribution"],
+        "wilcoxon_p": perm["p"],
+        "wilcoxon_statistic": perm["statistic"],
+        "wilcoxon_null_distribution": perm["null_distribution"],
         "alternative": alternative,
-        "n_pairs": wil["n_pairs"],
-        "n_nonzero_pairs": wil["n_nonzero_pairs"],
-        "n_zero_dropped": wil["n_zero_dropped"],
+        "n_pairs": int(np.asarray(method).size),
+        "n_nonzero_pairs": int(np.asarray(method).size),
+        "n_zero_dropped": 0,
         "holm_corrected_p": p_corr,
-        "rank_biserial": r_rb,
-        "cliffs_delta": delta,
         "ci_excludes_zero": bool(ci_excludes_zero),
         "supported": bool(p_passes),
     }

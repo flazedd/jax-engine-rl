@@ -3,9 +3,9 @@
 # in the conditioning architecture; policy_trunk_hidden absorbs the budget.
 extends:
 - base/base_rl2.yaml
-- envs/e_cartpole_v1.yaml
+- envs/e_cartpole_v1_spread.yaml
 experiment_name: m_cartpole_matched_rl2_concat
-iterations: 600
+iterations: 2000
 parallel_envs: 512
 rollout_length: 128
 num_seeds: 20

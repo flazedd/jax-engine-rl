@@ -1,9 +1,9 @@
 # Oracle-PPO: matched tuple plus the true regime one-hot.
 extends:
 - base/base_ppo.yaml
-- envs/e_cartpole_v1.yaml
+- envs/e_cartpole_v1_spread.yaml
 experiment_name: m_cartpole_matched_oracle
-iterations: 600
+iterations: 2000
 parallel_envs: 512
 rollout_length: 128
 num_seeds: 20

@@ -227,23 +227,20 @@ def build_plan() -> list[Stage]:
             key, "medium", CONFIGS / f"{key}.yaml", MEDIUM_EXPERIMENT[key], est=80,
             depends_on=gate,
         ))
-    for key in VARIANTS:
-        stages.append(_train(
-            key, "medium", CONFIGS / f"{key}.yaml", MEDIUM_EXPERIMENT[key], est=40,
-            depends_on=gate,
-        ))
-    medium_training = [s.name for s in stages if s.kind == "train"]
-
-    # Chapter 4's prerequisite: the reference ordering must hold before any
-    # variant is placed on the scale. It is cheap, it can fail, and everything
-    # normalised depends on it, so it runs before the analyses rather than
-    # being discovered wrong at the figures.
+    # The reference ordering must hold before any variant is trained. It is
+    # cheap, it can fail, and every normalised comparison depends on it.
     reference_training = [f"train:{k}" for k in REFERENCES]
     stages.append(_analysis(
         "gate:reference_ordering", "medium", "scripts.reference_ordering_gate",
         final / "reference_ordering_gate.json",
         depends_on=reference_training, est=1,
     ))
+    for key in VARIANTS:
+        stages.append(_train(
+            key, "medium", CONFIGS / f"{key}.yaml", MEDIUM_EXPERIMENT[key], est=40,
+            depends_on=["gate:reference_ordering"],
+        ))
+    medium_training = [s.name for s in stages if s.kind == "train"]
     medium_gate = medium_training + ["gate:reference_ordering"]
 
     # ---- Phase 2: medium environment, analyses -------------------------

@@ -1,17 +1,9 @@
 """M4 plot module — implementation-validation figure on the toy envs.
 
 Produces:
-  - factorial_toys.png — RL²/VariBAD × Concat/Hypernetwork across the
-    three M4 validation envs (bandit, gridworld, regime_bandit), with a
-    per-env PPO floor reference line. This single chart shows both the
-    M4 pass criterion (meta-RL clears floor) and the M5 integration
-    ablation (concat vs hypernet) on the toy envs.
-
-The factorial cells were collected during M5 Step-3 toy sweep, so the
-underlying stats JSON lives at `results/milestones/M5/stats_M5_factorial_toys.json`;
-the PPO floor numbers come from `results/milestones/M4/method_ranking.json`.
-The chart's *role* is M4 (implementation validation), so the PNG output
-is written under `figures/milestones/M4/`.
+  - factorial_toys.png — RL²/VariBAD × concat/hypernetwork across the three
+    validation environments. The solid Regime-agnostic-PPO line and its light
+    95% interval band use the original M4 baseline runs.
 
 CLI:
     uv run python -m plotting.m4_plots
@@ -22,7 +14,6 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -64,27 +55,25 @@ _TOY_ENV_LABELS = {
     "gridworld": "Gridworld (random goal)",
     "regime_bandit": "Regime-switching bandit",
 }
-_VARIANT_ORDER = ("concat_nobonus", "hypernet_nobonus")
-_VARIANT_LABELS = {
-    "concat_nobonus": "Concat",
-    "hypernet_nobonus": "Hypernetwork",
-}
-
-
-def _load_m4_floors() -> dict[str, float]:
-    path = foundations_dir() / "method_ranking.json"
-    if not resolve_data(path).exists():
-        return {}
-    with open(resolve_data(path)) as f:
-        d = json.load(f)
-    out: dict[str, float] = {}
-    for row in d.get("key_stats", {}).get("table", []):
-        if "ppo_floor" in row:
-            out[row["env"]] = float(row["ppo_floor"])
-    return out
+def _load_m4_validation() -> dict[str, dict[str, object]]:
+    candidates = (
+        foundations_dir() / "method_ranking.json",
+        RESULTS_ROOT / "_archive" / "milestones" / "M4" / "method_ranking.json",
+    )
+    for path in candidates:
+        resolved = resolve_data(path)
+        if resolved.exists():
+            with open(resolved) as f:
+                data = json.load(f)
+            return {row["env"]: row for row in data["key_stats"]["table"]}
+    return {}
 
 
 def plot_factorial_toys(out_path: Path) -> bool:
+    validation = _load_m4_validation()
+    if not validation:
+        print("[m4_plots] skip factorial_toys: missing M4 validation results")
+        return False
     stats_path = foundations_dir() / "stats_M5_factorial_toys.json"
     if not resolve_data(stats_path).exists():
         print(f"[m4_plots] skip factorial_toys: missing {stats_path}")
@@ -92,98 +81,65 @@ def plot_factorial_toys(out_path: Path) -> bool:
     with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
 
-    floors = _load_m4_floors()
-
-    # Re-index configs by (method, env, variant_label). Tolerate older
-    # JSONs that carry an `exploration_bonus` field; bonus configs are
-    # ignored by the plot regardless (only `*_nobonus` variants are read).
+    variants = ("concat_nobonus", "hypernet_nobonus")
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for r in stats["configs"]:
-        bonus = r.get("exploration_bonus", False)
-        variant = f"{r['integration']}_{'bonus' if bonus else 'nobonus'}"
-        by_key[(r["method"], r["env"], variant)] = r
+    for row in stats["configs"]:
+        variant = f"{row['integration']}_{'bonus' if row.get('exploration_bonus', False) else 'nobonus'}"
+        by_key[(row["method"], row["env"], variant)] = row
 
     apply_style()
     fig, axes = plt.subplots(3, 1, figsize=(11.0, 12.0), sharey=False)
-
-    methods = ["rl2", "varibad"]
+    methods = ("rl2", "varibad")
     method_labels = {"rl2": "RL²", "varibad": "VariBAD"}
-    n_v = len(_VARIANT_ORDER)
-    bar_w = 0.38
+    bar_width = 0.34
+    integration_colors = {
+        "concat_nobonus": "#b4bcc2",
+        "hypernet_nobonus": "#2a9d8f",
+    }
 
-    def _cell_color(method: str, variant: str) -> str:
-        integ = "hypernet" if "hypernet" in variant else "concat"
-        return _CELL_COLORS[f"{method}_{integ}"]
-
-    floor_label_template = "PPO floor"
-    floor_drawn = False
-    legend_handles: list[Any] = []
-    from matplotlib.lines import Line2D as _Line2D
-    from matplotlib.patches import Patch as _Patch
-    for m in methods:
-        for v in _VARIANT_ORDER:
-            legend_handles.append(_Patch(
-                facecolor=_cell_color(m, v), edgecolor="white", linewidth=0.8,
-                label=f"{method_labels[m]} {_VARIANT_LABELS[v]}",
-            ))
-    legend_handles.append(_Line2D(
-        [0], [0], color="#555555", linestyle="--", linewidth=1.2,
-        label=floor_label_template,
-    ))
+    from matplotlib.patches import Patch
+    legend_handles: list[Any] = [
+        Patch(facecolor=integration_colors["hypernet_nobonus"], edgecolor="white",
+              label="Hypernet integration"),
+        Patch(facecolor=integration_colors["concat_nobonus"], edgecolor="white",
+              label="Concat integration"),
+    ]
 
     for ax, env in zip(axes, _TOY_ENVS):
-        for i_method, method in enumerate(methods):
-            means = []
-            errs_lo = []
-            errs_hi = []
-            for v in _VARIANT_ORDER:
-                key = (method, env, v)
-                if key in by_key:
-                    r = by_key[key]
-                    means.append(r["final_return_mean"])
-                    lo, hi = r["final_return_ci95"]
-                    errs_lo.append(r["final_return_mean"] - lo)
-                    errs_hi.append(hi - r["final_return_mean"])
-                else:
-                    means.append(np.nan)
-                    errs_lo.append(0.0)
-                    errs_hi.append(0.0)
-            offset = (i_method - 0.5) * bar_w
-            x = np.arange(n_v) + offset
-            yerr = np.array([errs_lo, errs_hi])
-            colors = [_cell_color(method, v) for v in _VARIANT_ORDER]
-            ax.bar(
-                x, means, bar_w, yerr=yerr, color=colors,
-                edgecolor="white", linewidth=1.2, capsize=4, zorder=3,
-                error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.1},
-            )
-        floor_val = floors.get(env)
-        if floor_val is not None:
-            ax.axhline(
-                floor_val, color="#555555", linestyle="--", linewidth=1.2, zorder=2,
-            )
-            ax.text(
-                0.99, floor_val, f"  PPO floor = {floor_val:.1f}",
-                transform=ax.get_yaxis_transform(),
-                ha="left", va="center", fontsize=10, color="#444444", zorder=5,
-                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0),
-            )
-        ax.set_xticks(np.arange(n_v))
-        ax.set_xticklabels(
-            [_VARIANT_LABELS[v] for v in _VARIANT_ORDER], fontsize=11,
-        )
+        for method_index, method in enumerate(methods):
+            means, lows, highs = [], [], []
+            for variant in variants:
+                item = by_key[(method, env, variant)]
+                mean = float(item["final_return_mean"])
+                low, high = item["final_return_ci95"]
+                means.append(mean)
+                lows.append(mean - low)
+                highs.append(high - mean)
+            x = method_index + np.array([-bar_width * 0.62, bar_width * 0.62])
+            ax.bar(x, means, bar_width, yerr=np.array([lows, highs]),
+                   color=[integration_colors[variant] for variant in variants],
+                   edgecolor="white", linewidth=1.2, capsize=4, zorder=3,
+                   error_kw={"ecolor": "#3a3a3a", "elinewidth": 1.1})
+
+        ppo_mean = float(validation[env]["ppo_floor"])
+        ppo_low, ppo_high = validation[env]["ppo_ci"]
+        ax.axhspan(ppo_low, ppo_high, color="#555555", alpha=0.08, zorder=0)
+        ax.axhline(ppo_mean, color="#555555", linewidth=1.2, zorder=2)
+        ax.text(2.02, ppo_mean, " Regime-agnostic-PPO", va="center", ha="left", fontsize=8.5,
+                color="#444444", zorder=4, clip_on=False,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0))
+        ax.set_xlim(-0.55, 2.55)
+        ax.set_xticks(np.arange(len(methods)))
+        ax.set_xticklabels([method_labels[method] for method in methods], fontsize=11)
         ax.tick_params(axis="y", labelsize=11)
         ax.set_ylabel("Final return", fontsize=11)
         ax.set_title(_TOY_ENV_LABELS[env], fontsize=13, loc="left")
         polish(ax)
 
-    fig.legend(
-        handles=legend_handles,
-        loc="lower center", ncol=3, fontsize=12,
-        bbox_to_anchor=(0.5, -0.005), frameon=True,
-        facecolor="white", edgecolor="#cccccc", framealpha=1.0,
-    )
-    fig.tight_layout(rect=[0, 0.05, 1, 0.99])
+    fig.legend(handles=legend_handles, loc="lower center", ncol=2, fontsize=10,
+               bbox_to_anchor=(0.5, -0.005), frameon=True, facecolor="white",
+               edgecolor="#dddddd", framealpha=0.95)
+    fig.tight_layout(rect=[0, 0.04, 1, 0.99])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)

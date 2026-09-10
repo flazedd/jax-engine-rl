@@ -11,7 +11,7 @@ The set spans two metrics over two methods, so four hypernet-versus-concat
 comparisons:
 
   * ``method_kl_to_omega`` — forward KL to the analytical posterior, the
-    primary belief metric. Lower is better, so a negative paired difference
+    primary belief metric. Lower is better, so a negative mean difference
     (hypernet minus concat) favours the hypernetwork.
   * ``method_test_acc`` — decodability, top-1 accuracy. Higher is better.
 
@@ -37,11 +37,10 @@ from pathlib import Path
 import numpy as np
 
 from evaluation.metrics import (
+    bootstrap_independent_mean_ci,
     holm_bonferroni,
-    leave_one_out_sensitivity,
-    paired_wilcoxon,
-    rank_biserial,
-    bootstrap_paired_mean_ci,
+    leave_one_run_out_independent_sensitivity,
+    permutation_mean_test,
 )
 from utils.script_output import ScriptRun
 
@@ -101,10 +100,9 @@ def _compare(
     hyp_vals: np.ndarray, con_vals: np.ndarray, seeds: list[int],
     method: str, metric: str, direction: str, probe: str,
 ) -> dict:
-    """One paired hypernetwork-versus-concatenation comparison, in the fields
-    the protocol requires of any comparison a table reports."""
-    wil = paired_wilcoxon(hyp_vals, con_vals, alternative="two-sided")
-    mean_delta, lo, hi = bootstrap_paired_mean_ci(
+    """One independent hypernetwork-versus-concatenation comparison."""
+    perm = permutation_mean_test(hyp_vals, con_vals)
+    mean_delta, lo, hi = bootstrap_independent_mean_ci(
         hyp_vals, con_vals, n_boot=N_BOOT, alpha=ALPHA
     )
     # "Favours the hypernetwork" depends on the metric's direction, per
@@ -121,15 +119,19 @@ def _compare(
         "probe": probe,
         "direction_favouring_hypernet": direction,
         "n_pairs": int(hyp_vals.size),
+        "n_hypernet": int(hyp_vals.size),
+        "n_concat": int(con_vals.size),
         "seeds": seeds,
         "hypernet_mean": float(hyp_vals.mean()),
         "concat_mean": float(con_vals.mean()),
+        "mean_difference": mean_delta,
+        "permutation_p": perm["p"],
         "mean_paired_delta": mean_delta,
         "delta_ci": [lo, hi],
-        "rank_biserial": rank_biserial(hyp_vals, con_vals),
-        "wilcoxon_p": wil["p"],
-        "wilcoxon_null_distribution": wil["null_distribution"],
-        "n_zero_dropped": wil["n_zero_dropped"],
+        "rank_biserial": float("nan"),
+        "wilcoxon_p": perm["p"],
+        "wilcoxon_null_distribution": perm["null_distribution"],
+        "n_zero_dropped": 0,
         "favours_hypernet": bool(favours),
         "ci_excludes_zero": bool(lo > 0 or hi < 0),
     }
@@ -183,7 +185,7 @@ def main() -> int:
                 table, f"{method}_hypernet", f"{method}_concat", metric
             )
             if hyp_vals.size < 2:
-                run.fail(reason=f"too few paired seeds for {method}/{metric}")
+                run.fail(reason=f"too few runs for {method}/{metric}")
                 return 1
             comp = _compare(hyp_vals, con_vals, seeds, method, metric,
                             direction, "linear")
@@ -198,10 +200,9 @@ def main() -> int:
             p_holm == p_holm and p_holm < ALPHA
         )  # NaN-safe: NaN != NaN
         hyp_vals, con_vals = pairs[comp["name"]]
-        comp["stable_under_seed_omission"] = bool(leave_one_out_sensitivity(
+        comp["stable_under_seed_omission"] = bool(leave_one_run_out_independent_sensitivity(
             hyp_vals, con_vals, alpha=ALPHA, n_corrections=family_size,
-            alternative="two-sided",
-        )["stable_under_seed_omission"])
+        )["stable_under_run_omission"])
 
     # The robustness family: the proper scores under the linear probe, and every
     # metric under the MLP probe. Reported beside the corrected set and never
@@ -227,7 +228,7 @@ def main() -> int:
                 )
                 if hyp_vals.size < 2:
                     print(f"[belief_quality] skip {probe_label}/{method}/{metric}: "
-                          "too few paired seeds", flush=True)
+                          "too few runs", flush=True)
                     continue
                 comp = _compare(hyp_vals, con_vals, seeds, method, metric,
                                 direction, probe_label)
@@ -248,10 +249,9 @@ def main() -> int:
             comp["comparison_set"] = "belief_quality_mlp"
             comp["supported"] = bool(p_holm == p_holm and p_holm < ALPHA)
             hyp_vals, con_vals = mlp_pairs[comp["name"]]
-            comp["stable_under_seed_omission"] = bool(leave_one_out_sensitivity(
+            comp["stable_under_seed_omission"] = bool(leave_one_run_out_independent_sensitivity(
                 hyp_vals, con_vals, alpha=ALPHA, n_corrections=mlp_size,
-                alternative="two-sided",
-            )["stable_under_seed_omission"])
+            )["stable_under_run_omission"])
 
     n_supported = sum(1 for c in comparisons if c["supported"])
     payload = {

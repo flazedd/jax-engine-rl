@@ -345,6 +345,37 @@ def leave_one_out_sensitivity(
     }
 
 
+def leave_one_run_out_independent_sensitivity(
+    method: list[float] | np.ndarray,
+    baseline: list[float] | np.ndarray,
+    alpha: float = 0.05,
+    n_corrections: int = 1,
+) -> dict[str, Any]:
+    """Omit one run from either independent condition and repeat the test.
+
+    This is the independent-samples counterpart to ``leave_one_out_sensitivity``.
+    Each omission removes one run from one condition while retaining every run
+    in the other condition.
+    """
+    a = np.asarray(method, dtype=float)
+    b = np.asarray(baseline, dtype=float)
+    if a.size <= 1 or b.size <= 1:
+        return {"stable_under_run_omission": False, "flipping_run": None}
+    for label, values, other in (("method", a, b), ("baseline", b, a)):
+        for i in range(values.size):
+            kept = np.delete(values, i)
+            test_a, test_b = (kept, other) if label == "method" else (other, kept)
+            result = permutation_mean_test(test_a, test_b)
+            p = result["p"]
+            corrected = min(1.0, p * n_corrections) if not np.isnan(p) else np.nan
+            if np.isnan(corrected) or corrected >= alpha:
+                return {
+                    "stable_under_run_omission": False,
+                    "flipping_run": {"condition": label, "index": int(i)},
+                }
+    return {"stable_under_run_omission": True, "flipping_run": None}
+
+
 # ---------------------------------------------------------------------------
 # Per-seed method ranking — stable across seeds?
 # ---------------------------------------------------------------------------

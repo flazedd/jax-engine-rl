@@ -1,4 +1,4 @@
-"""M5R Stage E — pre-registered hypothesis tests on the final-eval results.
+"""Return and belief analyses for the final RSMM experiment.
 
 Three families, mapped to the three research questions:
 
@@ -6,17 +6,11 @@ Family A (4 environments): the gap decomposition is non-degenerate at every
   evaluated environment. We require regime-agnostic < Belief-PPO <= Oracle-PPO
   with non-overlapping bootstrap CIs on regime-agnostic and Oracle-PPO.
 
-Family B (8 variants): hypernet > concat at every (env, method) variant.
-  Paired Wilcoxon (two-sided) on the n seeds the
-  configs declare. Holm-Bonferroni correction across all 8 tests. Each test
-  must clear two bars: Holm-corrected p < 0.05 AND bootstrap CI on the paired
-  difference excludes zero.
-
-  ENVS must name exactly the env labels `scripts.sweep_redesign_n20` writes
-  into per_cell_env.json, plus the medium env `e_final`. A label listed here
-  but absent from the data still counts toward the Holm family size, so a
-  stale entry inflates every corrected p-value; a label present in the data
-  but missing here goes untested.
+Family B compares hypernetwork and concatenation conditioning for RL² and
+  VariBAD. It uses the frozen policies' returns on fresh evaluation episodes,
+  an independent bootstrap interval for the mean difference, and a two-sided
+  random-label permutation test. The two p-values are adjusted together with
+  the Holm procedure.
 
 Family C (1 confidence interval): pooled Pearson correlation between
   linear-probe regime-decoding accuracy (in posterior_error form) and
@@ -40,8 +34,10 @@ from typing import Any
 import numpy as np
 
 from evaluation.metrics import (
-    leave_one_out_sensitivity,
-    primary_hypothesis_test,
+    bootstrap_independent_mean_ci,
+    holm_bonferroni,
+    leave_one_run_out_independent_sensitivity,
+    permutation_mean_test,
 )
 from utils.script_output import ScriptRun
 
@@ -51,6 +47,7 @@ FINAL_DIR = analysis_dir()
 PER_CELL_ENV_PATH = FINAL_DIR / "per_cell_env.json"
 PROBE_LOGISTIC_PATH = FINAL_DIR / "m5r_posterior_vs_performance.json"
 PROBE_MLP_PATH = FINAL_DIR / "m5r_posterior_vs_performance_mlp.json"
+POST_TRAINING_EVALUATION_PATH = FINAL_DIR / "m5r_post_training_evaluation.json"
 
 ALPHA = 0.05
 N_BOOT = 10_000
@@ -158,40 +155,53 @@ def _check_family_a(per_cell_env: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _per_seed(cell: dict[str, Any]) -> list[float]:
-    return list(map(float, cell.get("per_seed_final_return", [])))
+def _per_seed_evaluation(methods: dict[str, Any], name: str) -> list[float]:
+    return list(map(float, methods[name].get("per_seed_evaluation_return", [])))
 
 
-def _run_family_b(per_cell_env: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _run_family_b(methods: dict[str, Any]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
+    ordered: list[dict[str, Any]] = []
     for hyp_name, method_cell, baseline_cell, env in FAMILY_B:
-        block = per_cell_env.get("per_env", {}).get(env, {})
-        cells = block.get("cells", {})
-        if method_cell not in cells or baseline_cell not in cells:
+        if method_cell not in methods or baseline_cell not in methods:
             out[hyp_name] = {"error": "missing cell"}
             continue
-        method_seeds = _per_seed(cells[method_cell])
-        baseline_seeds = _per_seed(cells[baseline_cell])
+        method_seeds = _per_seed_evaluation(methods, method_cell)
+        baseline_seeds = _per_seed_evaluation(methods, baseline_cell)
         if not method_seeds or not baseline_seeds:
-            out[hyp_name] = {"error": "no per-seed data"}
+            out[hyp_name] = {"error": "no evaluation returns"}
             continue
-        n_pair = min(len(method_seeds), len(baseline_seeds))
-        method_seeds = method_seeds[:n_pair]
-        baseline_seeds = baseline_seeds[:n_pair]
-        test = primary_hypothesis_test(
-            method=method_seeds, baseline=baseline_seeds,
-            family_size=FAMILY_B_SIZE, alpha=ALPHA, n_boot=N_BOOT,
-            alternative="two-sided",
+        mean, lo, hi = bootstrap_independent_mean_ci(
+            method_seeds, baseline_seeds, n_boot=N_BOOT, alpha=ALPHA,
         )
-        loo = leave_one_out_sensitivity(
-            method=method_seeds, baseline=baseline_seeds, alpha=ALPHA,
-            n_corrections=FAMILY_B_SIZE, alternative="two-sided",
+        permutation = permutation_mean_test(method_seeds, baseline_seeds)
+        loo = leave_one_run_out_independent_sensitivity(
+            method_seeds, baseline_seeds, alpha=ALPHA,
+            n_corrections=FAMILY_B_SIZE,
         )
-        out[hyp_name] = {
-            **test, "loo": loo, "env": env,
+        result = {
+            "mean_difference": mean,
+            "mean_paired_delta": mean,
+            "delta_ci": [lo, hi],
+            "permutation_p": permutation["p"],
+            "wilcoxon_p": permutation["p"],
+            "null_distribution": permutation["null_distribution"],
+            "n_permutations": permutation["n_permutations"],
+            "loo": loo,
+            "stable_under_seed_omission": loo["stable_under_run_omission"],
+            "env": env,
             "method": method_cell, "baseline": baseline_cell,
-            "n_pairs": n_pair,
+            "n_method": len(method_seeds),
+            "n_baseline": len(baseline_seeds),
         }
+        out[hyp_name] = result
+        ordered.append(result)
+
+    corrected = holm_bonferroni([result["permutation_p"] for result in ordered])
+    for result, p_holm in zip(ordered, corrected):
+        result["holm_corrected_p"] = p_holm
+        lo, hi = result["delta_ci"]
+        result["supported"] = bool(p_holm < ALPHA and (lo > 0 or hi < 0))
     return out
 
 
@@ -303,6 +313,12 @@ def main() -> int:
         return 1
     with open(PER_CELL_ENV_PATH) as f:
         per_cell_env = json.load(f)
+    if not POST_TRAINING_EVALUATION_PATH.exists():
+        run.fail(reason=f"missing {POST_TRAINING_EVALUATION_PATH}",
+                 summary_path=summary_path)
+        return 1
+    with open(POST_TRAINING_EVALUATION_PATH) as f:
+        evaluation_methods = json.load(f).get("methods", {})
 
     t_start = time.perf_counter()
 
@@ -317,11 +333,12 @@ def main() -> int:
     # Family B
     print(f"[m5r_tests] Family B: {FAMILY_B_SIZE} hypotheses (hypernet > concat)",
           flush=True)
-    family_b = _run_family_b(per_cell_env)
+    family_b = _run_family_b(evaluation_methods)
     b_supported = sum(1 for h in family_b.values() if h.get("supported"))
     b_loo_robust = sum(
         1 for h in family_b.values()
-        if h.get("supported") and h.get("loo", {}).get("robust_to_loo")
+        if h.get("supported")
+        and h.get("loo", {}).get("stable_under_run_omission")
     )
     print(
         f"[m5r_tests]   {b_supported}/{FAMILY_B_SIZE} supported "
@@ -439,7 +456,8 @@ def main() -> int:
             f"Δmean={hyp['mean_paired_delta']:+7.2f} "
             f"CI=[{hyp['delta_ci'][0]:+6.2f},{hyp['delta_ci'][1]:+6.2f}] | "
             f"p_corr={hyp['holm_corrected_p']:.4f} | "
-            f"sup={hyp['supported']} loo={loo.get('robust_to_loo')}",
+            f"sup={hyp['supported']} "
+            f"loo={loo.get('stable_under_run_omission')}",
             flush=True,
         )
     return 0

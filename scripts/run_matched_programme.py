@@ -1,4 +1,4 @@
-"""Run the whole matched-input experimental programme in one pass.
+"""Run the thesis experimental programme in one pass.
 
 Every method now receives the same per-step tuple and the two conditioning
 variants of each method are matched on encoder capacity, so every trained
@@ -15,9 +15,8 @@ Design notes:
   - **Fault tolerant.** A failing stage is recorded and the programme continues
     with stages that do not depend on it; dependants are skipped rather than run
     against missing inputs.
-  - **Ordered by value.** The medium environment answers RQ1 and RQ2 and comes
-    first, so the central claim can be checked before the replication phases
-    consume the bulk of the compute.
+  - **Ordered by dependency.** Validation precedes training, and training
+    precedes evaluation, analysis, and figure generation.
 
 Usage:
   uv run python -m scripts.run_matched_programme            # full programme
@@ -55,12 +54,12 @@ if "--dummy" in sys.argv:
 
 from utils.paths import (  # noqa: E402
     dummy_sibling, is_dummy, project_fig_dir as project_figs, results_root,
-    analysis_dir, cartpole_dir, experiment_dir, foundations_dir,
-    fig_appendix_dir, project_fig_dir as _pfd, fig_home,
+    analysis_dir, experiment_dir, foundations_dir,
+    fig_appendix_dir, project_fig_dir as _pfd, fig_home, thesis_fig_dir,
 )
 
 RESULTS = results_root()
-CONFIGS = REPO_ROOT / "experiments" / "configs" / "m5r_matched"
+CONFIGS = REPO_ROOT / "experiments" / "configs" / "m5r_e9"
 STATUS = RESULTS / "matched_programme_status.json"
 if is_dummy():
     STATUS = dummy_sibling(STATUS)
@@ -74,12 +73,12 @@ MEDIUM_EXPERIMENT = {
     "belief_ppo": "m5r_ref_belief_e9",
     "oracle_ppo": "m5r_ref_oracle_e9",
     "stacked_obs": "m5r_ref_stacked_obs_e9",
-    **{v: f"m5r_final_{v}_e_final" for v in VARIANTS},
+    **{v: f"m5r_final_{v}_e9" for v in VARIANTS},
 }
 
 
 SEEDS = 20
-ITERATIONS = 600
+ITERATIONS = 1500
 
 
 @dataclass
@@ -219,9 +218,7 @@ def build_plan() -> list[Stage]:
                   foundations_dir() / "stats_M5_factorial_toys.json",
                   depends_on=gate, est=45),
     ]
-    foundations = [s.name for s in stages if s.phase == "foundations"]
-
-    # ---- Phase 1: medium environment, training -------------------------
+    # ---- Phase 1: training ---------------------------------------------
     for key in REFERENCES:
         stages.append(_train(
             key, "medium", CONFIGS / f"{key}.yaml", MEDIUM_EXPERIMENT[key], est=80,
@@ -243,7 +240,7 @@ def build_plan() -> list[Stage]:
     medium_training = [s.name for s in stages if s.kind == "train"]
     medium_gate = medium_training + ["gate:reference_ordering"]
 
-    # ---- Phase 2: medium environment, analyses -------------------------
+    # ---- Phase 2: evaluation and analyses ------------------------------
     stages += [
         # The ladder figure reads this file; without the stage a clean-room run
         # trains everything and then fails at the figure.
@@ -255,6 +252,10 @@ def build_plan() -> list[Stage]:
                   final / "m5r_param_counts_run.json", depends_on=medium_training, est=2),
         _analysis("analysis:final_eval", "medium", "scripts.m5r_final_eval",
                   final / "m5r_final_run.json", depends_on=medium_gate, est=15),
+        _analysis("analysis:post_training_evaluation", "medium",
+                  "scripts.m5r_post_training_evaluation",
+                  final / "m5r_post_training_evaluation.json",
+                  depends_on=medium_training, est=30),
         # 500 rollouts x 128 steps = the 64,000-timestep probe buffer the
         # evaluation protocol specifies; the script default is smaller.
         _analysis("analysis:posterior_probe", "medium", "scripts.m5r_posterior_probe",
@@ -276,7 +277,8 @@ def build_plan() -> list[Stage]:
         _analysis("analysis:return_tests", "medium",
                   "scripts.m5r_return_tests",
                   final / "m5r_time_to_threshold_tests.json",
-                  depends_on=["analysis:final_eval"], est=1),
+                  depends_on=["analysis:final_eval",
+                              "analysis:post_training_evaluation"], est=1),
         _analysis("analysis:action_distributions", "medium",
                   "scripts.m5r_action_distributions",
                   final / "m5r_action_distributions.json",
@@ -297,68 +299,24 @@ def build_plan() -> list[Stage]:
                               "analysis:belief_swap_history_only"], est=2),
         _analysis("analysis:hypothesis_tests", "medium", "scripts.m5r_hypothesis_tests",
                   final / "m5r_hypothesis_tests.json",
-                  depends_on=["analysis:final_eval"], est=5),
+                  depends_on=["analysis:final_eval",
+                              "analysis:post_training_evaluation"], est=5),
     ]
 
-    # ---- Phase 3: difficulty sweep -------------------------------------
-    # The existing driver retrains every cell per level and merges into the
-    # structure the probe and sweep plots expect.
-    stages.append(_analysis(
-        "sweep:redesign_n20", "sweep", "scripts.sweep_redesign_n20",
-        final / "per_cell_env.json",
-        depends_on=medium_training, est=13 * 60,
-    ))
-
-    # ---- Phase 4: second domain ----------------------------------------
-    # Both difficulty axes, three levels each. The axis is not a default the
-    # driver can leave implicit: omitting it ran the asymmetry axis alone and
-    # the persistence half of the external-validity claim went unproduced.
-    cartpole_root = cartpole_dir()
-    # Asymmetry runs first and trains all 21 of its cells; persistence reuses
-    # the shared medium level and trains only 14, so its estimate is lower.
-    # Both budgets are 300 iterations x 20 seeds, matching the RSMM programme;
-    # at the measured ~0.4 s per iteration a cell costs roughly 45 minutes.
-    cartpole_est = {"asymmetry": 21 * 45, "persistence": 14 * 45}
-    for axis in ("asymmetry", "persistence"):
-        suffix = "" if axis == "asymmetry" else f"_{axis}"
-        stages.append(_analysis(
-            f"cartpole:sweep:{axis}", "cartpole", "scripts.cartpole_difficulty_sweep",
-            cartpole_root / f"stats_cartpole_sweep{suffix}.json",
-            args=["--axis", axis],
-            depends_on=medium_training, est=cartpole_est[axis],
-        ))
-        # `--levels` also has to be explicit: both scripts default to the
-        # medium level alone, which would analyse one of the three levels the
-        # sweep just trained.
-        levels = ["--levels", "easy", "medium", "hard"]
-        stages.append(_analysis(
-            f"cartpole:probe:{axis}", "cartpole", "scripts.cartpole_posterior_probe",
-            cartpole_root
-            / f"stats_cartpole_posterior_vs_performance_sweep{suffix}.json",
-            args=["--axis", axis, *levels, "--n-rollouts", "500"],
-            depends_on=[f"cartpole:sweep:{axis}"], est=40,
-        ))
-        stages.append(_analysis(
-            f"cartpole:tests:{axis}", "cartpole", "scripts.cartpole_hypothesis_tests",
-            cartpole_root / f"stats_cartpole_hypothesis_tests_sweep{suffix}.json",
-            args=["--axis", axis, *levels],
-            depends_on=[f"cartpole:sweep:{axis}"], est=5,
-        ))
-
-    # ---- Phase 5: figures ----------------------------------------------
+    # ---- Phase 3: tables and figures -----------------------------------
     stages += [
         # Tables are published on the same trigger as figures: they are
         # experiment output too, and were the last thing still typed by hand.
         # Keyed on a table make_tables still writes: probe_quality.tex was
         # replaced by one table per probe metric and no longer exists.
         _analysis("figures:tables", "figures", "scripts.make_tables",
-                  REPO_ROOT.parent / "master_thesis_reinier_schep_final"
-                  / "tables" / "probe_kl.tex",
-                  depends_on=["analysis:final_eval", "analysis:posterior_probe"],
+                  thesis_fig_dir().parent / "tables" / "probe_kl.tex",
+                  depends_on=["analysis:post_training_evaluation",
+                              "analysis:posterior_probe"],
                   est=1, always=True),
         _analysis("figures:main", "figures", "plotting.m5r_plots",
                   _repo_fig("m5r_method_ladder.png"),
-                  depends_on=["analysis:final_eval"], est=5),
+                  depends_on=["analysis:post_training_evaluation"], est=5),
         _analysis("figures:action_heatmap", "figures",
                   "plotting.m5r_action_inventory_heatmap",
                   _repo_fig("m5r_action_given_regime_inventory.png"),
@@ -434,9 +392,6 @@ def _write_dummy(stage: "Stage") -> bool:
 
 
 
-THESIS_DOC_ROOT = REPO_ROOT.parent / "master_thesis_reinier_schep_final"
-
-
 def _repo_fig(name: str) -> Path:
     """A figure's path in the repo tree, from the one registry."""
     return _pfd(*fig_home(name).split("/")) / name
@@ -456,7 +411,7 @@ def _thesis_referenced_figures(thesis_root: Path) -> dict[str, str]:
     # The .tex lives with the document, not with the figure output root: a
     # dummy run redirects the figure root into figures_dummy/, and deriving
     # sections from it found nothing, so publication silently copied nothing.
-    sections = THESIS_DOC_ROOT / "sections"
+    sections = thesis_root.parent / "sections"
     if not sections.exists():
         return names
     for tex in sections.glob("*.tex"):
@@ -479,10 +434,10 @@ def _publish_figures(since: float = 0.0) -> int:
     pre-rerun charts once replaced the dummy placeholders and quietly presented
     itself as current. Only files this run wrote are published.
     """
-    thesis = Path(os.environ.get(
-        "THESIS_FIG_ROOT",
-        REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures",
-    ))
+    configured = os.environ.get("THESIS_FIG_ROOT")
+    if not configured:
+        return 0
+    thesis = Path(configured)
     if not thesis.exists():
         return 0
     wanted = _thesis_referenced_figures(thesis)
@@ -531,10 +486,10 @@ def _write_provenance() -> None:
     most of the run the chapter is a mix. The watermark shows that on the page;
     this file makes it checkable without opening every image.
     """
-    thesis = Path(os.environ.get(
-        "THESIS_FIG_ROOT",
-        REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures",
-    ))
+    configured = os.environ.get("THESIS_FIG_ROOT")
+    if not configured:
+        return
+    thesis = Path(configured)
     if not thesis.exists():
         return
     entries = {}

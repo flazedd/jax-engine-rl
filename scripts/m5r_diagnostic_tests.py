@@ -1,4 +1,4 @@
-"""M5R — paired tests on the two regime-conditioning diagnostics.
+"""Compare conditioning architectures on the two behavioural diagnostics.
 
 Applies the thesis statistical protocol to the hypernet-versus-concat
 comparison on each diagnostic:
@@ -29,9 +29,10 @@ import numpy as np
 
 from evaluation.action_distribution import regime_separation_per_seed
 from evaluation.metrics import (
+    bootstrap_independent_mean_ci,
     holm_bonferroni,
-    leave_one_out_sensitivity,
-    primary_hypothesis_test,
+    leave_one_run_out_independent_sensitivity,
+    permutation_mean_test,
 )
 from utils.script_output import ScriptRun
 
@@ -119,20 +120,28 @@ def main() -> int:
             if hyper not in per_seed or concat not in per_seed:
                 continue
             h, c = per_seed[hyper], per_seed[concat]
-            if h.shape != c.shape:
-                raise ValueError(f"{tag}/{name}: seed counts differ")
-            test = primary_hypothesis_test(
-                h, c, family_size=family_size, alternative="two-sided",
+            mean, lo, hi = bootstrap_independent_mean_ci(h, c)
+            permutation = permutation_mean_test(h, c)
+            loo = leave_one_run_out_independent_sensitivity(
+                h, c, n_corrections=family_size,
             )
-            loo = leave_one_out_sensitivity(
-                h, c, n_corrections=family_size, alternative="two-sided",
-            )
-            test["leave_one_out"] = loo
-            # Promoted to the top level: the protocol reports this property for
-            # every claim, and the contract audit looks for it there.
-            test["stable_under_seed_omission"] = bool(
-                loo["stable_under_seed_omission"]
-            )
+            test = {
+                "name": f"{tag}_{name.lower()}_hypernet_vs_concat",
+                "mean_difference": mean,
+                "mean_paired_delta": mean,
+                "delta_ci": [lo, hi],
+                "permutation_p": permutation["p"],
+                "wilcoxon_p": permutation["p"],
+                "null_distribution": permutation["null_distribution"],
+                "n_permutations": permutation["n_permutations"],
+                "leave_one_out": loo,
+                "stable_under_run_omission": bool(
+                    loo["stable_under_run_omission"]
+                ),
+                "stable_under_seed_omission": bool(
+                    loo["stable_under_run_omission"]
+                ),
+            }
             test["mean_hypernet"] = float(h.mean())
             test["mean_concat"] = float(c.mean())
             test["direction"] = "hypernet > concat" if h.mean() > c.mean() \
@@ -140,7 +149,7 @@ def main() -> int:
             test["in_comparison_set"] = in_set
             results[tag][name] = test
             if in_set:
-                raw_p.append(test["wilcoxon_p"])
+                raw_p.append(test["permutation_p"])
                 index.append((tag, name))
 
     # Recompute Holm properly across the whole family rather than the

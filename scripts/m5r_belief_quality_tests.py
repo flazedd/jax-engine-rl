@@ -203,6 +203,7 @@ def main() -> int:
         comp["stable_under_seed_omission"] = bool(leave_one_run_out_independent_sensitivity(
             hyp_vals, con_vals, alpha=ALPHA, n_corrections=family_size,
         )["stable_under_run_omission"])
+        comp["stable_under_run_omission"] = comp["stable_under_seed_omission"]
 
     # The robustness family: the proper scores under the linear probe, and every
     # metric under the MLP probe. Reported beside the corrected set and never
@@ -252,6 +253,7 @@ def main() -> int:
             comp["stable_under_seed_omission"] = bool(leave_one_run_out_independent_sensitivity(
                 hyp_vals, con_vals, alpha=ALPHA, n_corrections=mlp_size,
             )["stable_under_run_omission"])
+            comp["stable_under_run_omission"] = comp["stable_under_seed_omission"]
 
     n_supported = sum(1 for c in comparisons if c["supported"])
     payload = {

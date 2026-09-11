@@ -7,7 +7,7 @@ artifact, so the six corrected p-values the thesis prints for them could not be
 regenerated or audited:
 
   * ``returns_method`` — RL2 against VariBAD at a fixed conditioning
-    architecture, from the end-of-training returns.
+    architecture, from fresh post-training evaluation episodes.
   * ``time_to_threshold`` — iterations to first reach the regime-agnostic
     reference return, one comparison per method, from the per-seed learning
     curves.
@@ -16,7 +16,8 @@ Both are computed here in the same schema the other set scripts write, so
 `scripts.thesis_contract` can check them alongside the rest.
 
 Reads:
-  results/analysis/per_cell_env.json          (end-of-training returns)
+  results/analysis/m5r_post_training_evaluation.json (fresh evaluation returns)
+  results/analysis/per_cell_env.json          (training reference level)
   results/<experiment>/metrics.json           (per-seed learning curves)
 Writes:
   results/analysis/m5r_method_return_tests.json
@@ -38,6 +39,7 @@ from evaluation import protocol as P
 from evaluation.metrics import (
     bootstrap_independent_mean_ci,
     holm_bonferroni,
+    leave_one_run_out_independent_sensitivity,
     permutation_mean_test,
 )
 from utils.paths import analysis_dir, experiment_dir, resolve_data
@@ -57,8 +59,10 @@ METHODS = ("rl2", "varibad")
 ARCHITECTURES = ("concat", "hypernet")
 
 
-def _per_seed_final(cells: dict, variant: str) -> np.ndarray:
-    return np.asarray(cells[variant]["per_seed_final_return"], dtype=float)
+def _per_seed_evaluation(methods: dict, variant: str) -> np.ndarray:
+    return np.asarray(
+        methods[variant]["per_seed_evaluation_return"], dtype=float
+    )
 
 
 def _per_seed_curves(experiment: str) -> np.ndarray | None:
@@ -89,6 +93,9 @@ def _compare(better: np.ndarray, worse: np.ndarray, name: str,
     perm = permutation_mean_test(better, worse)
     mean, lo, hi = bootstrap_independent_mean_ci(better, worse, n_boot=N_BOOT,
                                                   alpha=ALPHA)
+    omission = leave_one_run_out_independent_sensitivity(
+        better, worse, alpha=ALPHA, n_corrections=family_size,
+    )
     return {
         "name": name,
         "n_method": int(better.size),
@@ -99,6 +106,7 @@ def _compare(better: np.ndarray, worse: np.ndarray, name: str,
         "permutation_null_distribution": perm["null_distribution"],
         "n_permutations": perm["n_permutations"],
         "ci_excludes_zero": bool(lo > 0 or hi < 0),
+        "stable_under_run_omission": omission["stable_under_run_omission"],
     }
 
 
@@ -118,13 +126,13 @@ def _finalise(comparisons: list[dict], key: str) -> dict:
     }
 
 
-def method_return_tests(cells: dict) -> dict:
+def method_return_tests(methods: dict) -> dict:
     """RL2 minus VariBAD at each conditioning architecture."""
     size = P.COMPARISON_SETS["returns_method"].size
     comparisons = []
     for arch in ARCHITECTURES:
-        rl2 = _per_seed_final(cells, f"rl2_{arch}")
-        varibad = _per_seed_final(cells, f"varibad_{arch}")
+        rl2 = _per_seed_evaluation(methods, f"rl2_{arch}")
+        varibad = _per_seed_evaluation(methods, f"varibad_{arch}")
         comp = _compare(rl2, varibad, f"rl2_minus_varibad_{arch}", size)
         comp["architecture"] = arch
         comp["seeds_favouring_rl2"] = int((rl2 > varibad).sum())
@@ -185,8 +193,22 @@ def main() -> int:
                  summary_path=summary_path)
         return 1
 
+    evaluation_path = resolve_data(out_dir / "m5r_post_training_evaluation.json")
+    if not evaluation_path.exists():
+        run.fail(reason=f"missing {evaluation_path}", summary_path=summary_path)
+        return 1
+    with open(evaluation_path) as f:
+        evaluation_methods = json.load(f).get("methods", {})
+
+    required = {f"{method}_{arch}" for method in METHODS for arch in ARCHITECTURES}
+    missing = sorted(required - set(evaluation_methods))
+    if missing:
+        run.fail(reason=f"evaluation methods missing: {missing}",
+                 summary_path=summary_path)
+        return 1
+
     written = []
-    method_payload = method_return_tests(env_block["cells"])
+    method_payload = method_return_tests(evaluation_methods)
     method_path = out_dir / "m5r_method_return_tests.json"
     with open(method_path, "w") as f:
         json.dump(method_payload, f, indent=2)

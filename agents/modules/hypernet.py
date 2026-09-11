@@ -5,7 +5,7 @@ input, the belief generates the *weights* of a small target policy. The
 target maps the agent's policy input through the belief-generated weights
 to produce action logits.
 
-Spec lives at docs/implementation.md → "agents/modules/hypernet.py".
+The generated parameter shapes are defined below alongside the implementation.
 """
 from __future__ import annotations
 

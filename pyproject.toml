@@ -1,5 +1,5 @@
 [project]
-name = "thesis"
+name = "jax-engine-rl"
 version = "0.1.0"
 description = "Belief-conditioned meta-RL for regime-switching market making (TU Delft MSc thesis)"
 readme = "README.md"

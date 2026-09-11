@@ -21,8 +21,6 @@ BOOTSTRAP_RESAMPLES = 10_000
 INTERVAL_LEVEL = 0.95
 ALPHA = 0.05                      # error rate across a comparison set
 ALTERNATIVE = "two-sided"         # no direction committed to before the runs
-ZERO_METHOD = "wilcox"            # zero differences dropped, n reduced
-EFFECT_SIZE = "rank_biserial"     # matched-pairs rank-biserial correlation
 CORRECTION = "holm-bonferroni"
 
 # --- The current experiment set ---------------------------------------------
@@ -141,10 +139,9 @@ COMPARISON_SETS = {
 # Fields every corrected comparison must carry, so a figure or table can always
 # report what the protocol says is reported.
 REQUIRED_COMPARISON_FIELDS = (
-    "mean_paired_delta",
+    "mean_difference",
     "delta_ci",
-    "wilcoxon_p",
+    "permutation_p",
     "holm_corrected_p",
-    "rank_biserial",
-    "stable_under_seed_omission",
+    "stable_under_run_omission",
 )

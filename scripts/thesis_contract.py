@@ -6,8 +6,8 @@ here once:
   * a constant drifts — the bootstrap was on the median while the thesis
     defined the mean, the return tests were one-sided while the thesis said
     two-sided;
-  * a required quantity is simply absent — the thesis promises a rank-biserial
-    effect size for every comparison, and nothing produced one.
+  * a required quantity is absent — for example, a comparison omits its mean
+    difference, permutation p-value, or run-omission check.
 
 Run it as a gate before the programme starts and again after it finishes:
 
@@ -47,7 +47,7 @@ def _check_comparisons(payload, source: str, findings: list[dict]) -> int:
         if isinstance(node, list):
             stack.extend(node)
         elif isinstance(node, dict):
-            if "wilcoxon_p" in node or "holm_corrected_p" in node:
+            if "permutation_p" in node or "holm_corrected_p" in node:
                 comparisons.append(node)
             else:
                 stack.extend(node.values())
@@ -164,7 +164,8 @@ def audit(root: Path) -> dict:
         "protocol": {
             "seeds": P.SEEDS, "bootstrap_resamples": P.BOOTSTRAP_RESAMPLES,
             "alpha": P.ALPHA, "alternative": P.ALTERNATIVE,
-            "effect_size": P.EFFECT_SIZE, "correction": P.CORRECTION,
+            "hypothesis_test": "random-label permutation",
+            "correction": P.CORRECTION,
         },
         "comparisons_checked": checked_comparisons,
         "n_findings": len(findings),

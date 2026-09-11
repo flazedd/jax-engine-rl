@@ -41,10 +41,8 @@ def project_fig_dir(*parts: str) -> Path:
 
 
 def thesis_fig_dir() -> Path:
-    return Path(os.environ.get(
-        "THESIS_FIG_ROOT",
-        REPO_ROOT.parent / "master_thesis_reinier_schep_final" / "figures",
-    ))
+    configured = os.environ.get("THESIS_FIG_ROOT")
+    return Path(configured) if configured else project_fig_dir()
 
 
 def is_dummy() -> bool:
@@ -211,8 +209,9 @@ def fig_targets(name: str) -> list[Path]:
     where a chart belongs.
     """
     home = fig_home(name)
-    out = [project_fig_dir(*home.split("/")) / name,
-           thesis_fig_dir().joinpath(*home.split("/")) / name]
+    project = project_fig_dir(*home.split("/")) / name
+    thesis = thesis_fig_dir().joinpath(*home.split("/")) / name
+    out = [project] if thesis == project else [project, thesis]
     for p in out:
         p.parent.mkdir(parents=True, exist_ok=True)
     return out

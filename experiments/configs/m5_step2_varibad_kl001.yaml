@@ -1,5 +1,5 @@
 # M5 Step-2 sweep: VariBAD with kl_coef=0.001 (lighter posterior regularizer).
-# Diagnostic (DIAGNOSTIC_FINDINGS.md) flagged kl_coef=0.1 as posterior-collapse
+# An earlier diagnostic run flagged kl_coef=0.1 as posterior collapse.
 # culprit; this run tests whether weakening KL pressure 100× lets the encoder
 # hold non-trivial regime info on E_final.
 extends:

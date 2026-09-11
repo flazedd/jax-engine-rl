@@ -10,6 +10,7 @@ which parts of the thesis are real yet.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -17,7 +18,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 STATUS = REPO / "results" / "matched_programme_status.json"
-THESIS = REPO.parent / "master_thesis_reinier_schep_final"
+THESIS_FIGS = (
+    Path(os.environ["THESIS_FIG_ROOT"])
+    if os.environ.get("THESIS_FIG_ROOT") else None
+)
 
 
 def _fmt_min(m: float) -> str:
@@ -118,13 +122,13 @@ def main() -> int:
         for r in recent:
             print(f"    {r['stage']:38s} {_fmt_min(r.get('minutes', 0)):>6s}")
 
-    prov = THESIS / "figures" / "PROVENANCE.json"
-    if prov.exists():
+    prov = THESIS_FIGS / "PROVENANCE.json" if THESIS_FIGS else None
+    if prov and prov.exists():
         p = json.loads(prov.read_text())
         print(f"\n  thesis figures  real {p.get('n_real', 0)}"
               f"   still dummy {p.get('n_dummy', 0)}")
-    tprov = THESIS / "tables" / "PROVENANCE.txt"
-    if tprov.exists():
+    tprov = THESIS_FIGS.parent / "tables" / "PROVENANCE.txt" if THESIS_FIGS else None
+    if tprov and tprov.exists():
         print(f"  thesis tables   {tprov.read_text().splitlines()[0]}")
     print()
     return 0

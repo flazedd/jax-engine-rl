@@ -600,7 +600,7 @@ wheels = [
 ]
 
 [[package]]
-name = "thesis"
+name = "jax-engine-rl"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

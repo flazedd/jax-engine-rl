@@ -325,7 +325,7 @@ def verify(
     oracle_mean = float(m_oracle["final_return_mean"])
     oracle_ci = [float(x) for x in m_oracle["final_return_ci95"]]
 
-    # Paired bootstrap on the seed-level difference. CLAUDE.md mandates fixed
+    # Paired bootstrap on the seed-level difference. The experiment uses fixed
     # seeds {0..N-1} across methods for paired tests — summing independent
     # per-method CI widths would vastly overstate uncertainty on the gap.
     agn_per_seed = np.asarray(m_agn["per_seed_final_return"], dtype=float)

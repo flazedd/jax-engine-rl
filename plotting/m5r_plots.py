@@ -36,7 +36,7 @@ _CELL_BRAND = {
     "rl2_hypernet": "#2a9d8f", "varibad_hypernet": "#73b8ad",
 }
 
-# The canonical variant palette (docs/plotting.md → Colour): hue for the
+# Canonical variant palette: hue identifies the method and shade identifies
 # conditioning architecture, shade for the method, the darker tone being RL².
 # `_CELL_BRAND` predates it and orders the two slates the other way round; the
 # bar ladders still read from it.

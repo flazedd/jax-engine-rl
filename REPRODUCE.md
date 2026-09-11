@@ -1,73 +1,97 @@
 # Reproducing the thesis results
 
-This file is the executable guide for reproducing the experiments in *Trading in the Dark:
-Belief-Conditioned Meta-RL for Regime-Switching Market Making*.
+This guide reproduces the experiments reported in *Trading in the Dark: Belief-Conditioned
+Meta-RL for Regime-Switching Market Making*.
 
-## What you need
+## 1. Use the archived version
 
-- The archived repository commit recorded with the thesis results.
-- [uv](https://docs.astral.sh/uv/), which installs the required Python 3.12 environment.
-- A machine with enough memory for JAX training. Record the operating system, accelerator, driver,
-  and numerical-library versions used for the run.
+Check out the release or commit archived with the thesis. Record the commit identifier and the
+hardware and software details of the reproduction run.
 
-The full programme is computationally expensive. A fresh run should reproduce the experimental
-procedure and the qualitative conclusions, but exact floating-point values can vary across
-hardware.
+## 2. Create the software environment
 
-## Set up the environment
-
-Run these commands from the repository root:
+Install [uv](https://docs.astral.sh/uv/) and run:
 
 ```bash
-git checkout <archived-commit>
 uv sync --locked
-uv run python -c "import jax; print(jax.devices())"
+uv run python -c "import platform, jax; print(platform.platform()); print(jax.devices())"
 ```
 
-`uv sync --locked` creates the environment from `uv.lock` without changing dependency versions.
+The project requires Python 3.12. `uv sync --locked` installs the versions recorded in `uv.lock`
+without updating them.
 
-## Check the pipeline before training
+## 3. Check the code and pipeline
 
-First run the synthetic version of the complete pipeline. It checks that the analysis and figure
-generation steps work without spending the full training budget:
+Run the automated tests:
 
 ```bash
-uv run python -m scripts.run_matched_programme --dummy
-uv run python -m scripts.thesis_contract
+uv run pytest -q
 ```
 
-To inspect the full training plan and its time estimate without running it:
+Inspect the complete plan without running it:
 
 ```bash
 uv run python -m scripts.run_matched_programme --dry-run
 ```
 
-## Run the full programme
+Then run the synthetic version of the pipeline:
+
+```bash
+uv run python -m scripts.run_matched_programme --dummy
+```
+
+The synthetic run checks the execution order, analysis code, tables, and figures without training
+the full agents. Its outputs are marked as synthetic and are ignored by Git.
+
+## 4. Run the experiments
 
 ```bash
 uv run python -m scripts.run_matched_programme
-uv run python -m scripts.thesis_contract --strict
 ```
 
-The programme runs the steps in this order:
+The driver performs the following steps:
 
-1. Check that the methods use the specified inputs, network sizes, optimiser settings, and training budget.
-2. Validate each market-making setting against R1--R4 and run the standard benchmark checks.
-3. Train the four reference agents: Regime-agnostic PPO, Stacked-observation PPO, Belief-PPO, and Oracle-PPO.
-4. Check that Belief-PPO exceeds Regime-agnostic PPO and Oracle-PPO exceeds Belief-PPO before training the four belief-conditioned variants.
-5. Train the variants, evaluate every trained policy on fresh episodes, run the belief and behavioural diagnostics, apply the statistical tests, and regenerate the figures.
+1. Check the model inputs, parameter counts, optimiser settings, and training budget.
+2. Validate the market-making environment and the RL² and VariBAD implementations.
+3. Train regime-agnostic PPO, stacked-observation PPO, Belief-PPO, and Oracle-PPO.
+4. Check the two reference differences defined in the thesis.
+5. Train RL² and VariBAD with concatenation and hypernetwork conditioning.
+6. Evaluate the frozen policies on fresh episodes.
+7. Run the belief probes, behavioural diagnostics, statistical comparisons, and figure generation.
 
-The driver writes progress to `results/analysis/programme_status.json`. Check it with:
+Completed stages are detected from their output files, so rerunning the command resumes an
+interrupted experiment. To inspect progress in another terminal, run:
 
 ```bash
 uv run python -m scripts.status
 ```
 
+The status file is `results/matched_programme_status.json`.
+
+## 5. Check the generated results
+
+After the programme finishes, run:
+
+```bash
+uv run python -m scripts.thesis_contract --strict
+```
+
+This command checks that the required outputs exist and that their settings agree with
+`evaluation/protocol.py`.
+
 ## Outputs
 
-- `results/foundations/` contains environment and implementation-validation results.
-- `results/medium/` contains the trained reference and variant runs.
-- `results/analysis/` contains evaluation returns, diagnostic results, and statistical tables.
-- `figures/` contains the generated figures. The thesis uses the matching copies in the thesis repository.
+- `results/foundations/` contains environment and implementation validation.
+- `results/medium/` contains checkpoints and training results for the reported experiment.
+- `results/analysis/` contains fresh evaluation returns, probe results, diagnostics, and statistical
+  comparisons.
+- `figures/` contains the generated figures.
+- `tables/` contains the generated LaTeX result tables.
 
-Each run writes its resolved configuration, commit identifier, and per-seed results alongside its outputs.
+By default, every output stays inside this repository. To also publish figures and tables into a
+separate thesis checkout, set `THESIS_FIG_ROOT` to that checkout's `figures` directory before
+running the programme.
+
+Each training directory records the resolved configuration and results for every seed. Exact
+floating-point values may differ across hardware, but the same archived code, configuration, and
+random seeds reproduce the stated experimental procedure.

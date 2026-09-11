@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
+from evaluation.protocol import MEDIUM_ENV
 from utils.paths import analysis_dir, is_dummy, resolve_data, results_root, thesis_fig_dir
 from utils.script_output import ScriptRun
 
@@ -174,44 +175,39 @@ def probe_brier() -> str | None:
 
 def integration_gap() -> str | None:
     tests = _load(FINAL() / "m5r_hypothesis_tests.json")
-    evals = _load(FINAL() / "m5r_final_run.json") or _load(FINAL() / "per_cell_env.json")
+    evals = _load(FINAL() / "m5r_post_training_evaluation.json")
     if tests is None:
         return None
     results = tests.get("family_b", {}).get("results", {})
 
-    def cell_mean(name):
-        if not evals:
-            return None
-        per = evals.get("per_env", {}).get("e_final", {})
-        block = per.get(name) or {}
-        for k in ("final_return_mean", "mean", "return_mean"):
-            if k in block:
-                return block[k]
-        return None
+    methods = evals.get("methods", {}) if evals else {}
+    floor = methods.get("regime_agnostic_ppo", {}).get("evaluation_return_mean")
+    belief = methods.get("belief_ppo", {}).get("evaluation_return_mean")
+    reference_gap = belief - floor if floor is not None and belief is not None else None
 
     rows = []
     for method, label in (("rl2", "RL\\textsuperscript{2}"), ("varibad", "VariBAD")):
-        r = results.get(f"{method}_hypernet_beats_concat_e_final")
+        r = results.get(f"{method}_hypernet_beats_concat_{MEDIUM_ENV}")
         if r is None:
             continue
         lo, hi = r.get("delta_ci", [None, None])
+        difference = r.get("mean_difference", r.get("mean_paired_delta"))
+        fraction = difference / reference_gap if reference_gap else None
         rows.append(
-            f"{label} & {_fmt(cell_mean(f'{method}_concat'), 1)} "
-            f"& {_fmt(cell_mean(f'{method}_hypernet'), 1)} "
-            f"& ${r['mean_paired_delta']:+.2f}\\;[{lo:+.2f},\\, {hi:+.2f}]$ "
-            f"& ${r['holm_corrected_p']:.1e}$ "
-            f"& {_fmt(r.get('rank_biserial'), 2, plus=True)} \\\\"
+            f"{label} & {_fmt(difference, 2, plus=True)} "
+            f"& $[{lo:+.2f},\\, {hi:+.2f}]$ "
+            f"& {_fmt(fraction, 2, plus=True)} "
+            f"& {_fmt_p(r.get('holm_corrected_p'))} \\\\"
         )
     if not rows:
         return None
     body = "\n".join(rows)
-    return f"""\\begin{{tabular}}{{lccccc}}
-\\hline
-{_banner(6)}\\textbf{{Method}} & \\textbf{{concat}} & \\textbf{{hypernet}}
- & \\textbf{{$\\Delta$ (95\\% CI)}} & \\textbf{{Holm $p$}} & \\textbf{{$r_{{\\mathrm{{rb}}}}$}} \\\\
-\\hline
+    return f"""\\begin{{tabular}}{{lrrrr}}
+\\toprule
+{_banner(5)}Method & $\\bar{{d}}$ & $95\\%$ CI & Reference gap fraction & $p_{{\\mathrm{{Holm}}}}$ \\\\
+\\midrule
 {body}
-\\hline
+\\bottomrule
 \\end{{tabular}}
 """
 

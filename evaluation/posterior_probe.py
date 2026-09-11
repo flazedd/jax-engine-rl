@@ -117,14 +117,14 @@ def collect_probe_rollouts(
 
     Records per-timestep arrays shaped `[T, N, ...]`:
       - obs: agent observation
-      - belief: agent's internal belief (carry into act for RL²,
-        μ from extras for VariBAD)
+      - belief: the representation used for the current action (the updated
+        recurrent state for RL² and μ from extras for VariBAD)
       - regime: env's true regime (from info["regime"])
       - bid_fill, ask_fill, q: needed for analytical-posterior reference
       - action, reward, done
 
-    Also computes per-step analytical_belief by running the HMM filter
-    inline on the same trajectory.
+    Also computes the analytical belief available before the same action by
+    running the HMM filter inline on the same trajectory.
 
     Returns dict of `np.ndarray`s ready for classifier input.
     """
@@ -184,28 +184,20 @@ def collect_probe_rollouts(
 
     @jax.jit
     def hmm_step_v(b, action, bid_fill, ask_fill, q, done):
-        # full_update returns (b_filtered_t, b_pred_{t+1}). The wrapper
-        # uses b_pred for the next step's prior; on done, reset to initial.
+        # full_update returns the posterior after the current fills and the
+        # prediction for the next decision. The latter is what the agent can
+        # compare with at the next step.
         def per_env(b_i, a_i, bf_i, af_i, q_i, d_i):
             b_filt, b_pred = full_update(b_i, inner_mm, a_i, bf_i, af_i, q_i)
             b_init = initial_belief(inner_mm)
             b_next = jnp.where(d_i, b_init, b_pred)
-            # b_filt is the posterior at t (what we want to compare to method's
-            # belief if the method's belief is "after-fills"). For consistency
-            # with how each method updates: VariBAD μ is updated *during* the
-            # GRU forward pass with current observation, before action; RL²'s
-            # carry similarly. So b_filt at time t represents posterior given
-            # all evidence through step t. We record b_filt as the analytical
-            # belief at time t (the value the method's belief is implicitly
-            # approximating).
             return b_filt, b_next
         return jax.vmap(per_env)(b, action, bid_fill, ask_fill, q, done)
 
     for t in range(rollout_length):
-        # Belief BEFORE this step (the posterior the agent uses for action_t)
-        # For RL²: carry going into act. For VariBAD: μ produced by encoder
-        # given current obs. The latter is in act() extras.
-        carry_pre_act = carry  # for RL²
+        # This is the analytical posterior available when action_t is chosen.
+        # It contains evidence through the previous step, just like u_t.
+        analytical_pre_act = analytical_belief
 
         # Inventory at start of step (for HMM likelihood)
         q_pre = jax.vmap(get_q)(env_states)
@@ -213,11 +205,11 @@ def collect_probe_rollouts(
         step_key, key = jax.random.split(key)
         action, extras, new_carry = act_step(agent_state, carry, obses, step_key)
 
-        # Method-specific belief at time t. For RL² belief_key="carry_in"
-        # which is the carry going INTO act → carry_pre_act. For VariBAD
-        # belief_key="mu" which is in extras.
+        # Method-specific belief used to choose action_t. RL² uses the updated
+        # recurrent state returned by act(); VariBAD exposes its current mean
+        # in extras after processing the same input u_t.
         if belief_key == "carry_in":
-            belief_t = carry_pre_act
+            belief_t = new_carry
         else:
             if belief_key not in extras:
                 raise KeyError(
@@ -241,10 +233,9 @@ def collect_probe_rollouts(
             env_states, action, env_keys
         )
 
-        # Analytical belief update at time t (uses bid_fill, ask_fill from
-        # info, plus q_pre, plus action). The b_filt return is the posterior
-        # at time t.
-        b_filt_t, analytical_belief = hmm_step_v(
+        # Update only after recording the belief used for this decision. The
+        # resulting prediction becomes the analytical input at step t + 1.
+        _b_filt_t, analytical_belief = hmm_step_v(
             analytical_belief,
             action,
             info["bid_fill"],
@@ -259,7 +250,7 @@ def collect_probe_rollouts(
         out_action.append(np.asarray(action))
         out_reward.append(np.asarray(rewards))
         out_done.append(np.asarray(dones))
-        out_analytical.append(np.asarray(b_filt_t))
+        out_analytical.append(np.asarray(analytical_pre_act))
         out_q.append(np.asarray(q_pre))
 
         # Reset carry on episode boundary (matches training behavior)
@@ -387,12 +378,47 @@ def train_probe(
             preds = clf.predict(test_belief_TND[t])
             per_t[t] = float((preds == test_regime_TN[t]).mean())
 
+        # Accuracy after an actual regime change. The initial regime is not
+        # counted as a change, so this isolates adaptation rather than the
+        # ordinary accumulation of evidence from the start of an episode.
+        predictions = np.stack([
+            clf.predict(test_belief_TND[t]) for t in range(T)
+        ])
+        age = np.full(test_regime_TN.shape, -1, dtype=np.int32)
+        for rollout in range(test_regime_TN.shape[1]):
+            latest_change = -1
+            for t in range(1, T):
+                if test_regime_TN[t, rollout] != test_regime_TN[t - 1, rollout]:
+                    latest_change = t
+                if latest_change >= 0:
+                    age[t, rollout] = t - latest_change
+        switch_bins = (
+            (0, 0, "0"), (1, 1, "1"), (2, 2, "2"),
+            (3, 4, "3–4"), (5, 9, "5–9"),
+            (10, 19, "10–19"), (20, None, "20+"),
+        )
+        accuracy_since_change = []
+        count_since_change = []
+        for lower, upper, _label in switch_bins:
+            mask = age >= lower
+            if upper is not None:
+                mask &= age <= upper
+            count = int(mask.sum())
+            count_since_change.append(count)
+            accuracy_since_change.append(
+                float((predictions[mask] == test_regime_TN[mask]).mean())
+                if count else float("nan")
+            )
+
     out = {
         "train_acc": train_acc,
         "test_acc": test_acc,
         "test_log_loss": test_log_loss,
         "test_brier": test_brier,
         "per_t_test_acc": per_t.tolist(),
+        "steps_since_change_labels": [label for _, _, label in switch_bins],
+        "test_acc_since_change": accuracy_since_change,
+        "test_count_since_change": count_since_change,
         "n_classes": int(clf.classes_.size),
     }
     if kl_to_omega is not None:

@@ -175,6 +175,7 @@ FIGURE_HOME: dict[str, str] = {
     "factorial_toys.png": "appendix",
     # the paired per-timestep contrast supports the levels figure of RQ2
     "m5r_probe_delta_per_t.png": "appendix",
+    "m5r_probe_accuracy_since_change.png": "appendix",
     # Appendix B — second domain
     # Appendix C — supporting RSMM charts
     "m5r_action_given_regime_inventory.png": "appendix",

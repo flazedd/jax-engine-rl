@@ -84,6 +84,10 @@ def _probe_cell(
     analytical_per_t: list[list[float]] = []
     method_per_t_kl: list[list[float]] = []
     analytical_per_t_kl: list[list[float]] = []
+    method_since_change: list[list[float]] = []
+    analytical_since_change: list[list[float]] = []
+    since_change_counts: list[list[int]] = []
+    since_change_labels: list[str] | None = None
     for seed in seeds:
         bundle = load_experiment(exp_dir, seed)
         result = probe_one_seed(
@@ -106,6 +110,16 @@ def _probe_cell(
         analytical_per_t_kl.append(
             list(map(float, result["analytical"]["per_t_test_kl_to_omega"]))
         )
+        method_since_change.append(
+            list(map(float, result["method"]["test_acc_since_change"]))
+        )
+        analytical_since_change.append(
+            list(map(float, result["analytical"]["test_acc_since_change"]))
+        )
+        since_change_counts.append(
+            list(map(int, result["method"]["test_count_since_change"]))
+        )
+        since_change_labels = result["method"]["steps_since_change_labels"]
     return {
         "seeds": seeds,
         "method_test_acc_per_seed": method_accs,
@@ -118,6 +132,10 @@ def _probe_cell(
         "analytical_per_t_test_acc_per_seed": analytical_per_t,
         "method_per_t_kl_per_seed": method_per_t_kl,
         "analytical_per_t_kl_per_seed": analytical_per_t_kl,
+        "steps_since_change_labels": since_change_labels,
+        "method_test_acc_since_change_per_seed": method_since_change,
+        "analytical_test_acc_since_change_per_seed": analytical_since_change,
+        "test_count_since_change_per_seed": since_change_counts,
     }
 
 
@@ -262,6 +280,12 @@ def main() -> int:
             analytical_per_t = np.asarray(probe["analytical_per_t_test_acc_per_seed"])
             method_per_t_kl = np.asarray(probe["method_per_t_kl_per_seed"])
             analytical_per_t_kl = np.asarray(probe["analytical_per_t_kl_per_seed"])
+            method_since_change = np.asarray(
+                probe["method_test_acc_since_change_per_seed"]
+            )
+            analytical_since_change = np.asarray(
+                probe["analytical_test_acc_since_change_per_seed"]
+            )
             per_method_per_env.setdefault(env_label, {})[method] = {
                 "n_seeds": int(method_per_t.shape[0]),
                 "method_per_t_test_acc_mean": method_per_t.mean(axis=0).tolist(),
@@ -270,6 +294,16 @@ def main() -> int:
                 "method_per_t_kl_mean": method_per_t_kl.mean(axis=0).tolist(),
                 "method_per_t_kl_per_seed": method_per_t_kl.tolist(),
                 "analytical_per_t_kl_mean": analytical_per_t_kl.mean(axis=0).tolist(),
+                "steps_since_change_labels": probe["steps_since_change_labels"],
+                "method_test_acc_since_change_mean": np.nanmean(
+                    method_since_change, axis=0
+                ).tolist(),
+                "method_test_acc_since_change_per_seed": method_since_change.tolist(),
+                "analytical_test_acc_since_change_mean": np.nanmean(
+                    analytical_since_change, axis=0
+                ).tolist(),
+                "analytical_test_acc_since_change_per_seed": analytical_since_change.tolist(),
+                "test_count_since_change_per_seed": probe["test_count_since_change_per_seed"],
                 "method_test_acc_mean": float(np.mean(probe["method_test_acc_per_seed"])),
                 "method_test_acc_per_seed": probe["method_test_acc_per_seed"],
                 "method_test_acc_ci95": [

@@ -1183,10 +1183,6 @@ def _draw_probe_acc_levels_per_t(
                 facecolor=color, alpha=0.12, edgecolor=color, linewidth=0.7)
         if not analytical_drawn and "analytical_per_t_test_acc_mean" in m:
             ana = np.asarray(m["analytical_per_t_test_acc_mean"])
-            # Align the reference to the same information horizon as the
-            # variants: shift right one step and anchor the first step at
-            # chance, so every curve starts with zero observations in hand.
-            ana = np.concatenate(([1.0 / 3.0], ana[:-1]))
             ax.plot(np.arange(ana.shape[0]), _smooth_curve(ana, smoothing_window),
                     color=_ANALYTICAL_COLOR, linestyle="-", linewidth=2.6,
                     label="Analytical posterior")
@@ -1279,6 +1275,71 @@ def plot_m5r_probe_acc_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> Non
         "Probe test accuracy",
         ["Analytical posterior", "Random guess"], env_label,
     )
+
+
+def plot_m5r_probe_accuracy_since_change(
+    out_path: Path, env_label: str = MEDIUM_ENV,
+) -> None:
+    """Check how quickly each representation reflects a changed regime."""
+    apply_style()
+    panels = (("logistic", "Linear probe"), ("mlp", "MLP probe"))
+    fig, axes = plt.subplots(1, 2, figsize=(10.6, 6.4), sharey=True)
+    drew_any = False
+    for ax, (classifier, title) in zip(axes, panels):
+        probe = _load_probe_for_per_t(classifier)
+        env_block = (probe or {}).get("per_method_per_env", {}).get(env_label, {})
+        analytical_drawn = False
+        labels = None
+        for cell in CELLS:
+            result = env_block.get(cell, {})
+            key = "method_test_acc_since_change_per_seed"
+            if key not in result:
+                continue
+            values = np.asarray(result[key], dtype=float)
+            labels = result["steps_since_change_labels"]
+            x = np.arange(len(labels))
+            color, linestyle = _VARIANT_LEVEL_STYLE[cell]
+            ax.plot(x, np.nanmean(values, axis=0), color=color,
+                    linestyle=linestyle, linewidth=2.2,
+                    label=_VARIANT_LEVEL_LABEL[cell])
+            if not analytical_drawn:
+                analytical = np.asarray(
+                    result["analytical_test_acc_since_change_per_seed"],
+                    dtype=float,
+                )
+                ax.plot(x, np.nanmean(analytical, axis=0),
+                        color=_ANALYTICAL_COLOR, linewidth=2.6,
+                        label="Analytical posterior")
+                analytical_drawn = True
+            drew_any = True
+        ax.axhline(1.0 / 3.0, color="#999999", linestyle=":",
+                   linewidth=1.2, label="Random guess")
+        if labels is not None:
+            ax.set_xticks(np.arange(len(labels)), labels)
+        ax.set_title(title, fontsize=14, loc="left")
+        ax.set_xlabel("Steps since the latest regime change", fontsize=12)
+        ax.set_ylim(0.0, 1.0)
+        polish(ax)
+    if not drew_any:
+        print(f"[m5r_plots] skip {out_path.name}: no switch data")
+        plt.close(fig)
+        return
+    axes[0].set_ylabel("Probe test accuracy", fontsize=13)
+    handles = {}
+    for handle, label in zip(*axes[0].get_legend_handles_labels()):
+        handles.setdefault(label, handle)
+    order = [_VARIANT_LEVEL_LABEL[cell] for cell in CELLS]
+    order += ["Analytical posterior", "Random guess"]
+    shown = [label for label in order if label in handles]
+    fig.legend([handles[label] for label in shown], shown, loc="lower center",
+               ncol=3, fontsize=12, bbox_to_anchor=(0.5, 0.0), frameon=True,
+               facecolor="white", edgecolor="#dddddd", framealpha=1.0)
+    fig.subplots_adjust(left=0.09, right=0.99, top=0.93, bottom=0.24,
+                        wspace=0.05)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
 
 
 
@@ -1397,6 +1458,8 @@ def main() -> int:
         plot_m5r_probe_kl_per_t(target)
     for target in _both_targets("m5r_probe_acc_per_t.png"):
         plot_m5r_probe_acc_per_t(target)
+    for target in _both_targets("m5r_probe_accuracy_since_change.png"):
+        plot_m5r_probe_accuracy_since_change(target)
     for target in _both_targets("m5r_action_separation.png"):
         plot_m5r_diagnostic_separation(target, diagnostic="action")
     for target in _both_targets("m5r_belief_swap_separation.png"):

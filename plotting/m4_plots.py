@@ -51,9 +51,9 @@ def _budget_annotation(
 
 _TOY_ENVS = ["bandit", "gridworld", "regime_bandit"]
 _TOY_ENV_LABELS = {
-    "bandit": "Bandit (5-arm Bernoulli)",
-    "gridworld": "Gridworld (random goal)",
-    "regime_bandit": "Regime-switching bandit",
+    "bandit": "Five armed Bernoulli bandit",
+    "gridworld": "Random goal gridworld",
+    "regime_bandit": "Regime switching bandit",
 }
 def _load_m4_validation() -> dict[str, dict[str, object]]:
     candidates = (
@@ -100,9 +100,9 @@ def plot_factorial_toys(out_path: Path) -> bool:
     from matplotlib.patches import Patch
     legend_handles: list[Any] = [
         Patch(facecolor=integration_colors["hypernet_nobonus"], edgecolor="white",
-              label="Hypernet integration"),
+              label="Hypernetwork"),
         Patch(facecolor=integration_colors["concat_nobonus"], edgecolor="white",
-              label="Concat integration"),
+              label="Concatenation"),
     ]
 
     for ax, env in zip(axes, _TOY_ENVS):

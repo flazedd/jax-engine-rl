@@ -1,7 +1,7 @@
 """The statistical protocol, as the thesis states it, in one place.
 
-Every constant here has a counterpart in the thesis: Table 3.5 in the
-methodology chapter and Table D.8 in the executed-configuration appendix. Code
+Every constant here has a counterpart in the thesis: the statistical protocol in the
+methodology chapter and Tables C.6--C.7 in the reproduction appendix. Code
 and thesis drifted apart once already — the bootstrap was on the median while
 the protocol defined the mean, the return tests were one-sided while the
 protocol said two-sided — so the values live here and `scripts.thesis_contract`
@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-# --- Table 3.5 / Table D.8 --------------------------------------------------
+# --- Statistical protocol / Appendix C --------------------------------------
 SEEDS = 20
 BOOTSTRAP_RESAMPLES = 10_000
 INTERVAL_LEVEL = 0.95
@@ -80,7 +80,7 @@ class ComparisonSet:
     size: int
 
 
-# The three sets of the protocol, with the sizes Appendix D records.
+# The six sets of the protocol, with the sizes Appendix C records.
 COMPARISON_SETS = {
     # RQ3's difficulty sweep is deferred: its instances were all defined as
     # perturbations of e_final and need redefining against the current
@@ -90,7 +90,7 @@ COMPARISON_SETS = {
     "returns_rsmm": ComparisonSet(
         "returns_rsmm",
         "conditioning-architecture return comparisons, two methods on the "
-        "medium RSMM instance",
+        "selected RSMM instance",
         2,
     ),
     # Declared after the fact and recorded as such: these two families were

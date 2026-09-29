@@ -146,7 +146,7 @@ def _belief_table(metric: str, with_holm: bool = True) -> str | None:
     body = "\n".join(rows)
     spec = "ll" + "r" * (n_cols - 2)
     return (
-        "\\setlength{\\tabcolsep}{4pt}\n"
+        "\\setlength{\\tabcolsep}{3.5pt}\n"
         f"\\begin{{tabular}}{{{spec}}}\n"
         "\\toprule\n"
         f"{_banner(n_cols)}{head} \\\\\n"
@@ -219,6 +219,31 @@ TABLES = {
     "probe_brier": probe_brier,
     "integration_gap": integration_gap,
 }
+
+
+def probe_confusion() -> str | None:
+    """Held-out, row-normalized regime confusion from the saved probe rerun."""
+    data = _load(FINAL() / "m5r_probe_confusion.json")
+    if data is None:
+        return None
+    rows = []
+    for key, label in VARIANTS:
+        matrix = data["by_method"][key]["row_normalized"]
+        for regime, probabilities in enumerate(matrix):
+            shown_label = label if regime == 0 else ""
+            cells = " & ".join(f"${value:.3f}$" for value in probabilities)
+            rows.append(f"{shown_label} & ${regime}$ & {cells} \\\\")
+        rows.append("\\addlinespace")
+    return ("\\begin{tabular}{llrrr}\n"
+            "\\toprule\n"
+            "Method & True regime & Pred. $0$ & Pred. $1$ & Pred. $2$ \\\\\n"
+            "\\midrule\n"
+            + "\n".join(rows[:-1]) + "\n"
+            "\\bottomrule\n"
+            "\\end{tabular}\n")
+
+
+TABLES["probe_confusion"] = probe_confusion
 
 
 def main() -> int:

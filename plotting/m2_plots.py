@@ -32,9 +32,9 @@ from plotting.style import (
 )
 
 
-_REGIME_NAMES = ("noise", "bull", "bear")
+_REGIME_NAMES = ("Regime 0", "Regime 1", "Regime 2")
 _ACTION_NAMES = ("sym", "favor_ask", "favor_bid")
-_ACTION_LABELS = ("Symmetric", "Favor ask", "Favor bid")
+_ACTION_LABELS = ("Bid 1 / ask 1", "Bid 3 / ask 1", "Bid 1 / ask 3")
 
 
 def _regime_label(r: int) -> str:
@@ -77,7 +77,7 @@ def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) ->
     yedges = np.arange(n_reg + 1) - 0.5
     ax.pcolormesh(xedges, yedges, grid, cmap=cmap, norm=norm,
                   edgecolors="white", linewidth=1.5)
-    ax.invert_yaxis()  # regime 0 (noise) on top, matching the row order
+    ax.invert_yaxis()  # regime 0 on top, matching the row order
     ax.set_yticks(range(n_reg))
     ax.set_yticklabels([_regime_label(r) for r in range(n_reg)])
     ax.set_xticks(range(n_inv))

@@ -384,6 +384,9 @@ def train_probe(
         predictions = np.stack([
             clf.predict(test_belief_TND[t]) for t in range(T)
         ])
+        confusion_counts = np.zeros((n_cols, n_cols), dtype=np.int64)
+        np.add.at(confusion_counts,
+                  (test_regime_TN.reshape(-1), predictions.reshape(-1)), 1)
         age = np.full(test_regime_TN.shape, -1, dtype=np.int32)
         for rollout in range(test_regime_TN.shape[1]):
             latest_change = -1
@@ -420,6 +423,7 @@ def train_probe(
         "test_acc_since_change": accuracy_since_change,
         "test_count_since_change": count_since_change,
         "n_classes": int(clf.classes_.size),
+        "confusion_counts": confusion_counts.tolist(),
     }
     if kl_to_omega is not None:
         out["test_kl_to_omega"] = kl_to_omega

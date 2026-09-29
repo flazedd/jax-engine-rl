@@ -50,7 +50,11 @@ def main() -> int:
         return 1
     with open(resolve_data(stats_path)) as f:
         stats = json.load(f)
-    action_names = stats["action_names"]
+    action_names = [
+        {"sym": "bid 1 / ask 1", "favor_ask": "bid 3 / ask 1",
+         "favor_bid": "bid 1 / ask 3"}.get(name, name)
+        for name in stats["action_names"]
+    ]
     n_regimes = stats["n_regimes"]
     inv_max = stats.get("inv_max", 5)
     n_inv = 2 * inv_max + 1

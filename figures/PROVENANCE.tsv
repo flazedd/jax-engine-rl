@@ -1,10 +1,10 @@
 figure	written	source
 appendix/factorial_toys.png	2026-09-11T13:19:54	real
-appendix/fig_M2_R1_policy_heatmap.png	2026-08-24T12:47:29	real
+appendix/fig_M2_R1_policy_heatmap.png	2026-09-29T18:39:48	real
 appendix/fig_M2_R2_per_regime_ppo.png	2026-08-24T12:47:29	real
 appendix/fig_M2_R4_belief_ppo_gap.png	2026-08-24T12:47:29	real
 appendix/fig_M2_R4_posterior_entropy.png	2026-08-24T12:47:29	real
-appendix/m5r_action_given_regime_inventory.png	2026-08-24T12:46:57	real
+appendix/m5r_action_given_regime_inventory.png	2026-09-29T18:39:57	real
 appendix/m5r_probe_accuracy_since_change.png	2026-09-11T12:09:29	real
 appendix/m5r_probe_delta_per_t.png	2026-09-11T12:09:28	real
 results/RQ1/fig_rq1_learning_curves.png	2026-08-24T12:54:18	real

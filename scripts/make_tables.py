@@ -70,7 +70,7 @@ def _fmt(x, nd=3, plus=False):
 
 # The four per-measurement probe tables of the posterior-quality probe, in the
 # order the methodology defines the metrics. Each is self-contained: the level
-# each architecture reaches, the paired difference between them, and the test
+# each architecture reaches, the independent difference in means between them, and the test
 # the protocol requires of a reported comparison.
 _PROBE_METRIC_LABEL = {
     "method_test_acc": ("probe_decodability", 3),

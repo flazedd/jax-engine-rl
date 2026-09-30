@@ -4,7 +4,7 @@ Companion to `scripts.m5r_action_distributions`. That script measures what a
 policy did across locked regimes; this one holds the observation fixed and
 swaps only the belief, so a policy that responds to the regime by steering
 inventory rather than by changing its action at a given inventory is still
-credited, and every method is scored on the same observation grid.
+credited, and each method uses its own rollout-derived observation pools.
 
 Outputs:
   - results/M5R/final/m5r_belief_swap.json
@@ -198,6 +198,9 @@ def _probe_one(
     return {
         "experiment_name": experiment_name,
         "family": family,
+        "diagnostic_version": 2,
+        "aggregation": "unweighted mean over covered inventories",
+        "per_seed_inventory_pool_sizes": per_seed_pools,
         "seeds": seeds,
         "per_seed_separation": arr.tolist(),
         "mean_separation": float(arr.mean()),

@@ -3,19 +3,17 @@
 Mirrors `scripts/m6_posterior_probe.py` but reads cells from M5R's
 `results/M5R/final/per_cell_env.json` instead of the M6 axis-level structure.
 
-For each of the 4 meta-RL cells × 5 evaluation environments = 20 cells, load
-each per-seed checkpoint, roll out the policy, train a probe (logistic by
-default; `--classifier mlp` for the robustness check) on the belief
-representation to predict the latent regime, and score test accuracy.
-Aggregates per-seed (posterior_error, gap_closed) into a scatter that feeds
-Family C of the M5R hypothesis tests.
+For each of the four meta-RL variants on the selected RSMM environment, load
+per-seed checkpoints, collect rollouts, and fit logistic or MLP regime probes.
+Fresh frozen-policy evaluation returns are joined by experiment and seed to
+produce the reference-gap fraction used in the return association analysis.
 
 References (regime-agnostic / belief / oracle PPO) are NOT probed for the
 same reasons as in M6: floor has no regime representation, belief ingests
 the analytical posterior directly, and oracle sees the true regime.
 
 Outputs:
-  - results/M5R/final/m5r_posterior_vs_performance{_classifier}.json
+  - results/analysis/m5r_posterior_vs_performance{_classifier}.json
 
 Usage:
   uv run python -m scripts.m5r_posterior_probe                    # logistic
@@ -217,6 +215,9 @@ def main() -> int:
     with open(PER_CELL_ENV_PATH) as f:
         per_cell_env = json.load(f)
 
+    with open(out_dir / "m5r_post_training_evaluation.json") as f:
+        evaluation_methods = json.load(f)["methods"]
+
     t_start = time.perf_counter()
     scatter_points: list[dict[str, Any]] = []
     per_method_per_env: dict[str, dict[str, dict[str, Any]]] = {}
@@ -226,8 +227,8 @@ def main() -> int:
         if args.env_filter and env_label != args.env_filter:
             continue
         refs = env_block.get("refs", {})
-        floor = refs.get("regime_agnostic_ppo")
-        ceiling = refs.get("belief_ppo")
+        floor = evaluation_methods["regime_agnostic_ppo"]["evaluation_return_mean"]
+        ceiling = evaluation_methods["belief_ppo"]["evaluation_return_mean"]
         cells = env_block.get("cells", {})
         for method in PROBED_METHODS:
             cell = cells.get(method)
@@ -246,9 +247,10 @@ def main() -> int:
                 print(f"[probe] {experiment_name} FAILED: {e}", flush=True)
                 failed.append(experiment_name)
                 continue
-            gc_per_seed = _gap_closed_per_seed(
-                cell["per_seed_final_return"], floor, ceiling,
-            )
+            from scripts.m5r_refresh_probe_returns import evaluation_returns_for_seeds
+            evaluation_returns = evaluation_returns_for_seeds(
+                evaluation_methods, method, experiment_name, probe["seeds"])
+            gc_per_seed = _gap_closed_per_seed(evaluation_returns, floor, ceiling)
             for seed, m_acc, a_acc, m_kl, a_kl, m_ll, m_br, gc in zip(
                 probe["seeds"], probe["method_test_acc_per_seed"],
                 probe["analytical_test_acc_per_seed"],
@@ -384,6 +386,8 @@ def main() -> int:
         "decoupling_detected": decoupling,
         "decoupling_detected_kl": decoupling_kl,
     }
+    from scripts.m5r_refresh_probe_returns import refresh_probe
+    stats = refresh_probe(stats, evaluation_methods)
     with open(stats_path, "w") as f:
         json.dump(stats, f, indent=2)
     run.add_output(str(stats_path))

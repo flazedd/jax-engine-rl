@@ -77,6 +77,7 @@ def _evaluate_method(method_index: int, name: str, experiment: str) -> dict:
     return {
         "experiment": experiment,
         "n_trained_runs": len(seeds),
+        "seeds": seeds,
         "evaluation_episodes_per_run": N_EPISODES,
         "episode_length": EPISODE_LENGTH,
         "per_seed_evaluation_return": returns,

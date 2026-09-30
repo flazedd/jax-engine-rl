@@ -9,10 +9,7 @@ comparison on each diagnostic:
   - counterfactual belief swap, belief only and belief plus observation
     history.
 
-The test is TWO-SIDED. The RQ1 protocol pre-registers a one-sided hypernet >
-concat alternative for return, but these diagnostics are not return, and the
-two methods point in opposite directions here, so a fixed-direction test would
-foreclose the question it is meant to answer.
+All primary comparisons use independent-run, two-sided tests.
 
 Outputs:
   - results/M5R/final/m5r_diagnostic_tests.json
@@ -90,6 +87,8 @@ def main() -> int:
                 f"({payload['n_rollouts']}x{payload['rollout_length']}); "
                 "rerun it at the full budget before testing"
             )
+        if any(v.get("diagnostic_version") != 2 for v in payload["by_method"].values()):
+            raise RuntimeError(f"{fname}: stale belief substitution; rerun with actor-only RL2 intervention")
         sources[tag] = {
             k: np.asarray(v["per_seed_separation"], dtype=float)
             for k, v in payload["by_method"].items()
@@ -170,8 +169,8 @@ def main() -> int:
                 f"hyper={r['mean_hypernet']:.3f} concat={r['mean_concat']:.3f} "
                 f"delta={r['mean_paired_delta']:+.3f} "
                 f"CI[{r['delta_ci'][0]:+.3f},{r['delta_ci'][1]:+.3f}] "
-                f"p_holm={r['holm_corrected_p']:.4g} "
-                f"supported={r['supported']} ({r['direction']})",
+                f"p_holm={r.get('holm_corrected_p', float('nan')):.4g} "
+                f"supported={r.get('supported', 'uncorrected')} ({r['direction']})",
                 flush=True,
             )
 

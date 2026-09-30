@@ -9,18 +9,17 @@ possible at all shrink to whatever the policy visits in every regime.
 This diagnostic measures the belief-to-action map instead. The observation is
 held fixed and only the belief input is varied, so the question becomes: given
 the same situation, does this policy act differently when it believes it is in
-a different regime? Coverage is chosen rather than observed, so every method is
-scored on identical inputs, and steering never enters.
+a different regime? Each method supplies its own rollout-derived observation and belief pools.
+Inputs are held fixed across substitutions within a method, not across methods.
 
 The null is exact rather than empirical. A policy with no belief input, the
 regime-agnostic agent, cannot respond to a swapped belief and scores zero by
 construction.
 
 Belief substitution per method family:
-  - RL²      : the incoming GRU carry, which is the belief the policy reads
-               after folding in the observation.
+  - RL²      : the updated GRU state h_t read directly by the actor.
   - VariBAD  : the variational mean and log-variance handed to the policy.
-  - Belief / Oracle PPO : the trailing `n_regimes` entries of the observation.
+  - Belief / Oracle PPO : the explicitly located regime block in the observation.
   - Regime-agnostic / stacked-obs : no belief input, so the score is zero.
 
 Belief spaces differ across method families, so absolute values compare only
@@ -66,17 +65,41 @@ def action_probs_with_belief(
     bel_j = jnp.asarray(beliefs, dtype=jnp.float32)
 
     if family == "rl2":
-        # The policy reads the carry produced from (incoming carry, obs).
-        # Substituting the incoming carry is the belief swap: the GRU folds in
-        # the same observation either way, exactly as it does when acting.
+        # The collector records h_t AFTER the current encoder update. Evaluate
+        # only the actor: applying the GRU again would process obs_t twice.
+        from flax import linen as nn
+        from agents.modules.hypernet import Hypernet
         model = agent._model()
-        params = {"params": agent_state["params"]["params"]}
+        params = agent_state["params"]["params"]
 
-        def one(carry_i, obs_i):
-            _new_carry, logits, _value, _simplex = model.apply(params, carry_i, obs_i)
-            return logits
+        def dense(x, name):
+            layer = params[name]
+            return x @ layer["kernel"] + layer["bias"]
 
-        logits = jax.vmap(one)(bel_j, obs_j)
+        policy_belief = (jax.nn.softmax(dense(bel_j, "simplex_head"), axis=-1)
+                         if model.belief_simplex_head else bel_j)
+        policy_obs = model._policy_obs(obs_j)
+        if model.integration == "concat":
+            x = (jnp.concatenate([policy_obs, policy_belief], axis=-1)
+                 if model.concat_policy_reads_obs else policy_belief)
+            for i in range(model.policy_trunk_layers):
+                x = jnp.tanh(dense(x, f"Dense_{i + 1}"))
+            if model.belief_layernorm:
+                x = nn.LayerNorm().apply({"params": params["LayerNorm_0"]}, x)
+            logits = dense(x, f"Dense_{model.policy_trunk_layers + 1}")
+        elif model.integration == "hypernet":
+            hn = Hypernet(
+                target_obs_dim=model.policy_obs_dim or model.obs_size,
+                target_hidden=model.hypernet_target_hidden,
+                target_output_dim=model.n_actions,
+                hypernet_hidden=model.hypernet_hidden,
+                init_scale=model.hypernet_init_scale,
+                target_hidden_layers=model.policy_trunk_layers,
+            )
+            weights = hn.apply({"params": params["Hypernet_0"]}, policy_belief)
+            logits = jax.vmap(hn.apply_target)(weights, policy_obs)
+        else:
+            raise ValueError(f"unknown RL2 integration: {model.integration}")
 
     elif family == "varibad":
         if log_vars is None:

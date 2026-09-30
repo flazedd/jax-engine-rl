@@ -186,7 +186,8 @@ def _load_stacked_obs() -> dict | None:
     }}}
 
 
-def _draw_refs(ax, refs: dict, label_x: float | None = None) -> None:
+def _draw_refs(ax, refs: dict, label_x: float | None = None,
+               label_offsets: dict | None = None) -> None:
     """Add horizontal reference lines for floor / belief / oracle. If `label_x`
     is given (a data x-coordinate to the right of the bars), inline labels are
     placed there, left-aligned, as in the method-ladder figure."""
@@ -224,7 +225,9 @@ def _draw_refs(ax, refs: dict, label_x: float | None = None) -> None:
         ax.axhline(v, linestyle=style_map[key], color=color_map[key], linewidth=1.2,
                    zorder=2)
         if label_x is not None:
-            ax.text(label_x, v, f" {label}", va="center", ha="left", fontsize=7.5,
+            ax.annotate(f" {label}", (label_x, v),
+                    xytext=(0, (label_offsets or {}).get(key, 0)), textcoords="offset points",
+                    va="center", ha="left", fontsize=7.5,
                     color="#444444", zorder=5, clip_on=False,
                     bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0))
 
@@ -563,21 +566,17 @@ def _draw_posterior_vs_performance(ax, classifier: str, metric: str,
         ax.set_xlabel(f"Excess KL to the analytical posterior{suffix}")
         ax.set_xlim(-0.02, 0.70)
         ax.axvline(0.0, color=PALETTE["analytical"], linewidth=1.2,
-                   linestyle="--", label="Analytical posterior")
+                   linestyle="--", label="Analytical-input reference")
     else:
         ax.set_xlabel("Regime decodability against the analytical posterior"
                       + suffix)
         ax.set_xlim(0.40, 1.02)
         ax.axvline(1.0, color=PALETTE["analytical"], linewidth=1.2,
-                   linestyle="--", label="Analytical posterior")
-    ax.set_ylabel("Gap-closed fraction")
+                   linestyle="--", label="Analytical-input reference")
+    ax.set_ylabel("Reference-gap fraction")
     ax.axhline(0.0, color="#555555", linewidth=1.0,
                label="Regime-agnostic-PPO")
-    # The pooled correlation is deliberately not annotated. It is a
-    # between-method relation that the within-method clouds contradict, and a
-    # coefficient rendered on the chart carries no interval, no seed count and
-    # no test, so it reads as a stronger claim than the figure supports. The
-    # value stays in the probe JSON for anyone who needs it.
+    # Correlations and their intervals are reported in the thesis table.
     return True
 
 
@@ -866,7 +865,7 @@ def _draw_probe_per_t(ax, classifier: str, env_label: str = MEDIUM_ENV) -> bool:
             # curve starts at the random-guess baseline with zero observations.
             ana_aligned = np.concatenate(([1.0 / 3.0], ana[:-1]))
             ax.plot(ts, ana_aligned, color=PALETTE["analytical"],
-                    linestyle="-", linewidth=2.8, label="Analytical posterior")
+                    linestyle="-", linewidth=2.8, label="Analytical posterior\n(RL² concat rollouts)")
             analytical_drawn = True
 
     ax.axhline(1.0 / 3, color="#999999", linestyle=":", linewidth=1.0,
@@ -940,22 +939,18 @@ def _load_probe_for_per_t(classifier: str) -> dict | None:
     return _load_probe(classifier)
 
 
-def _paired_delta_ci(delta_ST: np.ndarray, n_boot: int = 10_000) -> tuple:
-    """Mean paired difference per timestep and its bootstrap CI.
-
-    Resamples seeds, not timesteps: one seed contributes its whole curve to a
-    resample, which is what pairing across seeds means here.
-    """
-    n_seeds = delta_ST.shape[0]
+def _independent_delta_ci(hyper: np.ndarray, concat: np.ndarray,
+                          n_boot: int = 10_000) -> tuple:
+    """Difference of means with independent whole-run curve resampling."""
     rng = np.random.default_rng(0)
-    means = np.empty((n_boot, delta_ST.shape[1]))
-    step = 2000
-    for lo_i in range(0, n_boot, step):
-        idx = rng.integers(0, n_seeds, size=(min(step, n_boot - lo_i), n_seeds))
-        means[lo_i:lo_i + idx.shape[0]] = delta_ST[idx].mean(axis=1)
-    return (delta_ST.mean(axis=0),
-            np.percentile(means, 2.5, axis=0),
-            np.percentile(means, 97.5, axis=0))
+    means = np.empty((n_boot, hyper.shape[1]))
+    for start in range(0, n_boot, 1000):
+        size = min(1000, n_boot-start)
+        ih = rng.integers(len(hyper), size=(size,len(hyper)))
+        ic = rng.integers(len(concat), size=(size,len(concat)))
+        means[start:start+size] = hyper[ih].mean(axis=1)-concat[ic].mean(axis=1)
+    return (hyper.mean(axis=0)-concat.mean(axis=0),
+            np.percentile(means,2.5,axis=0), np.percentile(means,97.5,axis=0))
 
 
 # The architecture contrast is the plotted quantity here, so a line identifies a
@@ -981,7 +976,7 @@ def _draw_probe_delta_per_t(
     ax, classifier: str, env_label: str = MEDIUM_ENV, metric: str = "acc",
 ) -> bool:
     """Draw hypernetwork-minus-concatenation belief quality at each
-    within-episode timestep, paired across seeds, for both methods."""
+    within-episode timestep, with independent runs, for both methods."""
     key, _ = _PER_T_METRIC[metric]
     probe = _load_probe_for_per_t(classifier)
     if probe is None:
@@ -1007,7 +1002,7 @@ def _draw_probe_delta_per_t(
             print(f"[m5r_plots] skip {method}: unpaired seed counts "
                   f"{h.shape[0]} vs {c.shape[0]}")
             continue
-        mean, lo, hi = _paired_delta_ci(h - c)
+        mean, lo, hi = _independent_delta_ci(h, c)
         ts = np.arange(mean.shape[0])
         ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
                 label=label, linewidth=2.2, linestyle=ls)
@@ -1030,13 +1025,13 @@ def _draw_probe_delta_per_t(
 
 
 def plot_m5r_probe_delta_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
-    """Paired architecture contrast in belief quality across the episode: both
+    """Architecture contrast in belief quality across the episode: both
     metrics by row, both probe families by column.
 
     The levels figure plots four variants against each other, where the
     method-to-method separation dominates the architecture contrast the
     comparison actually tests. This plots that contrast directly, with the
-    across-seed pairing the statistical protocol uses. The divergence row comes
+    independent run resampling the statistical protocol uses. The divergence row comes
     first because it is the primary metric, and it runs the other way round:
     a negative difference favours the hypernetwork there.
     """
@@ -1121,7 +1116,7 @@ def _draw_probe_kl_levels_per_t(
         if per_seed.shape[0] > 1:
             rng = np.random.default_rng(0)
             idx = rng.integers(0, per_seed.shape[0],
-                               size=(1000, per_seed.shape[0]))
+                               size=(10_000, per_seed.shape[0]))
             boot = per_seed[idx].mean(axis=1)
             lo = np.percentile(boot, 2.5, axis=0)
             hi = np.percentile(boot, 97.5, axis=0)
@@ -1134,7 +1129,7 @@ def _draw_probe_kl_levels_per_t(
             ax.plot(np.arange(ana.shape[0]),
                     _smooth_curve(ana, smoothing_window),
                     color=_ANALYTICAL_COLOR, linestyle="-", linewidth=2.6,
-                    label="Analytical posterior residual")
+                    label="Analytical residual\n(RL² concat rollouts)")
             analytical_drawn = True
         drew = True
 
@@ -1174,7 +1169,7 @@ def _draw_probe_acc_levels_per_t(
         if per_seed.shape[0] > 1:
             rng = np.random.default_rng(0)
             idx = rng.integers(0, per_seed.shape[0],
-                               size=(1000, per_seed.shape[0]))
+                               size=(10_000, per_seed.shape[0]))
             boot = per_seed[idx].mean(axis=1)
             ax.fill_between(
                 ts,
@@ -1185,7 +1180,7 @@ def _draw_probe_acc_levels_per_t(
             ana = np.asarray(m["analytical_per_t_test_acc_mean"])
             ax.plot(np.arange(ana.shape[0]), _smooth_curve(ana, smoothing_window),
                     color=_ANALYTICAL_COLOR, linestyle="-", linewidth=2.6,
-                    label="Analytical posterior")
+                    label="Analytical posterior\n(RL² concat rollouts)")
             analytical_drawn = True
         drew = True
 
@@ -1263,7 +1258,7 @@ def plot_m5r_probe_kl_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None
     _probe_levels_figure(
         out_path, _draw_probe_kl_levels_per_t,
         "KL to the analytical posterior",
-        ["Analytical posterior residual"], env_label,
+        ["Analytical residual\n(RL² concat rollouts)"], env_label,
     )
 
 
@@ -1273,7 +1268,7 @@ def plot_m5r_probe_acc_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> Non
     _probe_levels_figure(
         out_path, _draw_probe_acc_levels_per_t,
         "Probe test accuracy",
-        ["Analytical posterior", "Random guess"], env_label,
+        ["Analytical posterior\n(RL² concat rollouts)", "Random guess"], env_label,
     )
 
 
@@ -1309,7 +1304,7 @@ def plot_m5r_probe_accuracy_since_change(
                 )
                 ax.plot(x, np.nanmean(analytical, axis=0),
                         color=_ANALYTICAL_COLOR, linewidth=2.6,
-                        label="Analytical posterior")
+                        label="Analytical posterior\n(RL² concat rollouts)")
                 analytical_drawn = True
             drew_any = True
         ax.axhline(1.0 / 3.0, color="#999999", linestyle=":",
@@ -1329,7 +1324,7 @@ def plot_m5r_probe_accuracy_since_change(
     for handle, label in zip(*axes[0].get_legend_handles_labels()):
         handles.setdefault(label, handle)
     order = [_VARIANT_LEVEL_LABEL[cell] for cell in CELLS]
-    order += ["Analytical posterior", "Random guess"]
+    order += ["Analytical posterior\n(RL² concat rollouts)", "Random guess"]
     shown = [label for label in order if label in handles]
     fig.legend([handles[label] for label in shown], shown, loc="lower center",
                ncol=3, fontsize=12, bbox_to_anchor=(0.5, 0.0), frameon=True,
@@ -1379,10 +1374,10 @@ def _diagnostic_separation_per_seed(diagnostic: str) -> dict[str, np.ndarray] | 
 def plot_m5r_diagnostic_separation(
     out_path: Path, diagnostic: str = "action",
 ) -> None:
-    """Per-seed separation score of each variant, paired within seed.
+    """Per-run separation score of each variant.
 
     One point per run, the mean of each variant as a bar, and
-    the reference levels behind them. The table reports the paired difference;
+    the reference levels behind them. The table reports the independent difference in means;
     this shows the level each variant reaches and how far it sits from the
     Belief-PPO reference, which a difference alone cannot say.
     """
@@ -1404,14 +1399,7 @@ def plot_m5r_diagnostic_separation(
             continue
         x_c, x_h = positions[f"{method}_concat"], positions[f"{method}_hypernet"]
         jitter = rng.uniform(-0.09, 0.09, size=c.shape[0])
-        # No segment joining a seed's two points. The count they carried is a
-        # column of the diagnostics table, and the shape of each cloud is
-        # legible from the points alone; twenty crossing lines per method were
-        # obscuring it.
-        rising = h > c
-        ax.text((x_c + x_h) / 2, 1.005,
-                f"{int(rising.sum())} of {c.shape[0]} seeds rise",
-                ha="center", va="bottom", fontsize=9, color="#444444")
+        # Independent run clouds; numeric seed labels do not define pairs.
         for key, vals in ((f"{method}_concat", c), (f"{method}_hypernet", h)):
             x = positions[key]
             ax.scatter(x + jitter, vals, s=26, color=_VARIANT_COLOR[key],
@@ -1422,9 +1410,12 @@ def plot_m5r_diagnostic_separation(
     refs = {k: float(np.nanmean(per_seed[k]))
             for k in ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo")
             if k in per_seed}
-    refs["exact_full_information"] = _exact_full_information_diagnostics()[diagnostic]
+    if diagnostic == "action":
+        refs["exact_full_information"] = _exact_full_information_diagnostics()[diagnostic]
     ax.set_xlim(-0.6, 5.1)
-    _draw_refs(ax, refs, label_x=4.05)
+    _draw_refs(ax, refs, label_x=4.05,
+               label_offsets=({"exact_full_information": 5, "oracle_ppo": -4}
+                              if diagnostic == "action" else None))
     ax.set_xticks(list(positions.values()))
     ax.set_xticklabels(["RL²\nConcat", "RL²\nHypernet",
                         "VariBAD\nConcat", "VariBAD\nHypernet"], fontsize=11)

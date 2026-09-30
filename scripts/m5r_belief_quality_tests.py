@@ -16,9 +16,8 @@ comparisons:
   * ``method_test_acc`` — decodability, top-1 accuracy. Higher is better.
 
 Both are read from the *linear* probe, which is the main instrument. The MLP
-probe and the two proper scores (log-loss, Brier) are robustness checks and are
-deliberately left uncorrected: they are reported next to these results but no
-claim rests on them alone.
+probe is corrected as its own four-test family. The two proper scores
+(log-loss, Brier) are additional, uncorrected robustness checks.
 
 Reads:
   results/analysis/m5r_posterior_vs_performance.json
@@ -60,7 +59,7 @@ METRICS = [
     ("method_test_acc", "higher"),
 ]
 # The proper scores of the protocol. They are computed on both probe families
-# and left uncorrected, as is every metric read from the MLP probe.
+# and left uncorrected; the primary MLP metrics have their own corrected set.
 ROBUSTNESS_METRICS = [
     ("method_log_loss", "lower"),
     ("method_brier", "lower"),

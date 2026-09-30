@@ -330,7 +330,7 @@ def train_probe(
         clf = make_pipeline(
             StandardScaler(),
             MLPClassifier(
-                hidden_layer_sizes=(64,), max_iter=200, alpha=0.01,
+                hidden_layer_sizes=(64,), activation="relu", max_iter=200, alpha=0.01,
                 random_state=seed,
             ),
         )

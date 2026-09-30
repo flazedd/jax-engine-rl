@@ -101,3 +101,64 @@ running the programme.
 Each training directory records the resolved configuration and results for every seed. Exact
 floating-point values may differ across hardware, but the same archived code, configuration, and
 random seeds reproduce the stated experimental procedure.
+
+## Corrections after the September 2026 consistency audit
+
+The original analysis revision `3af71feedf24` predates these corrections. Use the
+updated code for the revised thesis. Training checkpoints and fresh evaluation
+returns are unchanged. The audit changed the probe/return join, correlation
+bootstrap, RL² substitution intervention, diagnostic presentation, and supporting
+text. The exact corrected files and their hashes are recorded in
+`results/analysis/thesis_correction_manifest.json`.
+
+The evaluator now records `seeds` beside `per_seed_evaluation_return`. Probe scores
+must be joined to returns by **experiment and seed**, never by array position.
+The legacy evaluator sorted checkpoint filenames lexically, whereas archived
+training-return arrays used numeric seed order. The explicit migration below
+recovers the former ordering from the complete set of archived checkpoints:
+
+```bash
+uv run python -m scripts.m5r_refresh_probe_returns --migrate-legacy-seeds
+```
+
+Use `scripts.m5r_refresh_probe_returns` without the flag for subsequent refreshes.
+This reuses the saved probe fits and joins them to fresh frozen-policy evaluation
+returns. It also refreshes cached correlations. It does not retrain agents or
+refit classifiers. Both pooled and within-variant correlation intervals resample
+independent runs within each variant, preserving each run's error/return pair.
+Within-variant means are recomputed inside each resample.
+
+The RL² collector records the state after the current encoder update. The corrected
+substitution diagnostic evaluates the actor directly from that state, without a
+second GRU update. Rerun it at the full 64 episodes per regime and all 20 seeds:
+
+```bash
+uv run python -m scripts.m5r_belief_swap
+uv run python -m scripts.m5r_diagnostic_tests
+uv run python -m scripts.m5r_hypothesis_tests
+```
+
+If optional history-channel substitution files exist, regenerate them using
+`--swap-history` and `--swap-history --hold-belief-fixed` before running the
+diagnostic tests. Stale substitution files are rejected rather than mixed with
+the corrected intervention. The primary score averages covered inventory levels
+without weighting. The exact-policy line is omitted from this figure because it
+used a different time/action aggregation.
+
+Regenerate the plots and tables, setting `THESIS_FIG_ROOT` to the thesis figure
+directory if publishing to a separate checkout:
+
+```bash
+uv run python -m plotting.m5r_plots
+uv run python -m scripts.make_tables
+uv run pytest -q
+uv run python -m scripts.thesis_contract --strict --thesis-root /path/to/thesis
+uv run python -m scripts.write_thesis_correction_manifest
+```
+
+The manually typeset diagnostic and correlation rows must be updated to the new
+analysis outputs; the final command checks them. The revised correlations retain
+a modest negative association within variants. The previous claim that the
+association disappears is withdrawn. Probe comparisons concern the tested
+representation (VariBAD's posterior mean, not its full mean/variance input), and
+each method supplies its own trajectories.

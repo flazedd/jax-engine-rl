@@ -2,9 +2,8 @@
 
 Three families, mapped to the three research questions:
 
-Family A (4 environments): the gap decomposition is non-degenerate at every
-  evaluated environment. We require regime-agnostic < Belief-PPO <= Oracle-PPO
-  with non-overlapping bootstrap CIs on regime-agnostic and Oracle-PPO.
+Family A records the descriptive ordering of the three trained references on
+  fresh evaluation episodes in the selected environment.
 
 Family B compares hypernetwork and concatenation conditioning for RL² and
   VariBAD. It uses the frozen policies' returns on fresh evaluation episodes,
@@ -12,11 +11,9 @@ Family B compares hypernetwork and concatenation conditioning for RL² and
   random-label permutation test. The two p-values are adjusted together with
   the Holm procedure.
 
-Family C (1 confidence interval): pooled Pearson correlation between
-  linear-probe regime-decoding accuracy (in posterior_error form) and
-  gap_closed_vs_oracle, across all (variant, env, seed) probe points.
-  Decoupling supported iff the 95% bootstrap CI is contained in
-  (-0.30, +0.30). Re-run with the MLP probe as a robustness check.
+Family C correlates excess forward KL with the Belief-PPO reference-gap
+fraction from fresh evaluation returns joined by seed. It reports pooled and
+within-variant relationships, with independent stratified run bootstraps.
 
 Outputs:
   results/M5R/final/m5r_hypothesis_tests.json
@@ -121,38 +118,16 @@ def _bootstrap_ci_mean(values: list[float]) -> tuple[float, float]:
     )
 
 
-def _check_family_a(per_cell_env: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Family A: gap decomposition non-degenerate per env.
-
-    Reads M3/M6 reference numbers from per_cell_env.json (which carries them
-    in the per_env.refs blocks). For E_final and the M6 sweep cells we have
-    per-seed seeds available via the M3/M6 stats files; here we use the
-    means since we did not reload per-seed data. The non-overlap check is
-    therefore a point-estimate ordering check rather than a CI test, which
-    is what M3/M6 already verified.
-    """
-    out: dict[str, dict[str, Any]] = {}
-    for env in ENVS:
-        block = per_cell_env.get("per_env", {}).get(env, {})
-        refs = block.get("refs", {})
-        floor = refs.get("regime_agnostic_ppo")
-        belief = refs.get("belief_ppo")
-        oracle = refs.get("oracle_ppo")
-        if floor is None or belief is None or oracle is None:
-            out[env] = {"error": "missing reference"}
-            continue
-        ordering_ok = (floor < belief) and (belief <= oracle + 1e-6)
-        # CIs were established in M3 / M6; we just record the means here.
-        out[env] = {
-            "floor": floor,
-            "belief": belief,
-            "oracle": oracle,
-            "ordering_holds": bool(ordering_ok),
-            "compromise_cost": belief - floor,
-            "inference_cost": oracle - belief,
-            "supported": bool(ordering_ok),
-        }
-    return out
+def _check_family_a(methods: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Reference ordering from the same fresh evaluation used for final returns."""
+    floor = methods["regime_agnostic_ppo"]["evaluation_return_mean"]
+    belief = methods["belief_ppo"]["evaluation_return_mean"]
+    oracle = methods["oracle_ppo"]["evaluation_return_mean"]
+    return {MEDIUM_ENV: {"floor": floor, "belief": belief, "oracle": oracle,
+            "ordering_holds": bool(floor < belief <= oracle),
+            "compromise_cost": belief-floor, "inference_cost": oracle-belief,
+            "supported": bool(floor < belief <= oracle),
+            "source": "fresh post-training evaluation; descriptive ordering"}}
 
 
 def _per_seed_evaluation(methods: dict[str, Any], name: str) -> list[float]:
@@ -205,52 +180,40 @@ def _run_family_b(methods: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _within_variant_correlation(points: list[dict[str, Any]], error_key: str,
-                                n_boot: int = N_BOOT,
-                                alpha: float = ALPHA) -> dict[str, Any]:
-    """The belief-quality against return relation with the variant held fixed.
+def _stratified_correlation(points: list[dict[str, Any]], error_key: str,
+                            centre: bool = False, n_boot: int = N_BOOT,
+                            alpha: float = ALPHA) -> dict[str, Any]:
+    """Resample independent runs within each variant, keeping each x/y pair.
 
-    The pooled correlation over every run is a between-variant quantity: it is
-    reproduced almost exactly by the four variant means, so treating its eighty
-    points as independent overstates the precision. Centring both variables
-    within variant removes that between-variant variation and leaves the
-    question a reader actually asks, whether a run with a better belief earns
-    more than its siblings. The bootstrap resamples whole seeds, because the
-    same seed appears once in every variant.
+    Numeric seed labels do not pair independently trained architectures.
+    Re-estimate variant means in every centred bootstrap sample.
     """
-    by_variant: dict[str, dict[int, tuple[float, float]]] = {}
-    for p in points:
-        by_variant.setdefault(p["method"], {})[int(p["seed"])] = (
-            float(p[error_key]), float(p["gap_closed"]))
-    variants = sorted(by_variant)
-    if len(variants) < 2:
-        return {"n_seeds": 0, "correlation": float("nan"),
-                "ci": [float("nan"), float("nan")]}
-    seeds = sorted(set.intersection(*(set(v) for v in by_variant.values())))
-    xs = np.array([[by_variant[v][s][0] for v in variants] for s in seeds])
-    ys = np.array([[by_variant[v][s][1] for v in variants] for s in seeds])
-    xc = xs - xs.mean(axis=0, keepdims=True)
-    yc = ys - ys.mean(axis=0, keepdims=True)
-
-    def _r(a: np.ndarray, b: np.ndarray) -> float:
-        if np.std(a) == 0 or np.std(b) == 0:
-            return 0.0
-        return float(np.corrcoef(a.ravel(), b.ravel())[0, 1])
-
+    groups = [np.asarray([(p[error_key], p["gap_closed"]) for p in points
+                          if p["method"] == method], dtype=float)
+              for method in sorted({p["method"] for p in points})]
+    def correlation(samples):
+        if centre:
+            samples = [a - a.mean(axis=0) for a in samples]
+        a = np.concatenate(samples)
+        if np.any(a.std(axis=0) == 0):
+            return float("nan")
+        return float(np.corrcoef(a.T)[0, 1])
     rng = np.random.default_rng(0)
-    boot = np.array([
-        _r(xc[idx], yc[idx])
-        for idx in rng.integers(0, len(seeds), size=(n_boot, len(seeds)))
-    ])
-    r_hat = _r(xc, yc)
-    lo, hi = np.percentile(boot, [100 * alpha / 2, 100 * (1 - alpha / 2)])
-    return {
-        "n_seeds": len(seeds), "n_variants": len(variants),
-        "correlation": r_hat, "r_squared": r_hat ** 2,
-        "ci": [float(lo), float(hi)],
-        "decoupling_supported": bool(lo > -DECOUPLING_THRESHOLD
-                                     and hi < DECOUPLING_THRESHOLD),
-    }
+    boot = [correlation([g[rng.integers(len(g), size=len(g))] for g in groups])
+            for _ in range(n_boot)]
+    r = correlation(groups)
+    lo, hi = np.nanpercentile(boot, [100*alpha/2, 100*(1-alpha/2)])
+    return {"n": sum(map(len, groups)), "n_variants": len(groups),
+            "n_seeds": min(map(len, groups)), "correlation": r,
+            "r_squared": r*r, "ci": [float(lo), float(hi)],
+            "bootstrap": ("independent runs within variant; paired x/y"
+                          + ("; recentered per resample" if centre else "")),
+            "decoupling_supported": bool(lo > -DECOUPLING_THRESHOLD and hi < DECOUPLING_THRESHOLD)}
+
+
+def _within_variant_correlation(points: list[dict[str, Any]], error_key: str,
+                                n_boot: int = N_BOOT, alpha: float = ALPHA) -> dict[str, Any]:
+    return _stratified_correlation(points, error_key, centre=True, n_boot=n_boot, alpha=alpha)
 
 
 def _family_c_from_probe(probe_path: Path) -> dict[str, Any] | None:
@@ -272,14 +235,14 @@ def _family_c_from_probe(probe_path: Path) -> dict[str, Any] | None:
         return (not any(np.isnan(ci))
                 and ci[0] > -DECOUPLING_THRESHOLD and ci[1] < DECOUPLING_THRESHOLD)
 
-    overall = _bootstrap_correlation_ci(arr_pe, arr_gc)
+    overall = _stratified_correlation(points, error_key)
     decoupling_supported = _within(overall["ci"])
     by_method: dict[str, list[dict[str, Any]]] = {}
     for p in points:
         by_method.setdefault(p["method"], []).append(p)
     per_method = {}
     for method, pts in by_method.items():
-        pe = np.asarray([p["posterior_error"] for p in pts], dtype=float)
+        pe = np.asarray([p[error_key] for p in pts], dtype=float)
         gc = np.asarray([p["gap_closed"] for p in pts], dtype=float)
         ci = _bootstrap_correlation_ci(pe, gc)
         # An equivalence test needs an interval inside the threshold, which at
@@ -325,7 +288,7 @@ def main() -> int:
     # Family A
     print("[m5r_tests] Family A: gap decomposition non-degenerate per env",
           flush=True)
-    family_a = _check_family_a(per_cell_env)
+    family_a = _check_family_a(evaluation_methods)
     a_supported = sum(1 for r in family_a.values() if r.get("supported"))
     a_total = len(family_a)
     print(f"[m5r_tests]   {a_supported}/{a_total} supported", flush=True)

@@ -257,15 +257,15 @@ def build_plan() -> list[Stage]:
                   final / "m5r_post_training_evaluation.json",
                   depends_on=medium_training, est=30),
         # 500 rollouts x 128 steps = the 64,000-timestep probe buffer the
-        # evaluation protocol specifies; the script default is smaller.
+        # evaluation protocol specifies; matching the script default.
         _analysis("analysis:posterior_probe", "medium", "scripts.m5r_posterior_probe",
                   final / "m5r_posterior_vs_performance.json",
                   args=["--n-rollouts", "500"],
-                  depends_on=medium_training, est=30),
+                  depends_on=["analysis:final_eval", "analysis:post_training_evaluation"], est=30),
         _analysis("analysis:posterior_probe_mlp", "medium", "scripts.m5r_posterior_probe",
                   final / "m5r_posterior_vs_performance_mlp.json",
                   args=["--n-rollouts", "500", "--classifier", "mlp"],
-                  depends_on=medium_training, est=30),
+                  depends_on=["analysis:final_eval", "analysis:post_training_evaluation"], est=30),
         # The third comparison set of the protocol: the probe metrics are
         # formally tested, corrected apart from returns and diagnostics.
         _analysis("analysis:belief_quality_tests", "medium",

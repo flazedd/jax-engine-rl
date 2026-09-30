@@ -105,18 +105,40 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
                 findings.append({"kind": "thesis_table_drift", "table": "stacked_baseline",
                                  "row": label, "expected_fragment": row})
 
-    expected_fragments = {
-        "learning_speed": [
-            "RL\\textsuperscript{2} & $238.3$ & $127.7$ & $-110.6$ & $[-139,\\ -80]$",
-            "VariBAD               & $718.6$ & $208.2$ & $-510.4$ & $[-692,\\ -318]$",
-        ],
-        "diagnostics": [
-            "Policy response      & RL\\textsuperscript{2} & $+0.087$ & $[-0.053,\\ +0.218]$ & $0.313$",
-            "Policy response      & VariBAD               & $+0.116$ & $[+0.052,\\ +0.192]$ & $<0.001$",
-            "Belief substitution  & RL\\textsuperscript{2} & $+0.071$ & $[-0.026,\\ +0.159]$ & $0.313$",
-            "Belief substitution  & VariBAD               & $+0.206$ & $[+0.112,\\ +0.305]$ & $<0.001$",
-        ],
-    }
+    expected_fragments = {"learning_speed": [], "diagnostics": [], "decoupling": []}
+    speed = _load(root / "analysis" / "m5r_time_to_threshold_tests.json")
+    if speed:
+        from decimal import Decimal, ROUND_HALF_UP
+        def rounded(value, digits):
+            return format(Decimal(str(round(value, 10))).quantize(Decimal(10)**-digits,
+                          rounding=ROUND_HALF_UP), f".{digits}f")
+        for r in speed["comparisons"]:
+            label = "RL\\textsuperscript{2}" if r["method"] == "rl2" else "VariBAD"
+            lo,hi = r["delta_ci"]
+            expected_fragments["learning_speed"].append(
+                f"{label} & ${rounded(r['concat_mean_iterations'],1)}$ & "
+                f"${rounded(r['hypernet_mean_iterations'],1)}$ & "
+                f"${rounded(r['mean_difference'],1)}$ & $[{lo:.0f},\\ {hi:.0f}]$")
+    diagnostics = _load(root / "analysis" / "m5r_diagnostic_tests.json")
+    if diagnostics:
+        for tag,label in [("locked_regime_action_distribution", "Policy response"),
+                          ("belief_swap_belief_only", "Belief substitution")]:
+            for method, r in diagnostics["results"][tag].items():
+                method_label = "RL\\textsuperscript{2}" if method == "RL2" else method
+                lo,hi = r["delta_ci"]
+                pvalue = r["holm_corrected_p"]
+                ptext = "<0.001" if pvalue < 0.001 else f"{pvalue:.3f}"
+                expected_fragments["diagnostics"].append(
+                    f"{label} & {method_label} & ${r['mean_difference']:+.3f}$ & "
+                    f"$[{lo:+.3f},\\ {hi:+.3f}]$ & ${ptext}$")
+    hypotheses = _load(root / "analysis" / "m5r_hypothesis_tests.json")
+    if hypotheses:
+        for classifier in ("logistic", "mlp"):
+            for key in ("overall", "within_variant"):
+                r = hypotheses["family_c"][classifier][key]
+                lo,hi = r["ci"]
+                expected_fragments["decoupling"].append(
+                    f"${r['correlation']:.3f}$ & $[{lo:.3f},\\ {hi:.3f}]$")
     for table, fragments in expected_fragments.items():
         for fragment in fragments:
             if " ".join(fragment.split()) not in normalised:
@@ -210,6 +232,34 @@ def audit(root: Path, thesis_root: Path | None = None) -> dict:
                     "kind": "probe_metrics_absent", "missing": absent,
                     "note": "the belief-quality set cannot be tested without these",
                 })
+
+    # Explicitly verify the seed join, rather than trusting positional arrays.
+    evaluation = _load(final / "m5r_post_training_evaluation.json")
+    if evaluation:
+        methods = evaluation["methods"]
+        floor = methods["regime_agnostic_ppo"]["evaluation_return_mean"]
+        gap = methods["belief_ppo"]["evaluation_return_mean"] - floor
+        for suffix in ("", "_mlp"):
+            data = _load(final / f"m5r_posterior_vs_performance{suffix}.json")
+            if not data:
+                continue
+            for point in data["scatter_points"]:
+                result = methods[point["method"]]
+                ids = result.get("seeds", [])
+                values = result["per_seed_evaluation_return"]
+                if len(ids) != len(values) or len(set(ids)) != len(ids):
+                    findings.append({"kind":"missing_or_duplicate_evaluation_seeds", "method":point["method"]})
+                    break
+                by_seed = dict(zip(ids, values))
+                expected = (by_seed[point["seed"]]-floor)/gap
+                if (point["experiment_name"] != result["experiment"] or
+                        not np.isclose(point["gap_closed"],expected,rtol=0,atol=1e-12)):
+                    findings.append({"kind":"probe_return_seed_join", "method":point["method"],
+                                     "seed":point["seed"], "classifier":suffix or "linear"})
+    substitution = _load(final / "m5r_belief_swap.json")
+    if substitution and any(v.get("diagnostic_version") != 2
+                            for v in substitution["by_method"].values()):
+        findings.append({"kind":"stale_belief_substitution", "required_version":2})
 
     # --- the budget --------------------------------------------------------
     for experiment in ("m5r_ref_regime_agnostic_e9", "m5r_final_rl2_hypernet_e9"):

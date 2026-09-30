@@ -58,8 +58,9 @@ class Hypernet(nn.Module):
         )(belief)
         h = nn.tanh(h)
         # Final-layer init scale is exposed because it is the integration-care
-        # analog of LayerNorm on the concat side: 0.0 = Beck et al. zero-init
-        # (all beliefs map to a single shared target at start); 0.01 = current
+        # analog of LayerNorm on the concat side: 0.0 generates an all-zero target with the default zero biases;
+        # this is NOT Beck et al. Bias-HyperInit, which initializes the biases
+        # as a normally initialized target. 0.01 = current
         # default; larger = more belief-driven variance at init.
         return nn.Dense(
             self.target_param_count(),

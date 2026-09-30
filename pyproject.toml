@@ -1,7 +1,7 @@
 [project]
 name = "jax-engine-rl"
 version = "0.1.0"
-description = "Belief-conditioned meta-RL for regime-switching market making (TU Delft MSc thesis)"
+description = "Research code for Trading in the Dark: Belief-Conditioned Meta-Reinforcement Learning for Regime-Switching Market Making"
 readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [

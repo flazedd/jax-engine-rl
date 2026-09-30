@@ -23,7 +23,10 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+
 from evaluation import protocol as P
+from evaluation.metrics import bootstrap_independent_mean_ci
 from utils.paths import results_root
 from utils.script_output import ScriptRun
 
@@ -65,7 +68,70 @@ def _check_comparisons(payload, source: str, findings: list[dict]) -> int:
     return checked
 
 
-def audit(root: Path) -> dict:
+def _signed(value: float, digits: int = 2) -> str:
+    return f"{value:+.{digits}f}"
+
+
+def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[dict]) -> None:
+    """Check manually typeset result rows against their analysis artifacts."""
+    results_path = thesis_root / "sections" / "results.tex"
+    try:
+        text = results_path.read_text()
+    except OSError:
+        findings.append({"kind": "missing_thesis_source", "path": str(results_path)})
+        return
+    normalised = " ".join(text.split())
+
+    post = _load(root / "analysis" / "m5r_post_training_evaluation.json")
+    if post is not None:
+        methods = post["methods"]
+        stacked = np.asarray(methods["stacked_obs_ppo"]["per_seed_evaluation_return"], dtype=float)
+        floor = float(methods["regime_agnostic_ppo"]["evaluation_return_mean"])
+        belief = float(methods["belief_ppo"]["evaluation_return_mean"])
+        gap = belief - floor
+        labels = {
+            "Regime-agnostic PPO": "regime_agnostic_ppo",
+            "VariBAD concat": "varibad_concat",
+            "VariBAD hypernet": "varibad_hypernet",
+            "RL\\textsuperscript{2} concat": "rl2_concat",
+            "RL\\textsuperscript{2} hypernet": "rl2_hypernet",
+        }
+        for label, key in labels.items():
+            other = np.asarray(methods[key]["per_seed_evaluation_return"], dtype=float)
+            mean, lo, hi = bootstrap_independent_mean_ci(stacked, other)
+            row = (f"{label} & ${_signed(mean)}$ & $[{_signed(lo)},\\ {_signed(hi)}]$ "
+                   f"& ${_signed(mean / gap)}$")
+            if row not in normalised:
+                findings.append({"kind": "thesis_table_drift", "table": "stacked_baseline",
+                                 "row": label, "expected_fragment": row})
+
+    expected_fragments = {
+        "learning_speed": [
+            "RL\\textsuperscript{2} & $238.3$ & $127.7$ & $-110.6$ & $[-139,\\ -80]$",
+            "VariBAD               & $718.6$ & $208.2$ & $-510.4$ & $[-692,\\ -318]$",
+        ],
+        "diagnostics": [
+            "Policy response      & RL\\textsuperscript{2} & $+0.087$ & $[-0.053,\\ +0.218]$ & $0.313$",
+            "Policy response      & VariBAD               & $+0.116$ & $[+0.052,\\ +0.192]$ & $<0.001$",
+            "Belief substitution  & RL\\textsuperscript{2} & $+0.071$ & $[-0.026,\\ +0.159]$ & $0.313$",
+            "Belief substitution  & VariBAD               & $+0.206$ & $[+0.112,\\ +0.305]$ & $<0.001$",
+        ],
+    }
+    for table, fragments in expected_fragments.items():
+        for fragment in fragments:
+            if " ".join(fragment.split()) not in normalised:
+                findings.append({"kind": "thesis_table_drift", "table": table,
+                                 "expected_fragment": fragment})
+
+    appendix_path = thesis_root / "sections" / "appendix.tex"
+    appendix = " ".join(appendix_path.read_text().split()) if appendix_path.exists() else ""
+    for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass", "$96.4\\%$ of the exact finite-horizon optimum"):
+        if fragment not in appendix:
+            findings.append({"kind": "thesis_table_drift", "table": "environment_validation",
+                             "expected_fragment": fragment})
+
+
+def audit(root: Path, thesis_root: Path | None = None) -> dict:
     findings: list[dict] = []
     # Analyses moved out of the retired M5R/final layout; the audit was
     # looking for its inputs where nothing has been written since.
@@ -160,6 +226,17 @@ def audit(root: Path) -> dict:
                                  "field": field, "expected": expected,
                                  "found": found})
 
+    if thesis_root is not None:
+        _check_thesis_result_tables(thesis_root, root, findings)
+
+    env_stats = _load(root / "foundations" / "env_validation" / "e9_stats.json")
+    if env_stats is not None:
+        r2 = env_stats.get("R2_per_regime_ppo_vs_vi", {})
+        expected_reference = "exact_undiscounted_finite_horizon_optimum"
+        if r2.get("reference") != expected_reference:
+            findings.append({"kind": "environment_validation_reference",
+                             "expected": expected_reference, "found": r2.get("reference")})
+
     return {
         "protocol": {
             "seeds": P.SEEDS, "bootstrap_resamples": P.BOOTSTRAP_RESAMPLES,
@@ -177,11 +254,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="scripts.thesis_contract")
     ap.add_argument("--strict", action="store_true",
                     help="exit non-zero when anything fails the contract")
+    ap.add_argument("--thesis-root", type=Path,
+                    help="also check manually typeset result tables in this thesis checkout")
     args = ap.parse_args()
 
     run = ScriptRun(script="thesis_contract")
     root = results_root()
-    report = audit(root)
+    report = audit(root, args.thesis_root)
 
     out_dir = root / "audits"
     out_dir.mkdir(parents=True, exist_ok=True)

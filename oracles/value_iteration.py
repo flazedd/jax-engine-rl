@@ -3,8 +3,8 @@
 Full-info MDP: state = (inventory, regime). The optimal policy on this MDP
 is what Oracle-PPO and per-regime PPO target. Used in M2 for:
 - R1 (policy divergence): compare per-regime argmax policies.
-- R2 (locked-regime optimality): compare PPO return to VI return on each
-  locked regime.
+- R2 (locked-regime optimality): compare PPO return to the exact
+  undiscounted finite-horizon optimum in each locked regime.
 - R3 / R4 utility: approximate episode-return under a given policy by
   forward-evaluating the MDP for `episode_length` steps from q=0, regime
   drawn from the initial distribution.
@@ -296,7 +296,7 @@ def finite_horizon_optimum(env: MarketMakingV1) -> float:
     Backward induction over `episode_length` steps with no discounting, which is
     what an episode return actually is. `solve_value_iteration` reports the
     undiscounted value of the *discounted*-optimal stationary policy, a lower
-    bound; this is the bound itself, and is what R2 and any "fraction of
+    bound; this is the exact ceiling, and is what R2 and any "fraction of
     optimum" figure should be stated against.
     """
     P, R = _transition_tables(env)
@@ -308,6 +308,25 @@ def finite_horizon_optimum(env: MarketMakingV1) -> float:
     init = int(env.inventory_max)
     dist = np.asarray(env.initial_distribution, dtype=np.float64)
     return float(V.reshape(n_inv, n_reg)[init] @ dist)
+
+
+def finite_horizon_locked_regime_optima(env: MarketMakingV1) -> np.ndarray:
+    """Exact undiscounted finite-horizon optimum for each locked regime.
+
+    Each value starts from the reset inventory and pins the regime for the
+    whole episode, matching the fixed-regime PPO runs used by requirement R2.
+    """
+    P, R = _transition_tables(env)
+    n_inv, n_reg, n_act, _, _ = P.shape
+    init = int(env.inventory_max)
+    values = np.zeros(n_reg, dtype=np.float64)
+    for regime in range(n_reg):
+        P_inv = P[:, regime, :, :, :].sum(axis=-1)
+        V = np.zeros(n_inv, dtype=np.float64)
+        for _ in range(env.episode_length):
+            V = (R[:, regime, :] + np.einsum("saj,j->sa", P_inv, V)).max(axis=-1)
+        values[regime] = V[init]
+    return values
 
 
 def finite_horizon_policy(env: MarketMakingV1, gamma: float = 1.0) -> np.ndarray:

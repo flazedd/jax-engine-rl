@@ -1,7 +1,7 @@
 # Reproducing the thesis results
 
 This guide reproduces the experiments reported in *Trading in the Dark: Belief-Conditioned
-Meta-RL for Regime-Switching Market Making*.
+Meta-Reinforcement Learning for Regime-Switching Market Making*.
 
 ## 1. Use the archived version
 
@@ -78,6 +78,12 @@ uv run python -m scripts.thesis_contract --strict
 
 This command checks that the required outputs exist and that their settings agree with
 `evaluation/protocol.py`.
+
+When a thesis checkout is available, also check its manually typeset result tables:
+
+```bash
+uv run python -m scripts.thesis_contract --strict --thesis-root /path/to/thesis-checkout
+```
 
 ## Outputs
 

@@ -152,10 +152,10 @@ def plot_value_loss_distribution(
 
 def plot_per_regime_ppo(
     per_regime_metrics: Iterable[dict],
-    vi_per_regime_returns: np.ndarray,
+    optimum_per_regime_returns: np.ndarray,
     output_path: Path,
 ) -> None:
-    """One subplot per regime, stacked vertically: PPO learning curve with VI line."""
+    """One subplot per regime with PPO learning curve and finite-horizon optimum."""
     apply_style()
     metrics = list(per_regime_metrics)
     n_reg = len(metrics)
@@ -175,17 +175,17 @@ def plot_per_regime_ppo(
             ax.fill_between(iters, lo, hi, color=color, alpha=0.18,
                             label=f"Per-seed spread: 2.5–97.5th percentile (n={n_seeds})")
         ax.axhline(
-            vi_per_regime_returns[r],
+            optimum_per_regime_returns[r],
             color="#555555", linestyle="--", linewidth=1.2,
         )
         ax.text(
-            0.99, vi_per_regime_returns[r],
-            f"  VI optimum = {vi_per_regime_returns[r]:.1f}",
+            0.99, optimum_per_regime_returns[r],
+            f"  Exact finite-horizon optimum = {optimum_per_regime_returns[r]:.1f}",
             transform=ax.get_yaxis_transform(),
             ha="left", va="center", fontsize=11, color="#444444",
             bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1.0),
         )
-        ax.set_title(f"Regime {r} ({_regime_label(r)})", fontsize=13, loc="left")
+        ax.set_title(_regime_label(r), fontsize=13, loc="left")
         ax.set_ylabel("Episode return", fontsize=11)
         ax.tick_params(axis="both", labelsize=11)
         polish(ax)

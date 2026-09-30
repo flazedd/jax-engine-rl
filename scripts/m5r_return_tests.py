@@ -8,9 +8,9 @@ regenerated or audited:
 
   * ``returns_method`` — RL2 against VariBAD at a fixed conditioning
     architecture, from fresh post-training evaluation episodes.
-  * ``time_to_threshold`` — iterations to first reach the regime-agnostic
-    reference return, one comparison per method, from the per-seed learning
-    curves.
+  * ``time_to_threshold`` — zero-based start index of the first forward
+    25-iteration window whose mean reaches the regime-agnostic reference
+    return, one comparison per method, from the per-seed learning curves.
 
 Both are computed here in the same schema the other set scripts write, so
 `scripts.thesis_contract` can check them alongside the rest.
@@ -76,7 +76,7 @@ def _per_seed_curves(experiment: str) -> np.ndarray | None:
 
 
 def _first_reach(curve: np.ndarray, target: float) -> int | None:
-    """Iterations until the smoothed curve first reaches `target`.
+    """Start index of the first forward window whose mean reaches `target`.
 
     Smoothing first, because a single noisy iteration touching the target is
     not the run having learned to reach it.
@@ -143,7 +143,7 @@ def method_return_tests(methods: dict) -> dict:
 
 
 def time_to_threshold_tests(env_label: str, target: float) -> dict | None:
-    """Iterations to first reach the target, hypernetwork minus concatenation."""
+    """Threshold-window start index, hypernetwork minus concatenation."""
     size = P.COMPARISON_SETS["time_to_threshold"].size
     comparisons = []
     for method in METHODS:
@@ -161,6 +161,7 @@ def time_to_threshold_tests(env_label: str, target: float) -> dict | None:
         comp["target_return"] = float(target)
         comp["target_source"] = THRESHOLD_TARGET_REF
         comp["smoothing_window"] = SMOOTH_WINDOW
+        comp["index_definition"] = "zero_based_start_of_forward_window"
         comp["concat_mean_iterations"] = float(c_it.mean())
         comp["hypernet_mean_iterations"] = float(h_it.mean())
         comp["runs_faster_under_hypernet"] = int((h_it < c_it).sum())

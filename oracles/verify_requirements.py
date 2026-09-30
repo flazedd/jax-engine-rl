@@ -31,6 +31,7 @@ from envs.market_making_v1 import MarketMakingV1
 from envs.wrappers.belief_obs import BeliefObsEnv
 from oracles.value_iteration import (
     compromise_policy_expected_returns,
+    finite_horizon_locked_regime_optima,
     policy_disagreement,
     solve_value_iteration,
     wrong_regime_value_loss,
@@ -67,7 +68,7 @@ from utils.paths import foundations_dir  # noqa: E402
 # duplicated in prose once already and drifted (R4 was cited as 0.30 in one
 # place while the check ran at 0.35).
 R1_MIN_DISAGREE_FRAC = 0.80  # fraction of inventory levels where policies differ
-R2_MIN_RATIO = 0.85  # worst-regime PPO / VI return ratio
+R2_MIN_RATIO = 0.85  # worst-regime PPO / exact finite-horizon return ratio
 R3_MAX_RECOVERY = 0.90  # regime-agnostic / Belief-PPO return ratio
 R4_MIN_ENTROPY_DECAY = 0.35  # posterior entropy decay by episode midpoint
 
@@ -237,7 +238,7 @@ def verify(
     print(f"[verify] [step 1] VI done in {time.perf_counter() - t0:.2f}s", flush=True)
     disagree_frac, disagree_mask = policy_disagreement(vi)
     mean_loss, rel_loss, per_state_loss = wrong_regime_value_loss(env, vi)
-    per_regime_optima = vi.per_regime_expected_episode_return.astype(float)
+    per_regime_optima = finite_horizon_locked_regime_optima(env)
     r1_pass = bool(disagree_frac >= R1_MIN_DISAGREE_FRAC)
     print(
         f"[verify] R1: disagree_frac={disagree_frac:.3f} "
@@ -245,7 +246,7 @@ def verify(
         flush=True,
     )
 
-    # ------- R2: short per-regime PPO vs VI per regime ------------------
+    # ------- R2: short per-regime PPO vs finite-horizon optimum ---------
     per_regime_metrics: list[dict[str, Any]] = []
     per_regime_ratios: list[float] = []
     ppo_runs_done = 0
@@ -271,7 +272,7 @@ def verify(
         print(
             f"[verify] [step 2] PPO {ppo_runs_done}/{n_ppo_runs} done in "
             f"{time.perf_counter() - t0:.1f}s | final={m['final_return_mean']:.2f} "
-            f"vi={per_regime_optima[r]:.2f} ratio={ratio:.3f}",
+            f"optimum={per_regime_optima[r]:.2f} ratio={ratio:.3f}",
             flush=True,
         )
     r2_min = float(min(per_regime_ratios))
@@ -415,6 +416,7 @@ def verify(
             "pass": r1_pass,
         },
         "R2_per_regime_ppo_vs_vi": {
+            "reference": "exact_undiscounted_finite_horizon_optimum",
             **{f"regime_{r}_ratio": per_regime_ratios[r] for r in range(env.n_regimes)},
             "min_ratio": r2_min,
             "pass": r2_pass,
@@ -444,6 +446,8 @@ def verify(
         "all_pass": all_pass,
         "vi": {
             "per_regime_expected_episode_return": per_regime_optima.tolist(),
+            "stationary_policy_per_regime_expected_episode_return":
+                vi.per_regime_expected_episode_return.tolist(),
             "mixed_expected_episode_return": float(vi.mixed_expected_episode_return),
             "policy": vi.policy.tolist(),
         },

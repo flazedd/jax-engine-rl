@@ -1,6 +1,6 @@
-# Belief-Conditioned Meta-RL for Regime-Switching Market Making
+# Trading in the Dark: Belief-Conditioned Meta-Reinforcement Learning for Regime-Switching Market Making
 
-Research code for the master's thesis *Trading in the Dark: Belief-Conditioned Meta-RL for
+Research code for the master's thesis *Trading in the Dark: Belief-Conditioned Meta-Reinforcement Learning for
 Regime-Switching Market Making*.
 
 The experiments compare RL² and VariBAD under two ways of providing a learned belief to the

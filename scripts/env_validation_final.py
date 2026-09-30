@@ -76,7 +76,7 @@ ENVS: list[dict[str, Any]] = [
         "label": "e9",
         "config": "e9_rare_fills.yaml",
         "thesis_row": "Medium-difficulty, reference",
-        "expected": {"R1": 1.00, "R2": 0.97, "R3": 0.76, "R4": 0.59},
+        "expected": {"R1": 1.00, "R2": 0.96, "R3": 0.76, "R4": 0.59},
         "reference_env": True,
     },
     {

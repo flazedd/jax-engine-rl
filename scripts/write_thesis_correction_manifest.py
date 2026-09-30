@@ -20,7 +20,7 @@ def main():
         'm5r_hypothesis_tests.json', 'm5r_belief_swap.json',
         'm5r_belief_swap_run.json', 'm5r_diagnostic_tests.json',
         'm5r_action_distributions.json', 'm5r_belief_quality_tests.json',
-        'm5r_belief_quality_mlp_tests.json')]
+        'm5r_belief_quality_mlp_tests.json', 'param_counts.json')]
     def hashes(paths):
         return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(paths)}
@@ -34,7 +34,11 @@ def main():
                         'independent stratified run bootstrap, recentered per draw',
                         'actor-only RL2 substitution from the updated hidden state',
                         'unweighted inventory aggregation documented',
-                        'unaligned exact-policy substitution reference removed'],
+                        'unaligned exact-policy substitution reference removed',
+                        'temporal curves smoothed before bootstrap percentile intervals',
+                        'optimal-policy heatmap displays all numerical ties',
+                        'module parameter counts checked against thesis table',
+                        'executed KL normalization, filter model and omission screen documented'],
         'code_sha256': hashes(code), 'analysis_sha256': hashes(outputs),
     }
     path=analysis_dir()/'thesis_correction_manifest.json'

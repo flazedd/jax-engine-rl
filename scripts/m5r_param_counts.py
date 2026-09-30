@@ -66,7 +66,19 @@ def _audit_one(label: str, cfg_rel: str) -> dict[str, Any]:
     env = _maybe_wrap_env_for_agent(cfg, env)
     agent = _build_agent(cfg, env)
     state = agent.init(jax.random.PRNGKey(0))
-    n_params = _count_params(state["params"])
+    params = state["params"]
+    n_params = _count_params(params)
+    if label.startswith("rl2_"):
+        modules = params["params"]
+        encoder = _count_params(modules["Dense_0"]) + _count_params(modules["GRUCell_0"])
+        components = {"encoder": encoder, "actor_critic": n_params - encoder, "decoder": 0}
+    elif label.startswith("varibad_"):
+        components = {"encoder": _count_params(params["encoder"]),
+                      "actor_critic": _count_params(params["policy"]),
+                      "decoder": _count_params(params["decoder"])}
+    else:
+        components = {"encoder": 0, "actor_critic": n_params, "decoder": 0}
+    assert sum(components.values()) == n_params
     return {
         "label": label,
         "config_path": str(cfg_path.relative_to(REPO_ROOT)),
@@ -78,6 +90,7 @@ def _audit_one(label: str, cfg_rel: str) -> dict[str, Any]:
         "latent_dim": int(cfg.agent.params.get("latent_dim", -1))
             if "latent_dim" in cfg.agent.params else None,
         "param_count": n_params,
+        "component_counts": components,
     }
 
 

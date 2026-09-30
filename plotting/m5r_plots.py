@@ -799,82 +799,38 @@ def plot_m5r_speedup_sweep(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
 
 
 def _smooth_curve(arr, w):
-    """Centered moving average over available samples (no edge zero-padding)."""
+    """Centered moving average along the last axis, without edge zero-padding."""
     if w <= 1:
         return arr
     arr = np.asarray(arr, dtype=float)
     out = np.empty_like(arr)
     half = w // 2
-    n = len(arr)
+    n = arr.shape[-1]
     for i in range(n):
         lo = max(0, i - half)
         hi = min(n, i + half + 1)
-        out[i] = arr[lo:hi].mean()
+        out[..., i] = arr[..., lo:hi].mean(axis=-1)
     return out
 
 
+def _mean_curve_ci(per_run, smoothing_window=9, n_boot=10_000):
+    """Pointwise percentile intervals for the smoothed mean run curve.
+
+    Smooth the statistic before taking quantiles. Whole-run resampling retains
+    temporal dependence; smoothing percentile endpoints afterwards would not
+    give intervals for this statistic.
+    """
+    curves = _smooth_curve(np.asarray(per_run, dtype=float), smoothing_window)
+    rng = np.random.default_rng(0)
+    indices = rng.integers(len(curves), size=(n_boot, len(curves)))
+    means = curves[indices].mean(axis=1)
+    return (curves.mean(axis=0), np.percentile(means, 2.5, axis=0),
+            np.percentile(means, 97.5, axis=0))
+
+
 def _draw_probe_per_t(ax, classifier: str, env_label: str = MEDIUM_ENV) -> bool:
-    """Draw the per-timestep regime-decoding curves for one probe class onto
-    `ax` (4 cells + analytical posterior + random-guess line). Returns False if
-    the data is missing. Prefers the high-rollout file for stable curves."""
-    probe = _load_probe_for_per_t(classifier)
-    if probe is None:
-        return False
-    env_block = probe.get("per_method_per_env", {}).get(env_label, {})
-    if not env_block:
-        return False
-
-    smoothing_window = 9
-    cell_style = {
-        "rl2_concat":       (PALETTE["concat"], "-"),
-        "rl2_hypernet":     (PALETTE["hyper"],  "-"),
-        "varibad_concat":   (PALETTE["concat"], "--"),
-        "varibad_hypernet": (PALETTE["hyper"],  "--"),
-    }
-    analytical_drawn = False
-    for cell in CELLS:
-        m = env_block.get(cell)
-        if m is None:
-            continue
-        per_t = np.asarray(m["method_per_t_test_acc_mean"])
-        per_t_per_seed = np.asarray(m["method_per_t_test_acc_per_seed"])
-        n_seeds = per_t_per_seed.shape[0]
-        if n_seeds > 1:
-            T = per_t.shape[0]
-            rng = np.random.default_rng(0)
-            idx = rng.integers(0, n_seeds, size=(1000, n_seeds))
-            lo = np.zeros(T); hi = np.zeros(T)
-            for t in range(T):
-                vals = per_t_per_seed[idx, t].mean(axis=1)
-                lo[t] = np.percentile(vals, 2.5)
-                hi[t] = np.percentile(vals, 97.5)
-        else:
-            lo, hi = per_t.copy(), per_t.copy()
-        per_t_s = _smooth_curve(per_t, smoothing_window)
-        lo_s = _smooth_curve(lo, smoothing_window)
-        hi_s = _smooth_curve(hi, smoothing_window)
-        ts = np.arange(per_t.shape[0])
-        color, ls = cell_style.get(cell, ("#666666", "-"))
-        ax.plot(ts, per_t_s, color=color, label=CELL_LABEL[cell],
-                linewidth=2.2, linestyle=ls)
-        ax.fill_between(ts, lo_s, hi_s, color=color, alpha=0.12)
-        if not analytical_drawn:
-            ana = np.asarray(m["analytical_per_t_test_acc_mean"])
-            # Align analytical to the same information horizon as the method
-            # curves: shift right one step and anchor t=0 at chance so every
-            # curve starts at the random-guess baseline with zero observations.
-            ana_aligned = np.concatenate(([1.0 / 3.0], ana[:-1]))
-            ax.plot(ts, ana_aligned, color=PALETTE["analytical"],
-                    linestyle="-", linewidth=2.8, label="Analytical posterior\n(RL² concat rollouts)")
-            analytical_drawn = True
-
-    ax.axhline(1.0 / 3, color="#999999", linestyle=":", linewidth=1.0,
-               label="Random guess (33.3%)")
-    ax.set_xlabel("Timestep within episode", fontsize=12)
-    ax.tick_params(axis="both", labelsize=11)
-    ax.set_ylim(0.20, 1.05)
-    polish(ax)
-    return True
+    """Compatibility entry point using the corrected temporal-accuracy plot."""
+    return _draw_probe_acc_levels_per_t(ax, classifier, env_label)
 
 
 def plot_m5r_probe_per_t(
@@ -940,8 +896,10 @@ def _load_probe_for_per_t(classifier: str) -> dict | None:
 
 
 def _independent_delta_ci(hyper: np.ndarray, concat: np.ndarray,
-                          n_boot: int = 10_000) -> tuple:
-    """Difference of means with independent whole-run curve resampling."""
+                          n_boot: int = 10_000, smoothing_window: int = 1) -> tuple:
+    """Independent whole-run intervals for a (possibly smoothed) mean contrast."""
+    hyper = _smooth_curve(np.asarray(hyper), smoothing_window)
+    concat = _smooth_curve(np.asarray(concat), smoothing_window)
     rng = np.random.default_rng(0)
     means = np.empty((n_boot, hyper.shape[1]))
     for start in range(0, n_boot, 1000):
@@ -1002,14 +960,13 @@ def _draw_probe_delta_per_t(
             print(f"[m5r_plots] skip {method}: unpaired seed counts "
                   f"{h.shape[0]} vs {c.shape[0]}")
             continue
-        mean, lo, hi = _independent_delta_ci(h, c)
+        mean, lo, hi = _independent_delta_ci(h, c, smoothing_window=smoothing_window)
         ts = np.arange(mean.shape[0])
-        ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
+        ax.plot(ts, mean, color=color,
                 label=label, linewidth=2.2, linestyle=ls)
         # Two bands overlap over much of the episode, so each carries a thin
         # edge in its own colour and the fill stays light enough to see through.
-        ax.fill_between(ts, _smooth_curve(lo, smoothing_window),
-                        _smooth_curve(hi, smoothing_window),
+        ax.fill_between(ts, lo, hi,
                         facecolor=color, alpha=0.13, edgecolor=color,
                         linewidth=0.8)
         drew = True
@@ -1108,22 +1065,14 @@ def _draw_probe_kl_levels_per_t(
                   "rerun scripts.m5r_posterior_probe")
             continue
         per_seed = np.asarray(m[key])
-        mean = per_seed.mean(axis=0)
+        mean, lo, hi = _mean_curve_ci(per_seed, smoothing_window)
         ts = np.arange(mean.shape[0])
         color, ls = _VARIANT_LEVEL_STYLE[cell]
-        ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
+        ax.plot(ts, mean, color=color,
                 linestyle=ls, linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
         if per_seed.shape[0] > 1:
-            rng = np.random.default_rng(0)
-            idx = rng.integers(0, per_seed.shape[0],
-                               size=(10_000, per_seed.shape[0]))
-            boot = per_seed[idx].mean(axis=1)
-            lo = np.percentile(boot, 2.5, axis=0)
-            hi = np.percentile(boot, 97.5, axis=0)
-            ax.fill_between(ts, _smooth_curve(lo, smoothing_window),
-                            _smooth_curve(hi, smoothing_window),
-                            facecolor=color, alpha=0.12, edgecolor=color,
-                            linewidth=0.7)
+            ax.fill_between(ts, lo, hi, facecolor=color, alpha=0.12,
+                            edgecolor=color, linewidth=0.7)
         if not analytical_drawn and "analytical_per_t_kl_mean" in m:
             ana = np.asarray(m["analytical_per_t_kl_mean"])
             ax.plot(np.arange(ana.shape[0]),
@@ -1161,21 +1110,14 @@ def _draw_probe_acc_levels_per_t(
         if m is None or key not in m:
             continue
         per_seed = np.asarray(m[key])
-        mean = per_seed.mean(axis=0)
+        mean, lo, hi = _mean_curve_ci(per_seed, smoothing_window)
         ts = np.arange(mean.shape[0])
         color, ls = _VARIANT_LEVEL_STYLE[cell]
-        ax.plot(ts, _smooth_curve(mean, smoothing_window), color=color,
+        ax.plot(ts, mean, color=color,
                 linestyle=ls, linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
         if per_seed.shape[0] > 1:
-            rng = np.random.default_rng(0)
-            idx = rng.integers(0, per_seed.shape[0],
-                               size=(10_000, per_seed.shape[0]))
-            boot = per_seed[idx].mean(axis=1)
-            ax.fill_between(
-                ts,
-                _smooth_curve(np.percentile(boot, 2.5, axis=0), smoothing_window),
-                _smooth_curve(np.percentile(boot, 97.5, axis=0), smoothing_window),
-                facecolor=color, alpha=0.12, edgecolor=color, linewidth=0.7)
+            ax.fill_between(ts, lo, hi, facecolor=color, alpha=0.12,
+                            edgecolor=color, linewidth=0.7)
         if not analytical_drawn and "analytical_per_t_test_acc_mean" in m:
             ana = np.asarray(m["analytical_per_t_test_acc_mean"])
             ax.plot(np.arange(ana.shape[0]), _smooth_curve(ana, smoothing_window),

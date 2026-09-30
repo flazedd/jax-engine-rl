@@ -52,12 +52,20 @@ def _budget_from_metrics(metrics: dict) -> dict:
     }
 
 
+def _tied_optimal_actions(q_values: np.ndarray, atol: float = 1e-7) -> np.ndarray:
+    """All actions numerically tied for the maximum, independent of argmax order."""
+    return np.isclose(q_values, np.max(q_values, axis=-1, keepdims=True),
+                      rtol=0, atol=atol)
+
+
 def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) -> None:
     """Heatmap of VI-optimal action per (regime, inventory) state."""
     from matplotlib.colors import BoundaryNorm, ListedColormap
+    from matplotlib.patches import Rectangle
 
     apply_style()
-    policy = vi.policy  # [n_inv, n_reg]
+    optimal = _tied_optimal_actions(vi.Q)
+    policy = optimal.argmax(axis=-1)  # deterministic display choice for single optima
     n_inv, n_reg = policy.shape
     inv_levels = np.arange(-env.inventory_max, env.inventory_max + 1)
     grid = policy.T  # rows = regimes, cols = inventory.
@@ -77,6 +85,17 @@ def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) ->
     yedges = np.arange(n_reg + 1) - 0.5
     ax.pcolormesh(xedges, yedges, grid, cmap=cmap, norm=norm,
                   edgecolors="white", linewidth=1.5)
+    # Divide tied cells into equal colour strips, so floating-point argmax
+    # noise cannot suggest that two regimes require different actions.
+    for q in range(n_inv):
+        for r in range(n_reg):
+            actions = np.flatnonzero(optimal[q, r])
+            if len(actions) > 1:
+                for i, action in enumerate(actions):
+                    ax.add_patch(Rectangle(
+                        (q - 0.5 + i / len(actions), r - 0.5),
+                        1 / len(actions), 1, facecolor=action_colors[action],
+                        edgecolor="white", linewidth=1.0))
     ax.invert_yaxis()  # regime 0 on top, matching the row order
     ax.set_yticks(range(n_reg))
     ax.set_yticklabels([_regime_label(r) for r in range(n_reg)])
@@ -95,7 +114,8 @@ def plot_policy_heatmap(vi: VIResult, env: MarketMakingV1, output_path: Path) ->
               label=_ACTION_LABELS[i])
         for i in range(3)
     ]
-    ax.legend(handles=legend_handles, **LEGEND_OUTSIDE_RIGHT)
+    ax.legend(handles=legend_handles, title="Split cells: tied optima",
+              title_fontsize=9, **LEGEND_OUTSIDE_RIGHT)
     fig.tight_layout()
     fig.subplots_adjust(right=0.78)
     output_path.parent.mkdir(parents=True, exist_ok=True)

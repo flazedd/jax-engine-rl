@@ -45,3 +45,31 @@ def test_within_variant_correlation_removes_offsets_and_keeps_run_pair():
     np.testing.assert_allclose(result['ci'],[-1,-1])
     relabelled=[dict(p,seed=100-p['seed']) for p in points]
     assert _within_variant_correlation(relabelled,'error',n_boot=100)['ci'] == result['ci']
+
+
+def test_temporal_intervals_smooth_before_quantiles():
+    from plotting.m5r_plots import _mean_curve_ci, _independent_delta_ci
+    # Each run has the same two-step mean despite opposite raw trajectories.
+    # Any whole-run bootstrap must therefore give a degenerate smoothed CI.
+    curves = np.array([[0., 2.], [2., 0.]])
+    mean, lo, hi = _mean_curve_ci(curves, smoothing_window=3, n_boot=200)
+    np.testing.assert_allclose([mean, lo, hi], np.ones((3, 2)))
+    mean, lo, hi = _independent_delta_ci(
+        2 * curves, curves, n_boot=200, smoothing_window=3)
+    np.testing.assert_allclose([mean, lo, hi], np.ones((3, 2)))
+
+
+def test_policy_heatmap_keeps_boundary_ties():
+    from envs.market_making_v1 import MarketMakingV1
+    from oracles.value_iteration import solve_value_iteration
+    from plotting.m2_plots import _tied_optimal_actions
+    from training.config import _load_yaml_with_extends
+    from pathlib import Path
+    cfg = _load_yaml_with_extends(Path(__file__).resolve().parents[1] /
+                                 'experiments/configs/m5r_e9/oracle_ppo.yaml')
+    vi = solve_value_iteration(MarketMakingV1(**cfg['env']['params']))
+    tied = _tied_optimal_actions(vi.Q)
+    np.testing.assert_array_equal(tied[0, 1], [True, False, True])
+    np.testing.assert_array_equal(tied[0, 2], tied[0, 1])
+    np.testing.assert_array_equal(np.flatnonzero(np.any(tied[:, 1] != tied[:, 2], axis=-1)),
+                                  [4, 6])  # q = -1, +1

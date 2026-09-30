@@ -157,8 +157,27 @@ uv run python -m scripts.write_thesis_correction_manifest
 ```
 
 The manually typeset diagnostic and correlation rows must be updated to the new
-analysis outputs; the final command checks them. The revised correlations retain
+analysis outputs; the thesis-contract command checks them. The revised correlations retain
 a modest negative association within variants. The previous claim that the
 association disappears is withdrawn. Probe comparisons concern the tested
 representation (VariBAD's posterior mean, not its full mean/variance input), and
 each method supplies its own trajectories.
+
+
+The second audit corrects documentation of the experiment actually run:
+VariBAD's KL coefficient multiplies a mean over latent coordinates (0.1 per
+coordinate, equivalent to 0.05 on the full two-dimensional KL). The KL reference
+is fixed N(0,I); encoder updates combine PPO and the auxiliary loss in one
+optimizer using the current on-policy minibatch. Locked-regime diagnostics lock
+the simulator while retaining the analytical filter's training transition model.
+The run-omission output is a conservative Bonferroni significance screen for
+significant findings, not a recomputation of the full Holm family. Non-reaching
+learning-speed observations use sentinel 1500, beyond indices 0 through 1499.
+
+Temporal probe confidence bands now smooth each run curve before bootstrap
+quantiles are taken. They are pointwise intervals, not simultaneous bands.
+The optimal-policy heatmap displays all numerically tied optima (absolute
+tolerance 1e-7), including the common boundary ties in regimes 1 and 2.
+`python -m scripts.m5r_param_counts` now records component counts as well as totals;
+the thesis contract checks all eight rows against those counts. These changes
+require no retraining or probe refitting.

@@ -544,8 +544,9 @@ class VariBADAgent:
                     f"unknown reward_decoder: {self.reward_decoder!r}"
                 )
 
-            # KL(q(m | τ_{:t}) || N(0, I)) averaged over (t, env). Standard
-            # closed-form for diagonal Gaussian vs unit Gaussian.
+            # Per-coordinate KL(q(m | τ_{:t}) || N(0, I)), averaged over
+            # (time, environment, latent coordinate). The coefficient on the
+            # full multivariate KL is kl_coef / latent_dim.
             kl = -0.5 * jnp.mean(
                 1.0 + log_vars - mus ** 2 - jnp.exp(log_vars)
             )

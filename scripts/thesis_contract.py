@@ -145,6 +145,32 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
                 findings.append({"kind": "thesis_table_drift", "table": table,
                                  "expected_fragment": fragment})
 
+    counts = _load(root / "analysis" / "param_counts.json")
+    design_path = thesis_root / "sections" / "experimental_design.tex"
+    design = " ".join(design_path.read_text().split()) if design_path.exists() else ""
+    if counts is None:
+        findings.append({"kind": "missing_artifact", "set": "parameter_counts"})
+    else:
+        labels = {"rl2_concat": "RL\\textsuperscript{2} concat",
+                  "rl2_hypernet": "RL\\textsuperscript{2} hypernet",
+                  "varibad_concat": "VariBAD concat", "varibad_hypernet": "VariBAD hypernet",
+                  "regime_agnostic_ppo": "Regime-agnostic PPO",
+                  "stacked_obs_ppo": "Stacked-observation PPO",
+                  "belief_ppo": "Belief-PPO", "oracle_ppo": "Oracle-PPO"}
+        for label, display in labels.items():
+            row = next((r for r in counts["rows"] if r["label"] == label), {})
+            components = row.get("component_counts")
+            if components is None:
+                findings.append({"kind": "missing_parameter_components", "row": label})
+                continue
+            def tex_count(n):
+                return "$" + f"{n:,}".replace(",", "{,}") + "$" if n else "--"
+            values = [components[k] for k in ("encoder", "actor_critic", "decoder")]
+            fragment = display + " & " + " & ".join(map(tex_count, values + [row["param_count"]]))
+            if sum(values) != row["param_count"] or fragment not in design:
+                findings.append({"kind": "thesis_table_drift", "table": "parameter_counts",
+                                 "row": label, "expected_fragment": fragment})
+
     appendix_path = thesis_root / "sections" / "appendix.tex"
     appendix = " ".join(appendix_path.read_text().split()) if appendix_path.exists() else ""
     for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass", "$96.4\\%$ of the exact finite-horizon optimum"):

@@ -351,11 +351,15 @@ def leave_one_run_out_independent_sensitivity(
     alpha: float = 0.05,
     n_corrections: int = 1,
 ) -> dict[str, Any]:
-    """Omit one run from either independent condition and repeat the test.
+    """Conservative significance screen after omitting each independent run.
 
     This is the independent-samples counterpart to ``leave_one_out_sensitivity``.
     Each omission removes one run from one condition while retaining every run
-    in the other condition.
+    in the other condition. All omissions must pass a Bonferroni threshold with
+    the original family size. This does not recompute the Holm family or assess
+    stability of non-rejection. The legacy `stable_under_run_omission` field
+    denotes passing this significance screen; `flipping_run` identifies the first
+    failing omission, not necessarily a change in the original Holm decision.
     """
     a = np.asarray(method, dtype=float)
     b = np.asarray(baseline, dtype=float)

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 import matplotlib.pyplot as plt
@@ -28,7 +29,7 @@ _CELL_COLORS = {
     "varibad_hypernet": "#73b8ad",  # light teal
 }
 
-from utils.paths import fig_appendix_dir, foundations_dir, project_fig_dir, resolve_data, results_root
+from utils.paths import fig_targets, fig_appendix_dir, foundations_dir, project_fig_dir, resolve_data, results_root
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_ROOT = results_root()
@@ -159,8 +160,13 @@ def main() -> int:
     written = 0
     if plot_factorial_toys(out_dir / "factorial_toys.png"):
         written += 1
+        if out_dir == FIGURES_ROOT:
+            source = out_dir / "factorial_toys.png"
+            for target in fig_targets("factorial_toys.png"):
+                if target.resolve() != source.resolve():
+                    shutil.copy2(source, target)
     print(f"[m4_plots] wrote {written} figures to {out_dir}")
-    return 0
+    return 0 if written == 1 else 1
 
 
 if __name__ == "__main__":

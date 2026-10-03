@@ -49,6 +49,7 @@ from training.config import (
 )
 from training.recurrent_rollout import recurrent_rollout
 from training.rollout import rollout
+from utils.training_identity import identity, prepare, validate_seed, sha256
 from utils.paths import experiment_dir
 from utils.script_output import ScriptRun, iso_now
 
@@ -336,6 +337,8 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
 
     config_json_path = exp_dir / "config.json"
     cfg_dict = cfg.to_dict()
+    training_identity = identity(cfg_dict)
+    prepare(exp_dir, training_identity)
     cfg_dict["commit_hash"] = _commit_hash()
     with open(config_json_path, "w") as f:
         json.dump(cfg_dict, f, indent=2, default=str)
@@ -355,63 +358,13 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
         seed = cfg.seed_base + s
         t_seed = time.perf_counter()
 
-        # Stamp the resolved agent config alongside the run. Budget alone is
-        # not provenance: a directory trained at 20 seeds x 300 iterations
-        # under a *different architecture* satisfies every budget check and is
-        # silently reused, which is how seven-week-old cells were adopted as
-        # current results.
-        try:
-            import hashlib
-            cfg_fingerprint = hashlib.sha1(
-                json.dumps(getattr(cfg, "agent", {}), sort_keys=True, default=str)
-                .encode()
-            ).hexdigest()[:12]
-            (exp_dir / "provenance.json").write_text(json.dumps({
-                "agent_fingerprint": cfg_fingerprint,
-                "iterations": int(cfg.iterations),
-                "parallel_envs": int(cfg.parallel_envs),
-                "rollout_length": int(cfg.rollout_length),
-                "num_seeds": int(cfg.num_seeds),
-                "written_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            }, indent=2))
-        except Exception:
-            pass
-
-        # Per-seed resume. A crash at seed 18 of 20 used to discard the 18
-        # seeds already trained, because results were only aggregated after the
-        # loop. Each seed's curves are now persisted as it finishes and reloaded
-        # on a rerun, so an interrupted stage costs one seed, not all of them.
         seed_cache = exp_dir / f"seed_{seed}_result.json"
         ckpt_path = exp_dir / f"checkpoint_seed_{seed}.pkl"
-        if seed_cache.exists() and ckpt_path.exists():
-            try:
-                with open(seed_cache) as f:
-                    cached = json.load(f)
-                # A cache is only reusable if it was produced at *this* budget.
-                # Without the check, a `--super-fast` smoke run leaves a
-                # two-iteration seed behind and the next full run silently
-                # adopts it, mixing smoke data into a real result.
-                stamp = cached.get("_budget", {})
-                mismatch = {
-                    k: (stamp.get(k), v) for k, v in (
-                        ("iterations", int(cfg.iterations)),
-                        ("parallel_envs", int(cfg.parallel_envs)),
-                        ("rollout_length", int(cfg.rollout_length)),
-                    ) if stamp.get(k) != v
-                }
-                if mismatch:
-                    print(f"[train] seed {seed} cache was produced at a "
-                          f"different budget {mismatch}, retraining", flush=True)
-                    raise ValueError("budget mismatch")
-                per_seed.append(cached)
-                print(
-                    f"[train] seed {s + 1}/{cfg.num_seeds} reused from "
-                    f"{seed_cache.name}", flush=True,
-                )
-                continue
-            except Exception as exc:  # corrupt or stale cache: retrain this seed
-                print(f"[train] seed cache not reusable ({exc}), retraining seed "
-                      f"{seed}", flush=True)
+        if seed_cache.exists() or ckpt_path.exists():
+            cached = validate_seed(exp_dir, seed, training_identity)
+            per_seed.append(cached)
+            print(f"[train] seed {seed} reused with verified identity and checksum", flush=True)
+            continue
 
         seed_out = _train_one_seed(cfg, seed, s, cfg.num_seeds)
         # Save trained agent_state to disk before discarding it from the
@@ -425,7 +378,9 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
         # pair is never mistaken for a finished seed.
         tmp = seed_cache.with_suffix(".json.partial")
         with open(tmp, "w") as f:
-            json.dump({**seed_out, "_budget": {
+            json.dump({**seed_out,
+                "_training_fingerprint": training_identity["fingerprint"],
+                "_checkpoint_sha256": sha256(ckpt_path), "_budget": {
                 "iterations": int(cfg.iterations),
                 "parallel_envs": int(cfg.parallel_envs),
                 "rollout_length": int(cfg.rollout_length),
@@ -482,6 +437,7 @@ def train(cfg: ExperimentConfig) -> dict[str, Any]:
         "env": cfg.env.name,
         "iterations": cfg.iterations,
         "num_seeds": cfg.num_seeds,
+        "seeds": list(range(cfg.seed_base, cfg.seed_base + cfg.num_seeds)),
         "parallel_envs": cfg.parallel_envs,
         "rollout_length": cfg.rollout_length,
         "mean_return_per_iter": mean_curve.tolist(),
@@ -653,6 +609,8 @@ def train_per_regime_sweep(cfg: ExperimentConfig) -> dict[str, Any]:
 
     # Same shared-schema wrapper as train(): config + summary + eval.
     cfg_dict = cfg.to_dict()
+    training_identity = identity(cfg_dict)
+    prepare(exp_dir, training_identity)
     cfg_dict["commit_hash"] = _commit_hash()
     with open(exp_dir / "config.json", "w") as f:
         json.dump(cfg_dict, f, indent=2, default=str)

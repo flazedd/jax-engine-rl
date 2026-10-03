@@ -1,0 +1,207 @@
+{
+  "script": "m4_full_eval_aggregate",
+  "status": "OK",
+  "started_at": "2026-04-26T19:36:02",
+  "finished_at": "2026-04-26T19:36:02",
+  "run_mode": "n/a",
+  "config_used": {},
+  "key_stats": {
+    "n_runs": 9,
+    "table": [
+      {
+        "env": "bandit",
+        "ppo_floor": 40.271484375,
+        "ppo_ci": [
+          40.12109375,
+          40.548828125
+        ],
+        "rl2": 48.193359375,
+        "rl2_ci": [
+          48.056640625,
+          48.41015625
+        ],
+        "rl2_clears_floor": true,
+        "varibad": 48.206380208333336,
+        "varibad_ci": [
+          48.0390625,
+          48.40625
+        ],
+        "varibad_clears_floor": true
+      },
+      {
+        "env": "gridworld",
+        "ppo_floor": 4.466796875,
+        "ppo_ci": [
+          4.255859375,
+          4.87890625
+        ],
+        "rl2": 46.98046875,
+        "rl2_ci": [
+          45.826171875,
+          48.83984375
+        ],
+        "rl2_clears_floor": true,
+        "varibad": 17.15234375,
+        "varibad_ci": [
+          16.609375,
+          17.6875
+        ],
+        "varibad_clears_floor": true
+      },
+      {
+        "env": "regime_bandit",
+        "ppo_floor": 49.65234375,
+        "ppo_ci": [
+          49.255859375,
+          50.43359375
+        ],
+        "rl2": 65.83072916666667,
+        "rl2_ci": [
+          62.22265625,
+          72.724609375
+        ],
+        "rl2_clears_floor": true,
+        "varibad": 63.438802083333336,
+        "varibad_ci": [
+          63.228515625,
+          63.552734375
+        ],
+        "varibad_clears_floor": true
+      }
+    ],
+    "rows": [
+      {
+        "method": "ppo",
+        "env": "bandit",
+        "experiment_name": "m4_ppo_bandit",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          40.14453125,
+          40.548828125,
+          40.12109375
+        ],
+        "final_return_mean": 40.271484375,
+        "final_return_ci_lo": 40.12109375,
+        "final_return_ci_hi": 40.548828125
+      },
+      {
+        "method": "ppo",
+        "env": "gridworld",
+        "experiment_name": "m4_ppo_gridworld",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          4.87890625,
+          4.255859375,
+          4.265625
+        ],
+        "final_return_mean": 4.466796875,
+        "final_return_ci_lo": 4.255859375,
+        "final_return_ci_hi": 4.87890625
+      },
+      {
+        "method": "ppo",
+        "env": "regime_bandit",
+        "experiment_name": "m4_ppo_regime_bandit",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          49.267578125,
+          50.43359375,
+          49.255859375
+        ],
+        "final_return_mean": 49.65234375,
+        "final_return_ci_lo": 49.255859375,
+        "final_return_ci_hi": 50.43359375
+      },
+      {
+        "method": "rl2",
+        "env": "bandit",
+        "experiment_name": "m4_rl2_bandit",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          48.11328125,
+          48.056640625,
+          48.41015625
+        ],
+        "final_return_mean": 48.193359375,
+        "final_return_ci_lo": 48.056640625,
+        "final_return_ci_hi": 48.41015625
+      },
+      {
+        "method": "rl2",
+        "env": "gridworld",
+        "experiment_name": "m4_rl2_gridworld",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          48.83984375,
+          45.826171875,
+          46.275390625
+        ],
+        "final_return_mean": 46.98046875,
+        "final_return_ci_lo": 45.826171875,
+        "final_return_ci_hi": 48.83984375
+      },
+      {
+        "method": "rl2",
+        "env": "regime_bandit",
+        "experiment_name": "m4_rl2_regime_bandit",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          72.724609375,
+          62.22265625,
+          62.544921875
+        ],
+        "final_return_mean": 65.83072916666667,
+        "final_return_ci_lo": 62.22265625,
+        "final_return_ci_hi": 72.724609375
+      },
+      {
+        "method": "varibad",
+        "env": "bandit",
+        "experiment_name": "m4_varibad_bandit",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          48.173828125,
+          48.0390625,
+          48.40625
+        ],
+        "final_return_mean": 48.206380208333336,
+        "final_return_ci_lo": 48.0390625,
+        "final_return_ci_hi": 48.40625
+      },
+      {
+        "method": "varibad",
+        "env": "gridworld",
+        "experiment_name": "m4_varibad_gridworld",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          16.609375,
+          17.16015625,
+          17.6875
+        ],
+        "final_return_mean": 17.15234375,
+        "final_return_ci_lo": 16.609375,
+        "final_return_ci_hi": 17.6875
+      },
+      {
+        "method": "varibad",
+        "env": "regime_bandit",
+        "experiment_name": "m4_varibad_regime_bandit",
+        "n_seeds": 3,
+        "per_seed_final_returns": [
+          63.552734375,
+          63.53515625,
+          63.228515625
+        ],
+        "final_return_mean": 63.438802083333336,
+        "final_return_ci_lo": 63.228515625,
+        "final_return_ci_hi": 63.552734375
+      }
+    ],
+    "figure_path": "figures/milestones/M4/m4_method_ranking.png"
+  },
+  "outputs_written": [
+    "/Volumes/samsungssd990/github/workspace/jax-engine-rl/results/milestones/M4/method_ranking.json"
+  ],
+  "error": null,
+  "schema_version": "0.1"
+}

@@ -46,3 +46,8 @@ experiments/configs/m5r_final/
 *.log
 *.out
 texput.log
+
+# Isolated reproductions
+results-retrained/
+figures-retrained/
+retrained-thesis/

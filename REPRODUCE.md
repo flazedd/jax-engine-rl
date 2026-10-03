@@ -1,183 +1,168 @@
 # Reproducing the thesis results
 
-This guide reproduces the experiments reported in *Trading in the Dark: Belief-Conditioned
-Meta-Reinforcement Learning for Regime-Switching Market Making*.
+This guide accompanies *Trading in the Dark* and the October 2026 corrections.
+It distinguishes verification of saved results, replay of frozen policies, and
+full retraining. None is a substitute for the others.
 
-## 1. Use the archived version
+## Companion archive and source identity
 
-Check out the release or commit archived with the thesis. Record the commit identifier and the
-hardware and software details of the reproduction run.
+The delivered `thesis-reproducibility-2026-10-02.tar.gz` contains `code/`,
+`thesis/`, `MANIFEST.json`, and `ENVIRONMENT.json`. Its adjacent `.sha256` file
+verifies the download. After extraction, verify every archived file:
 
-## 2. Create the software environment
+```bash
+cd thesis-reproducibility-2026-10-02
+python3 code/scripts/verify_reproduction_bundle.py .
+cd code
+```
 
-Install [uv](https://docs.astral.sh/uv/) and run:
+The manifest pins the corrected source snapshot by SHA-256, including changes
+beyond base commit `96cae2465159d78b13cc00ba6c354b87de4641e9`. It also pins all
+YAML configurations, the lock file, analysis inputs, and the 160 main checkpoints.
+The source snapshot is complete without Git history. This is a local companion
+archive delivered with the thesis; no public release URL or DOI is claimed.
+
+Training was recorded at `220b319f367e69a8f466c87d5346b1acf60574d6`; the original
+analysis revision `3af71feedf24d01d001a358dec5c7c1bbbf1a880` predates the corrections.
+Neither historical revision alone regenerates the revised analysis. The original
+three-seed toy-validation baseline is explicitly pinned in
+`reproduction/inputs/method_ranking.json`, including all nine sets of per-seed
+final returns. The bundle additionally preserves its original training artifacts.
+The current factorial validation is a separate experiment with eight seeds.
+
+`ENVIRONMENT.json` describes the verification machine and installed libraries.
+Original training hardware details that were not recorded are marked unknown.
+`TRAINING_EVIDENCE.json` records observed budgets and preserved metadata conflicts.
+In particular, VariBAD-concat's config/provenance says 600 iterations while its
+summary, metrics, and all 20 seed curves say 1500. Original files are preserved.
+There is no archived verification record establishing the earlier claim of a
+hash-identical full retraining; the revised thesis withdraws that claim.
+
+## Install the locked environment
+
+Use Python 3.12 and [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv sync --locked
 uv run python -c "import platform, jax; print(platform.platform()); print(jax.devices())"
-```
-
-The project requires Python 3.12. `uv sync --locked` installs the versions recorded in `uv.lock`
-without updating them.
-
-## 3. Check the code and pipeline
-
-Run the automated tests:
-
-```bash
 uv run pytest -q
 ```
 
-Inspect the complete plan without running it:
+The normal pytest suite includes environment, belief-filter, and observation
+invariants, including the final e9 environment, plus the regression tests for
+cache identity, required artifacts, comparison schemas, and dependency tracking.
+Training-based validation is separate and runs in the full programme.
+
+## Verify the saved scientific results
+
+These commands use the bundle's saved data and do not train agents or refit probes:
+
+```bash
+uv run python -m scripts.restore_validation_baselines
+uv run python -m scripts.m5r_seed_block_sensitivity
+uv run python -m scripts.thesis_contract --strict --thesis-root ../thesis
+```
+
+The sensitivity script recomputes all 18 original mean comparisons (including
+bootstrap intervals, permutation p-values and six Holm adjustments) and checks
+them against the saved results before calculating the seed-block analysis.
+Training uses shared seeds and rollout-key schedules across conditions. The
+original working-independence analysis is retained explicitly. The added paired
+bootstrap/sign-flip analysis preserves seed blocks; sign flips require symmetric
+paired differences or within-pair exchangeability under the null. Correlation
+resamples preserve all four variants within a seed and recenter each draw.
+This post-analysis check changes none of the 18 significance decisions.
+
+The strict contract requires evaluation, both probes, primary diagnostics,
+confusion data, all six comparison families, all eight training budgets and
+20-by-1500 learning curves. Missing or malformed required data fail. The optional
+history-substitution analyses are checked if present. With `--thesis-root`, it
+also checks all seven generated tables and the manually typeset result rows.
+
+## Replay frozen checkpoints
+
+```bash
+uv run python -m scripts.verify_checkpoint_replay
+uv run python -m scripts.verify_checkpoint_replay --all-seeds
+```
+
+The first command replays seed 0 from all eight conditions (4096 episodes); the
+second replays all 160 checkpoints (81920 episodes). Each uses the original
+512 episodes, 128 steps, method-specific evaluation keys, and compares with the
+saved per-seed result. It writes a separate verification file. Numerical identity
+across hardware is not promised; discrepancies are reported with their size.
+The probes and locked-regime diagnostics can be regenerated with their corresponding
+`m5r_posterior_probe`, `m5r_action_distributions`, and `m5r_belief_swap` scripts.
+
+## Preflight and full retraining
+
+Inspect the dependency-complete plan and run the deterministic rendering smoke test:
 
 ```bash
 uv run python -m scripts.run_matched_programme --dry-run
-```
-
-Then run the synthetic version of the pipeline:
-
-```bash
 uv run python -m scripts.run_matched_programme --dummy
+uv run python -m scripts.verify_clean_preflight
 ```
 
-The synthetic run checks the execution order, analysis code, tables, and figures without training
-the full agents. Its outputs are marked as synthetic and are ignored by Git.
+The synthetic preflight uses checked-in schema fixtures, requires no archived
+results, and executes the real table and figure renderers. It does not validate
+training or statistically coherent synthetic results. It unconditionally redirects
+all output roots into a new temporary directory, prints that directory, marks
+outputs synthetic, and never falls back to real JSON. Inherited thesis-publication
+paths are ignored. The temporary output can be removed after inspection.
 
-## 4. Run the experiments
+Run training in a **new directory**, preserving the delivered evidence:
 
 ```bash
+export THESIS_RESULTS_ROOT="$PWD/results-retrained"
+export THESIS_PROJECT_FIGS="$PWD/figures-retrained"
+export THESIS_FIG_ROOT="$PWD/retrained-thesis/figures"
 uv run python -m scripts.run_matched_programme
 ```
 
-The driver performs the following steps:
+The driver gates main training on configuration and foundation validation, trains
+the four references, checks reference ordering, trains the four meta-RL variants,
+and then runs evaluation, both probes, confusion collection, diagnostics, all six
+comparison families, seed-block sensitivity, tables and figures. The strict
+scientific contract runs after real outputs exist. Failed prerequisites block
+all dependants. Selecting a phase includes its transitive prerequisites.
 
-1. Check the model inputs, parameter counts, optimiser settings, and training budget.
-2. Validate the market-making environment and the RL² and VariBAD implementations.
-3. Train regime-agnostic PPO, stacked-observation PPO, Belief-PPO, and Oracle-PPO.
-4. Check the two reference differences defined in the thesis.
-5. Train RL² and VariBAD with concatenation and hypernetwork conditioning.
-6. Evaluate the frozen policies on fresh episodes.
-7. Run the belief probes, behavioural diagnostics, statistical comparisons, and figure generation.
+New runs record the complete resolved configuration, relevant source/lock hashes,
+and a checksum for each checkpoint. Resume validates these before changing any
+metadata. An incompatible or legacy cache is rejected, not relabelled or silently
+retrained in place. Analysis-stage receipts hash code/configuration, dependency
+outputs and every required output; deleting a secondary output or changing an
+input invalidates the receipt. `--force STAGE` reruns a named analysis stage.
 
-Completed stages are detected from their output files, so rerunning the command resumes an
-interrupted experiment. To inspect progress in another terminal, run:
+Results live under `foundations/`, `medium/`, and `analysis/` beneath
+`THESIS_RESULTS_ROOT`. Progress is in `matched_programme_status.json`. Setting
+`THESIS_FIG_ROOT` publishes figures there and tables in its sibling `tables/`.
+A fresh retraining is a new replication; do not automatically replace published
+numbers without reviewing its outputs.
 
-```bash
-uv run python -m scripts.status
-```
+## Regenerate the corrected thesis presentation
 
-The status file is `results/matched_programme_status.json`.
-
-## 5. Check the generated results
-
-After the programme finishes, run:
-
-```bash
-uv run python -m scripts.thesis_contract --strict
-```
-
-This command checks that the required outputs exist and that their settings agree with
-`evaluation/protocol.py`.
-
-When a thesis checkout is available, also check its manually typeset result tables:
+From the extracted `code/` directory:
 
 ```bash
-uv run python -m scripts.thesis_contract --strict --thesis-root /path/to/thesis-checkout
-```
-
-## Outputs
-
-- `results/foundations/` contains environment and implementation validation.
-- `results/medium/` contains checkpoints and training results for the reported experiment.
-- `results/analysis/` contains fresh evaluation returns, probe results, diagnostics, and statistical
-  comparisons.
-- `figures/` contains the generated figures.
-- `tables/` contains the generated LaTeX result tables.
-
-By default, every output stays inside this repository. To also publish figures and tables into a
-separate thesis checkout, set `THESIS_FIG_ROOT` to that checkout's `figures` directory before
-running the programme.
-
-Each training directory records the resolved configuration and results for every seed. Exact
-floating-point values may differ across hardware, but the same archived code, configuration, and
-random seeds reproduce the stated experimental procedure.
-
-## Corrections after the September 2026 consistency audit
-
-The original analysis revision `3af71feedf24` predates these corrections. Use the
-updated code for the revised thesis. Training checkpoints and fresh evaluation
-returns are unchanged. The audit changed the probe/return join, correlation
-bootstrap, RL² substitution intervention, diagnostic presentation, and supporting
-text. The exact corrected files and their hashes are recorded in
-`results/analysis/thesis_correction_manifest.json`.
-
-The evaluator now records `seeds` beside `per_seed_evaluation_return`. Probe scores
-must be joined to returns by **experiment and seed**, never by array position.
-The legacy evaluator sorted checkpoint filenames lexically, whereas archived
-training-return arrays used numeric seed order. The explicit migration below
-recovers the former ordering from the complete set of archived checkpoints:
-
-```bash
-uv run python -m scripts.m5r_refresh_probe_returns --migrate-legacy-seeds
-```
-
-Use `scripts.m5r_refresh_probe_returns` without the flag for subsequent refreshes.
-This reuses the saved probe fits and joins them to fresh frozen-policy evaluation
-returns. It also refreshes cached correlations. It does not retrain agents or
-refit classifiers. Both pooled and within-variant correlation intervals resample
-independent runs within each variant, preserving each run's error/return pair.
-Within-variant means are recomputed inside each resample.
-
-The RL² collector records the state after the current encoder update. The corrected
-substitution diagnostic evaluates the actor directly from that state, without a
-second GRU update. Rerun it at the full 64 episodes per regime and all 20 seeds:
-
-```bash
-uv run python -m scripts.m5r_belief_swap
-uv run python -m scripts.m5r_diagnostic_tests
-uv run python -m scripts.m5r_hypothesis_tests
-```
-
-If optional history-channel substitution files exist, regenerate them using
-`--swap-history` and `--swap-history --hold-belief-fixed` before running the
-diagnostic tests. Stale substitution files are rejected rather than mixed with
-the corrected intervention. The primary score averages covered inventory levels
-without weighting. The exact-policy line is omitted from this figure because it
-used a different time/action aggregation.
-
-Regenerate the plots and tables, setting `THESIS_FIG_ROOT` to the thesis figure
-directory if publishing to a separate checkout:
-
-```bash
+export THESIS_FIG_ROOT="$(cd ../thesis && pwd)/figures"
 uv run python -m plotting.m5r_plots
+uv run python -m plotting.reference_levels
+uv run python -m plotting.m5r_action_inventory_heatmap
+uv run python -m plotting.m4_plots
 uv run python -m scripts.make_tables
-uv run pytest -q
-uv run python -m scripts.thesis_contract --strict --thesis-root /path/to/thesis
-uv run python -m scripts.write_thesis_correction_manifest
+uv run python -m scripts.thesis_contract --strict --thesis-root ../thesis
+cd ../thesis
+latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
 ```
 
-The manually typeset diagnostic and correlation rows must be updated to the new
-analysis outputs; the thesis-contract command checks them. The revised correlations retain
-a modest negative association within variants. The previous claim that the
-association disappears is withdrawn. Probe comparisons concern the tested
-representation (VariBAD's posterior mean, not its full mean/variance input), and
-each method supplies its own trajectories.
-
-
-The second audit corrects documentation of the experiment actually run:
-VariBAD's KL coefficient multiplies a mean over latent coordinates (0.1 per
-coordinate, equivalent to 0.05 on the full two-dimensional KL). The KL reference
-is fixed N(0,I); encoder updates combine PPO and the auxiliary loss in one
-optimizer using the current on-policy minibatch. Locked-regime diagnostics lock
-the simulator while retaining the analytical filter's training transition model.
-The run-omission output is a conservative Bonferroni significance screen for
-significant findings, not a recomputation of the full Holm family. Non-reaching
-learning-speed observations use sentinel 1500, beyond indices 0 through 1499.
-
-Temporal probe confidence bands now smooth each run curve before bootstrap
-quantiles are taken. They are pointwise intervals, not simultaneous bands.
-The optimal-policy heatmap displays all numerically tied optima (absolute
-tolerance 1e-7), including the common boundary ties in regimes 1 and 2.
-`python -m scripts.m5r_param_counts` now records component counts as well as totals;
-the thesis contract checks all eight rows against those counts. These changes
-require no retraining or probe refitting.
+The five environment-validation figures are included in the bundle with their
+saved validation inputs. A full recomputation of those figures is part of
+`python -m scripts.env_validation_final` and includes its validation training.
+The original frozen evaluation and probe measurements remain unchanged. Earlier
+corrections fixed the experiment/seed join, RL2 actor-only belief substitution,
+inventory aggregation, temporal bootstrap smoothing, and tied-optimum display.
+The method-return, speed and MLP Holm families were declared after initial
+inspection; the thesis now discloses that history. All paired and independent
+analyses retain their stated assumptions. Architectural matching does not isolate
+VariBAD's conditioning route from changes in trunk sharing and hidden widths.

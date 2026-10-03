@@ -112,11 +112,15 @@ def _read_metrics(experiment_name: str) -> dict[str, Any]:
 
 def _read_m4_baseline(method: str, env: str) -> float | None:
     """Return the M4 baseline final_return_mean for (method, env), if available."""
-    path = experiment_dir(f"m4_{method}_{env}") / "metrics.json"
-    if not path.exists():
-        return None
-    with open(path) as f:
-        return float(json.load(f)["final_return_mean"])
+    # Historical baseline is an explicit, versioned input on a clean checkout.
+    from scripts.restore_validation_baselines import SOURCE, EXPECTED
+    import hashlib
+    raw = SOURCE.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != EXPECTED:
+        raise ValueError("Historical toy baseline checksum mismatch")
+    rows = json.loads(raw)["key_stats"]["rows"]
+    row = next(r for r in rows if r["method"] == method and r["env"] == env)
+    return float(row["final_return_mean"])
 
 
 def _num(v, sign: bool = False) -> str:

@@ -43,14 +43,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # the same roots without being passed anything.
 if "--dummy" in sys.argv:
     os.environ["THESIS_DUMMY"] = "1"
-    # The results root is deliberately NOT redirected: dummy artifacts are
-    # written beside their real counterparts as <stem>.dummy.json, so one
-    # listing shows which stages have landed. Figures still go to their own
-    # tree, because a figure filename carries no such marker.
-    os.environ.setdefault("THESIS_PROJECT_FIGS", str(REPO_ROOT / "figures_dummy"))
-    os.environ.setdefault(
-        "THESIS_FIG_ROOT", str(REPO_ROOT / "figures_dummy" / "thesis")
-    )
+    # Unconditional isolation: inherited publication paths must never survive.
+    import tempfile
+    _dummy_root = Path(tempfile.mkdtemp(prefix="thesis-preflight-"))
+    os.environ["THESIS_RESULTS_ROOT"] = str(_dummy_root / "results")
+    os.environ["THESIS_PROJECT_FIGS"] = str(_dummy_root / "figures")
+    os.environ["THESIS_FIG_ROOT"] = str(_dummy_root / "thesis" / "figures")
 
 from utils.paths import (  # noqa: E402
     dummy_sibling, is_dummy, project_fig_dir as project_figs, results_root,
@@ -96,63 +94,50 @@ class Stage:
     # Cheap checks that gate the rest of the programme and are never skipped,
     # so an edited config cannot be waved through by a stale pass on disk.
     always: bool = False
+    additional_outputs: list[Path] = field(default_factory=list)
+
+    @property
+    def outputs(self):
+        return [self.produces, *self.additional_outputs]
 
 
-def _training_is_complete(produces: Path) -> bool:
-    """A training output counts only if it ran the full budget.
-
-    Existence is not enough: a `--super-fast` smoke run writes the same
-    `summary.json`, and treating that as done would silently skip the real run.
-    """
-    if not produces.exists():
-        return False
-    try:
-        summary = json.loads(produces.read_text())
-    except Exception:
-        return False
-    if summary.get("status") != "OK":
-        return False
-    # Count checkpoints rather than trusting config.json: `--super-fast`
-    # overrides the seed and iteration counts at runtime while the saved config
-    # still shows the full budget, so a smoke artifact would otherwise pass.
-    n_ckpt = len(list(produces.parent.glob("checkpoint_seed_*.pkl")))
-    if n_ckpt < SEEDS:
-        return False
-    # Provenance, not just budget. A run at the right seed and iteration counts
-    # but from a superseded architecture passes every numeric check; requiring
-    # a provenance stamp means an un-stamped directory is treated as needing a
-    # rerun rather than silently adopted.
-    prov = produces.parent / "provenance.json"
-    if not prov.exists():
-        print(f"[programme] {produces.parent.name}: no provenance stamp, "
-              f"treating as stale", flush=True)
-        return False
-    return True
+def _training_is_complete(produces: Path, config: dict | None = None) -> bool:
+    from utils.training_identity import complete
+    return complete(produces.parent, config)
 
 
-def _is_complete(stage: "Stage", by_name: dict[str, "Stage"]) -> bool:
-    if is_dummy() and stage.phase != "figures":
-        return dummy_sibling(stage.produces).exists()
-    """Whether a stage can be skipped.
+def _stage_stamp(stage: Stage) -> Path:
+    return RESULTS / ".programme" / (stage.name.replace(":", "_") + ".json")
 
-    Training: the full budget must already be on disk. Analyses: the output must
-    exist *and* be newer than every input it derives from, so artifacts left by
-    the previous architecture are regenerated rather than mistaken for current.
-    """
-    if stage.always:
+
+def _stage_signature(stage: Stage, by_name: dict[str, Stage]) -> dict:
+    from utils.training_identity import sha256
+    inputs = {str(path): sha256(path) if path.is_file() else None
+              for dep in stage.depends_on for path in by_name[dep].outputs}
+    sources = sorted(p for folder in ("agents", "beliefs", "envs", "evaluation", "oracles", "plotting", "scripts", "training", "utils", "experiments/configs", "reproduction")
+                     for p in (REPO_ROOT / folder).rglob("*")
+                     if p.is_file() and p.suffix in (".py", ".yaml", ".json", ".gz"))
+    sources += [REPO_ROOT / "uv.lock", REPO_ROOT / "pyproject.toml"]
+    return {"command": stage.cmd, "inputs": inputs,
+            "source": {str(p.relative_to(REPO_ROOT)): sha256(p) for p in sources},
+            "outputs": {str(p): sha256(p) if p.is_file() else None for p in stage.outputs}}
+
+
+def _is_complete(stage: Stage, by_name: dict[str, Stage]) -> bool:
+    if is_dummy() or stage.always:
         return False
     if stage.kind == "train":
-        return _training_is_complete(stage.produces)
-    if not stage.produces.exists():
+        from training.config import load_config
+        cfg = load_config(stage.cmd[stage.cmd.index("--config") + 1]).to_dict()
+        return _training_is_complete(stage.produces, cfg)
+    if any(not p.is_file() or p.stat().st_size == 0 for p in stage.outputs):
         return False
-    own = stage.produces.stat().st_mtime
-    for dep_name in stage.depends_on:
-        dep = by_name.get(dep_name)
-        if dep is None or not dep.produces.exists():
-            return False
-        if dep.produces.stat().st_mtime > own:
-            return False
-    return True
+    try:
+        saved = json.loads(_stage_stamp(stage).read_text())
+        current = _stage_signature(stage, by_name)
+        return all(v is not None for v in current["inputs"].values()) and saved == current
+    except (OSError, ValueError, KeyError):
+        return False
 
 
 def _train(key: str, phase: str, cfg: Path, experiment: str, est: float,
@@ -218,6 +203,10 @@ def build_plan() -> list[Stage]:
                   foundations_dir() / "stats_M5_factorial_toys.json",
                   depends_on=gate, est=45),
     ]
+    stages.append(_analysis("foundations:original_validation", "foundations",
+                  "scripts.restore_validation_baselines", foundations_dir() / "method_ranking.json",
+                  depends_on=gate, est=0.1))
+    gate = gate + ["foundations:env_validation", "foundations:impl_validation", "foundations:original_validation"]
     # ---- Phase 1: training ---------------------------------------------
     for key in REFERENCES:
         stages.append(_train(
@@ -242,12 +231,6 @@ def build_plan() -> list[Stage]:
 
     # ---- Phase 2: evaluation and analyses ------------------------------
     stages += [
-        # The ladder figure reads this file; without the stage a clean-room run
-        # trains everything and then fails at the figure.
-        _analysis("analysis:stacked_obs_sweep", "medium",
-                  "scripts.m5r_stacked_obs_sweep",
-                  final / "m5r_stacked_obs_sweep.json",
-                  depends_on=medium_training, est=10),
         _analysis("analysis:param_counts", "medium", "scripts.m5r_param_counts",
                   final / "m5r_param_counts_run.json", depends_on=medium_training, est=2),
         _analysis("analysis:final_eval", "medium", "scripts.m5r_final_eval",
@@ -271,7 +254,7 @@ def build_plan() -> list[Stage]:
         _analysis("analysis:belief_quality_tests", "medium",
                   "scripts.m5r_belief_quality_tests",
                   final / "m5r_belief_quality_tests.json",
-                  depends_on=["analysis:posterior_probe"], est=2),
+                  depends_on=["analysis:posterior_probe", "analysis:posterior_probe_mlp"], est=2),
         # The method-return and time-to-threshold sets. They had no stage here,
         # so their corrected p-values could not be regenerated by this command.
         _analysis("analysis:return_tests", "medium",
@@ -300,8 +283,15 @@ def build_plan() -> list[Stage]:
         _analysis("analysis:hypothesis_tests", "medium", "scripts.m5r_hypothesis_tests",
                   final / "m5r_hypothesis_tests.json",
                   depends_on=["analysis:final_eval",
-                              "analysis:post_training_evaluation"], est=5),
+                              "analysis:post_training_evaluation", "analysis:posterior_probe", "analysis:posterior_probe_mlp"], est=5),
     ]
+
+    stages.append(_analysis("analysis:probe_confusion", "medium", "scripts.m5r_probe_confusion",
+                           final / "m5r_probe_confusion.json", depends_on=["analysis:posterior_probe"], est=30))
+    statistics = ["analysis:hypothesis_tests", "analysis:return_tests", "analysis:diagnostic_tests", "analysis:belief_quality_tests"]
+    stages.append(_analysis("analysis:seed_block_sensitivity", "medium", "scripts.m5r_seed_block_sensitivity",
+                           final / "m5r_seed_block_sensitivity.json", depends_on=statistics, est=2))
+    presentation_inputs = [s.name for s in stages if s.phase == "medium" and s.kind != "train"]
 
     # ---- Phase 3: tables and figures -----------------------------------
     stages += [
@@ -311,12 +301,11 @@ def build_plan() -> list[Stage]:
         # replaced by one table per probe metric and no longer exists.
         _analysis("figures:tables", "figures", "scripts.make_tables",
                   thesis_fig_dir().parent / "tables" / "probe_kl.tex",
-                  depends_on=["analysis:post_training_evaluation",
-                              "analysis:posterior_probe"],
+                  depends_on=presentation_inputs,
                   est=1, always=True),
         _analysis("figures:main", "figures", "plotting.m5r_plots",
                   _repo_fig("m5r_method_ladder.png"),
-                  depends_on=["analysis:post_training_evaluation"], est=5),
+                  depends_on=presentation_inputs, est=5),
         _analysis("figures:action_heatmap", "figures",
                   "plotting.m5r_action_inventory_heatmap",
                   _repo_fig("m5r_action_given_regime_inventory.png"),
@@ -335,60 +324,35 @@ def build_plan() -> list[Stage]:
                   depends_on=medium_training, est=2),
         _analysis("figures:factorial_toys", "figures", "plotting.m4_plots",
                   _repo_fig("factorial_toys.png"),
-                  depends_on=medium_training, est=2),
+                  depends_on=["foundations:impl_validation", "foundations:original_validation"], est=2),
     ]
+    by_name = {stage.name: stage for stage in stages}
+    secondary = {
+        "analysis:param_counts": [final / "param_counts.json"],
+        "analysis:final_eval": [final / "per_cell_env.json"],
+        "analysis:belief_quality_tests": [final / "m5r_belief_quality_mlp_tests.json"],
+        "analysis:return_tests": [final / "m5r_method_return_tests.json"],
+        "foundations:env_validation": [foundations_dir() / "env_validation/e9_stats.json"] +
+            [_repo_fig(n) for n in ("fig_M2_R1_policy_heatmap.png", "fig_M2_R1_value_loss_distribution.png",
+             "fig_M2_R2_per_regime_ppo.png", "fig_M2_R4_belief_ppo_gap.png", "fig_M2_R4_posterior_entropy.png")],
+        "figures:tables": [thesis_fig_dir().parent / "tables" / f"{n}.tex" for n in
+                           ("probe_decodability", "probe_log_loss", "probe_brier", "integration_gap", "probe_confusion", "seed_block_sensitivity")],
+        "figures:main": [_repo_fig(n) for n in ("m5r_learning_curves.png", "m5r_probe_kl_per_t.png",
+                          "m5r_probe_acc_per_t.png", "m5r_probe_delta_per_t.png", "m5r_probe_accuracy_since_change.png",
+                          "m5r_action_separation.png", "m5r_belief_swap_separation.png", "m5r_posterior_vs_performance.png")],
+    }
+    for name, outputs in secondary.items():
+        by_name[name].additional_outputs = outputs
+    for stage in stages:
+        if stage.kind == "train":
+            stage.additional_outputs = [stage.produces.parent / n for n in ("metrics.json", "config.json", "provenance.json")]
     return stages
 
 
 
-def _real_counterpart(produces: Path) -> Path:
-    """The same artifact under the real results root, used as a schema template."""
-    real_root = REPO_ROOT / "results"
-    try:
-        return real_root / produces.relative_to(RESULTS)
-    except ValueError:
-        return produces
-
-
-def _write_dummy(stage: "Stage") -> bool:
-    """Write a plausible synthetic artifact for one stage.
-
-    Cloning a real artifact is preferred, because then the figure rendered from
-    it has the shape the finished thesis will have. Stages that never ran get a
-    synthesiser instead.
-    """
+def _write_dummy(stage: Stage) -> bool:
     from scripts import dummy_data as dd
-
-    produces = dummy_sibling(stage.produces)
-    produces.parent.mkdir(parents=True, exist_ok=True)
-
-    if stage.kind == "train":
-        experiment = produces.parent.name
-        produces.write_text(json.dumps(
-            dd.synth_training_summary(experiment), indent=2))
-        (produces.parent / "metrics.dummy.json").write_text(json.dumps(
-            dd.synth_training_metrics(experiment), indent=2))
-        return True
-
-    synth = dd.SYNTHESISERS.get(stage.name)
-    if synth is not None:
-        produces.write_text(json.dumps(synth(), indent=2))
-        return True
-
-    template = stage.produces
-    if template.exists():
-        payload = dd.clone_with_jitter(template, seed=abs(hash(stage.name)) % 2**31)
-        if payload is not None:
-            produces.write_text(json.dumps(payload, indent=2))
-            return True
-
-    # No template and no synthesiser: say so rather than writing something the
-    # plotting code will silently misread.
-    print(f"  [{stage.name}] no dummy template at {template}", flush=True)
-    produces.write_text(json.dumps(
-        {"dummy": True, "stage": stage.name,
-         "note": "no template available; structure unknown"}, indent=2))
-    return True
+    return dd.write_stage(stage)
 
 
 
@@ -545,19 +509,18 @@ def _validate_output(stage: "Stage") -> str | None:
     whole run, because by then the training that produced it is hours behind.
     Catching it here means one stage is rerun, not the programme.
     """
-    produces = stage.produces
-    if not produces.exists():
-        return "no output written"
-    if produces.suffix != ".json":
-        return None if produces.stat().st_size > 0 else "empty file"
-    try:
-        payload = json.loads(produces.read_text())
-    except Exception as exc:
-        return f"unparseable JSON ({exc})"
-    if payload in ({}, [], None):
-        return "empty JSON"
-    if isinstance(payload, dict) and payload.get("status") == "FAIL":
-        return f"stage reported FAIL: {payload.get('error')}"
+    for output in stage.outputs:
+        if not output.is_file() or output.stat().st_size == 0:
+            return f"missing or empty required output: {output}"
+        if output.suffix == ".json":
+            try:
+                payload = json.loads(output.read_text())
+            except (OSError, ValueError) as exc:
+                return f"unparseable JSON {output}: {exc}"
+            if payload in ({}, [], None):
+                return f"empty JSON: {output}"
+            if isinstance(payload, dict) and payload.get("status") == "FAIL":
+                return f"stage reported FAIL in {output}: {payload.get('error')}"
     return None
 
 
@@ -600,11 +563,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if is_dummy():
-        from scripts import dummy_data as dd
-        n = dd.mirror_inputs(REPO_ROOT / "results")
-        print(f"[programme] dummy mode: wrote {n} .dummy.json siblings under "
-              f"results/, figures under "
-              f"{os.environ['THESIS_PROJECT_FIGS'].split('/')[-1]}/", flush=True)
+        print(f"[programme] isolated schema/render preflight: {RESULTS.parent}", flush=True)
 
     if not is_dummy() and not args.dry_run and not args.skip_preflight:
         print("[programme] preflight: proving the chain on dummy data", flush=True)
@@ -617,15 +576,22 @@ def main() -> int:
                   "would train for days and then fail the same way. Fix it, or "
                   "pass --skip-preflight to override.", flush=True)
             return 1
-        contract = subprocess.run(
-            [sys.executable, "-u", "-m", "scripts.thesis_contract"], cwd=REPO_ROOT,
-        )
-        print(f"[programme] preflight passed (contract exit={contract.returncode})",
-              flush=True)
+        print("[programme] schema/render preflight passed; scientific validation runs after real outputs exist", flush=True)
 
     plan = build_plan()
     if args.phase:
-        plan = [s for s in plan if s.phase in args.phase]
+        selected = {s.name for s in plan if s.phase in args.phase}
+        if not selected:
+            raise ValueError(f"Unknown or empty phase selection: {args.phase}")
+        # Include transitive prerequisites; filtering must never erase gates.
+        all_stages = {s.name: s for s in plan}
+        pending = list(selected)
+        while pending:
+            for dependency in all_stages[pending.pop()].depends_on:
+                if dependency not in selected:
+                    selected.add(dependency)
+                    pending.append(dependency)
+        plan = [s for s in plan if s.name in selected]
 
     done: set[str] = set()
     failed: set[str] = set()
@@ -686,6 +652,9 @@ def main() -> int:
 
         problem = _validate_output(stage) if code == 0 else "non-zero exit"
         if code == 0 and problem is None:
+            stamp = _stage_stamp(stage)
+            stamp.parent.mkdir(parents=True, exist_ok=True)
+            stamp.write_text(json.dumps(_stage_signature(stage, by_name), indent=2))
             done.add(stage.name)
             status = "ok"
         elif code == 0:
@@ -704,7 +673,9 @@ def main() -> int:
         print(f"[programme] {stage.name} {status} in {_fmt(took)}", flush=True)
 
     for i, stage in enumerate(plan, start=1):
-        blocked = [d for d in stage.depends_on if d in failed]
+        if stage.name in done:
+            continue
+        blocked = [d for d in stage.depends_on if d not in done]
         if blocked:
             print(f"\n[programme] SKIP {stage.name}: dependency failed ({blocked[0]})",
                   flush=True)
@@ -748,9 +719,12 @@ def main() -> int:
     print(
         f"\n[programme] finished | {len(done)} ok, {len(failed)} failed "
         f"| total {_fmt((time.time() - t0) / 60)} | status: "
-        f"{STATUS.relative_to(REPO_ROOT)}",
+        f"{_rel(STATUS)}",
         flush=True,
     )
+    if not failed and not is_dummy() and not args.phase:
+        contract = subprocess.run([sys.executable, "-m", "scripts.thesis_contract", "--strict"], cwd=REPO_ROOT)
+        return contract.returncode
     return 1 if failed else 0
 
 

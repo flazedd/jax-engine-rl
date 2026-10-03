@@ -76,11 +76,10 @@ def _test_stationary_distribution_matches() -> int:
     n = env.n_regimes
     T = np.asarray(params["transition_matrix"], dtype=np.float64).reshape(n, n)
     stationary = _stationary_distribution(T)
-    # Long rollout — 200 episodes' worth of steps. The 0.98 diagonal means
-    # the chain has ~50-step correlation length, so effective sample size is
-    # ~500 even at n_steps=25k. Threshold 0.03 is still comfortably above the
-    # expected sampling noise.
-    n_steps = 200 * env.episode_length
+    # Two thousand episodes also cover the final 0.995-persistence instance.
+    # A 200-episode sample has substantial finite-sample error under that
+    # correlation structure and cannot reliably support a 3% tolerance.
+    n_steps = 2000 * env.episode_length
     _, regimes = _simulate(env, n_steps, seed=123)
     freqs = np.bincount(regimes, minlength=n) / regimes.size
     err = np.max(np.abs(freqs - stationary))

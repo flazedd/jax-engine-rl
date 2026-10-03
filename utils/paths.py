@@ -55,8 +55,8 @@ def resolve_data(path):
 
     Dummy artifacts live beside the real ones as ``<stem>.dummy.json`` rather
     than in a parallel tree, so one directory listing shows which stages have
-    landed. A dummy run reads the ``.dummy.json`` where one exists and the real
-    file where it does not; a normal run never looks at a dummy file at all.
+    landed. A dummy run requires the ``.dummy.json``; missing fixtures fail rather than
+    falling back to real data. A normal run never reads a dummy file.
     """
     from pathlib import Path as _Path
 
@@ -64,7 +64,7 @@ def resolve_data(path):
     if not is_dummy() or p.suffix != ".json" or p.name.endswith(".dummy.json"):
         return p
     sibling = p.with_name(p.name[: -len(".json")] + ".dummy.json")
-    return sibling if sibling.exists() else p
+    return sibling  # Never mix real data into a synthetic run.
 
 
 def dummy_sibling(path):

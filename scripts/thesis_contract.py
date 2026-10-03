@@ -42,6 +42,8 @@ def _load(path: Path):
 def _check_comparisons(payload, source: str, findings: list[dict]) -> int:
     """Every corrected comparison carries the fields the thesis reports."""
     checked = 0
+    if source == "returns_rsmm":
+        payload = payload.get("family_b", {})
     raw = payload.get("comparisons") or payload.get("results") or []
     comparisons = []
     stack = [raw]
@@ -65,6 +67,24 @@ def _check_comparisons(payload, source: str, findings: list[dict]) -> int:
                 "kind": "missing_fields", "source": source,
                 "comparison": comp.get("name", "?"), "missing": missing,
             })
+        for field in ("mean_difference", "delta_ci", "permutation_p", "holm_corrected_p"):
+            try:
+                value = np.asarray(comp[field], dtype=float)
+                valid = np.all(np.isfinite(value))
+                if field == "delta_ci":
+                    valid = valid and value.shape == (2,) and value[0] <= value[1]
+                elif field.endswith("_p"):
+                    valid = valid and value.shape == () and 0 <= value <= 1
+                else:
+                    valid = valid and value.shape == ()
+                if not valid:
+                    raise ValueError(field)
+            except (KeyError, TypeError, ValueError):
+                findings.append({"kind": "invalid_comparison_value", "source": source, "field": field})
+    expected = P.COMPARISON_SETS[source].size
+    if checked != expected:
+        findings.append({"kind": "comparison_count", "source": source,
+                         "expected": expected, "found": checked})
     return checked
 
 
@@ -139,6 +159,37 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
                 lo,hi = r["ci"]
                 expected_fragments["decoupling"].append(
                     f"${r['correlation']:.3f}$ & $[{lo:.3f},\\ {hi:.3f}]$")
+    if post:
+        expected_fragments["reference_gaps"] = []
+        for high, low, label in (("belief_ppo", "regime_agnostic_ppo", "Belief-PPO $-$ regime-agnostic PPO"),
+                                 ("oracle_ppo", "belief_ppo", "Oracle-PPO $-$ Belief-PPO")):
+            difference, lower, upper = bootstrap_independent_mean_ci(
+                post["methods"][high]["per_seed_evaluation_return"],
+                post["methods"][low]["per_seed_evaluation_return"])
+            expected_fragments["reference_gaps"].append(
+                f"{label} & ${difference:+.2f}$ & $[{lower:+.2f},\\ {upper:+.2f}]$")
+    # Main architecture/method effect tables, not only the supplementary rows.
+    if hypotheses and post:
+        expected_fragments["architecture_returns"] = []
+        for r in hypotheses["family_b"]["results"].values():
+            label = "RL\\textsuperscript{2}" if r["method"].startswith("rl2") else "VariBAD"
+            lo, hi = r["delta_ci"]
+            pv = r["holm_corrected_p"]
+            ptext = "<0.001" if pv < .001 else f"{pv:.3f}"
+            expected_fragments["architecture_returns"].append(
+                f"{label} & ${r['mean_difference']:+.2f}$ & $[{lo:+.2f},\\ {hi:+.2f}]$ & "
+                f"${r['mean_difference']/gap:+.2f}$ & ${ptext}$")
+    method_tests = _load(root / "analysis/m5r_method_return_tests.json")
+    if method_tests and post:
+        expected_fragments["method_returns"] = []
+        for r in method_tests["comparisons"]:
+            label = "Concatenation" if r["architecture"] == "concat" else "Hypernetwork"
+            lo, hi = r["delta_ci"]
+            pv = r["holm_corrected_p"]
+            ptext = "<0.001" if pv < .001 else f"{pv:.3f}"
+            expected_fragments["method_returns"].append(
+                f"{label} & ${r['mean_difference']:+.2f}$ & $[{lo:+.2f},\\ {hi:+.2f}]$ & "
+                f"${r['mean_difference']/gap:+.2f}$ & ${ptext}$")
     for table, fragments in expected_fragments.items():
         for fragment in fragments:
             if " ".join(fragment.split()) not in normalised:
@@ -173,13 +224,26 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
 
     appendix_path = thesis_root / "sections" / "appendix.tex"
     appendix = " ".join(appendix_path.read_text().split()) if appendix_path.exists() else ""
+    if post:
+        for key, display in labels.items():
+            result = post["methods"][key]
+            mean = result["evaluation_return_mean"]
+            sd = np.std(result["per_seed_evaluation_return"], ddof=1)
+            fragment = f"{display} & ${mean:.2f}$ & ${sd:.2f}$ & ${(mean-floor)/gap:.2f}$"
+            if fragment not in appendix:
+                findings.append({"kind":"thesis_table_drift", "table":"variant_ladder", "row":key})
+            if key in ("regime_agnostic_ppo", "stacked_obs_ppo", "belief_ppo", "oracle_ppo"):
+                lo,hi = result["evaluation_return_ci95"]
+                fragment = f"{display} & ${mean:.2f}$ & ${sd:.2f}$ & $[{lo:.2f},\\ {hi:.2f}]$"
+                if fragment not in appendix:
+                    findings.append({"kind":"thesis_table_drift", "table":"reference_levels", "row":key})
     for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass", "$96.4\\%$ of the exact finite-horizon optimum"):
         if fragment not in appendix:
             findings.append({"kind": "thesis_table_drift", "table": "environment_validation",
                              "expected_fragment": fragment})
 
 
-def audit(root: Path, thesis_root: Path | None = None) -> dict:
+def _audit(root: Path, thesis_root: Path | None = None) -> dict:
     findings: list[dict] = []
     # Analyses moved out of the retired M5R/final layout; the audit was
     # looking for its inputs where nothing has been written since.
@@ -209,15 +273,16 @@ def audit(root: Path, thesis_root: Path | None = None) -> dict:
             findings.append({"kind": "missing_artifact", "set": key,
                              "path": str(path)})
             continue
-        size = payload.get("family_size")
-        if size is not None and size != expected.size:
+        metadata = payload.get("family_b", {}) if key == "returns_rsmm" else payload
+        size = metadata.get("family_size", metadata.get("size"))
+        if size != expected.size:
             findings.append({
                 "kind": "family_size", "set": key,
                 "expected": expected.size, "found": size,
                 "note": "Appendix D records the expected size",
             })
-        alt = payload.get("alternative")
-        if alt is not None and alt != P.ALTERNATIVE:
+        alt = metadata.get("alternative")
+        if alt != P.ALTERNATIVE:
             findings.append({"kind": "alternative", "set": key,
                              "expected": P.ALTERNATIVE, "found": alt})
         checked_comparisons += _check_comparisons(payload, key, findings)
@@ -287,23 +352,39 @@ def audit(root: Path, thesis_root: Path | None = None) -> dict:
                             for v in substitution["by_method"].values()):
         findings.append({"kind":"stale_belief_substitution", "required_version":2})
 
-    # --- the budget --------------------------------------------------------
-    for experiment in ("m5r_ref_regime_agnostic_e9", "m5r_final_rl2_hypernet_e9"):
-        m = _load(root / experiment / "metrics.json")
-        if m is None:
+    # Every published condition, using the actual routed medium directory.
+    for experiment in EXPERIMENTS.values():
+        m = _load(root / "medium" / experiment / "metrics.json")
+        if not isinstance(m, dict):
+            findings.append({"kind": "missing_artifact", "experiment": experiment})
             continue
-        for field, expected in (("num_seeds", P.SEEDS),
-                                ("iterations", P.ITERATIONS),
+        for field, expected in (("num_seeds", P.SEEDS), ("iterations", P.ITERATIONS),
                                 ("parallel_envs", P.PARALLEL_ENVS),
                                 ("rollout_length", P.ROLLOUT_LENGTH)):
-            found = m.get(field)
-            if found is not None and found != expected:
+            if m.get(field) != expected:
                 findings.append({"kind": "budget", "experiment": experiment,
-                                 "field": field, "expected": expected,
-                                 "found": found})
+                                 "field": field, "expected": expected, "found": m.get(field)})
+        try:
+            curves = np.asarray(m["per_seed_mean_return_per_iter"], dtype=float)
+            assert curves.shape == (P.SEEDS, P.ITERATIONS) and np.isfinite(curves).all()
+            ids = m.get("seeds", list(range(P.SEEDS)))  # historical train() appended in numeric order
+            assert ids == list(range(P.SEEDS))
+        except (KeyError, TypeError, ValueError, AssertionError):
+            findings.append({"kind": "training_curves", "experiment": experiment})
 
     if thesis_root is not None:
         _check_thesis_result_tables(thesis_root, root, findings)
+        from scripts import make_tables
+        previous = make_tables.FINAL
+        make_tables.FINAL = lambda: root / "analysis"
+        try:
+            for name, builder in make_tables.TABLES.items():
+                expected = builder()
+                path = thesis_root / "tables" / f"{name}.tex"
+                if expected is None or not path.exists() or path.read_text() != expected:
+                    findings.append({"kind": "generated_table_drift", "table": name})
+        finally:
+            make_tables.FINAL = previous
 
     env_stats = _load(root / "foundations" / "env_validation" / "e9_stats.json")
     if env_stats is not None:
@@ -325,6 +406,94 @@ def audit(root: Path, thesis_root: Path | None = None) -> dict:
         "findings": findings,
     }
 
+
+
+EXPERIMENTS = {
+    "regime_agnostic_ppo": "m5r_ref_regime_agnostic_e9",
+    "belief_ppo": "m5r_ref_belief_e9", "oracle_ppo": "m5r_ref_oracle_e9",
+    "stacked_obs_ppo": "m5r_ref_stacked_obs_e9",
+    **{m: f"m5r_final_{m}_e9" for m in P.METHOD_ARMS},
+}
+
+
+def _required_inputs(root: Path) -> list[dict]:
+    findings = []
+    def require(relative):
+        value = _load(root / relative)
+        if not isinstance(value, dict) or not value:
+            findings.append({"kind": "missing_or_corrupt_artifact", "path": relative})
+            return {}
+        return value
+    def check(label, function):
+        try:
+            assert function()
+        except (KeyError, TypeError, ValueError, IndexError, AssertionError):
+            findings.append({"kind": "invalid_schema", "source": label})
+    def finite(values, shape):
+        array = np.asarray(values, dtype=float)
+        return array.shape == shape and np.isfinite(array).all()
+    ev = require("analysis/m5r_post_training_evaluation.json")
+    check("evaluation methods", lambda: set(ev["methods"]) == set(EXPERIMENTS))
+    for method, experiment in EXPERIMENTS.items():
+        def validate(method=method, experiment=experiment):
+            b = ev["methods"][method]
+            return (b["experiment"] == experiment and sorted(b["seeds"]) == list(range(P.SEEDS))
+                    and b["n_trained_runs"] == P.SEEDS
+                    and b["evaluation_episodes_per_run"] == 512 and b["episode_length"] == 128
+                    and finite(b["per_seed_evaluation_return"], (P.SEEDS,))
+                    and np.isclose(np.mean(b["per_seed_evaluation_return"]), b["evaluation_return_mean"]))
+        check("evaluation:" + method, validate)
+    for suffix, classifier in (("", P.PRIMARY_PROBE), ("_mlp", P.ROBUSTNESS_PROBE)):
+        data = require(f"analysis/m5r_posterior_vs_performance{suffix}.json")
+        def validate_probe(data=data, classifier=classifier):
+            points = data["scatter_points"]
+            expected = {(m, seed) for m in P.METHOD_ARMS for seed in range(P.SEEDS)}
+            fields = (P.PRIMARY_BELIEF_METRIC, P.DECODABILITY_METRIC,
+                      *P.UNCORRECTED_PROBE_METRICS, "belief_error_kl", "gap_closed")
+            return (data["classifier"] == classifier and data["n_rollouts"] * data["rollout_length"] == P.PROBE_TIMESTEPS
+                    and len(points) == len(expected)
+                    and {(p["method"], p["seed"]) for p in points} == expected
+                    and all(finite([p[k] for k in fields], (len(fields),)) for p in points))
+        check("probe" + suffix, validate_probe)
+    for name in ("m5r_belief_swap", "m5r_belief_swap_with_history", "m5r_belief_swap_history_only", "m5r_action_distributions"):
+        if name in ("m5r_belief_swap_with_history", "m5r_belief_swap_history_only") and not (root / f"analysis/{name}.json").exists():
+            continue  # optional, unreported robustness interventions
+        data = require(f"analysis/{name}.json")
+        for method in P.METHOD_ARMS:
+            def validate(data=data, method=method, name=name):
+                b = data["by_method"][method]
+                if sorted(b["seeds"]) != list(range(P.SEEDS)):
+                    return False
+                if "swap" in name:
+                    return b["diagnostic_version"] == 2 and finite(b["per_seed_separation"], (P.SEEDS,))
+                return (finite(b["per_seed_action_given_regime_inventory"], (P.SEEDS, 3, 11, 3))
+                        and finite(b["per_seed_inventory_counts"], (P.SEEDS, 3, 11)))
+            check(name + ":" + method, validate)
+    sensitivity = require("analysis/m5r_seed_block_sensitivity.json")
+    check("seed-block sensitivity", lambda: len(sensitivity["comparisons"]) == 18
+          and sensitivity["seed_ids"] == list(range(P.SEEDS))
+          and all(finite(r["paired_bootstrap_ci"], (2,)) and 0 <= r["paired_p_holm"] <= 1
+                  for r in sensitivity["comparisons"]))
+    confusion = require("analysis/m5r_probe_confusion.json")
+    for method in P.METHOD_ARMS:
+        check("confusion:" + method, lambda m=method: finite(confusion["by_method"][m]["row_normalized"], (3,3))
+              and np.allclose(np.sum(confusion["by_method"][m]["row_normalized"], axis=1), 1))
+    for relative in ("analysis/per_cell_env.json", "analysis/param_counts.json",
+                     "foundations/env_validation/e9_stats.json", "foundations/env_validation/validation_table.json",
+                     "foundations/stats_M5_factorial_toys.json", "foundations/method_ranking.json"):
+        require(relative)
+    return findings
+
+
+def audit(root: Path, thesis_root: Path | None = None) -> dict:
+    findings = _required_inputs(root)
+    try:
+        report = _audit(root, thesis_root)
+    except (KeyError, TypeError, ValueError, IndexError, ZeroDivisionError) as exc:
+        report = {"comparisons_checked": 0, "findings": [{"kind": "invalid_artifact_schema", "error": str(exc)}]}
+    report["findings"] = findings + report["findings"]
+    report["n_findings"] = len(report["findings"])
+    return report
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="scripts.thesis_contract")

@@ -236,7 +236,7 @@ def probe_confusion() -> str | None:
         rows.append("\\addlinespace")
     return ("\\begin{tabular}{llrrr}\n"
             "\\toprule\n"
-            "Method & True regime & Pred. $0$ & Pred. $1$ & Pred. $2$ \\\\\n"
+            f"{_banner(5)}Method & True regime & Pred. $0$ & Pred. $1$ & Pred. $2$ \\\\\n"
             "\\midrule\n"
             + "\n".join(rows[:-1]) + "\n"
             "\\bottomrule\n"
@@ -244,6 +244,38 @@ def probe_confusion() -> str | None:
 
 
 TABLES["probe_confusion"] = probe_confusion
+
+
+
+def seed_block_sensitivity() -> str | None:
+    data = _load(FINAL() / "m5r_seed_block_sensitivity.json")
+    if data is None or len(data.get("comparisons", [])) != 18:
+        return None
+    families = {"architecture_returns": "Architecture return", "method_returns": "Method return",
+                "speed": "Time to reference", "probe": "Linear probe", "probe_mlp": "MLP probe",
+                "diagnostics": "Behaviour"}
+    rows = []
+    for item in data["comparisons"]:
+        name = item["comparison"]
+        method = "RL2" if name.startswith(("rl2", "locked_regime_action_distribution_rl2", "belief_swap_belief_only_rl2")) else "VariBAD"
+        if item["family"] == "method_returns":
+            label = "RL2--VariBAD, " + ("hypernet" if name.endswith("hypernet") else "concat")
+        elif item["family"] in ("probe", "probe_mlp"):
+            label = method + (", KL" if item["metric"] == "method_kl_to_omega" else ", accuracy")
+        elif item["family"] == "diagnostics":
+            label = method + (", response" if name.startswith("locked") else ", substitution")
+        else:
+            label = method
+        lo, hi = item["paired_bootstrap_ci"]
+        digits = 1 if item["family"] == "speed" else 3
+        rows.append(f"{families[item['family']]} & {label} & {_fmt(item['delta'], digits, plus=True)} "
+                    f"& $[{lo:+.{digits}f},\\ {hi:+.{digits}f}]$ & {_fmt_p(item['paired_p_holm'])} " + r"\\")
+    return ("\\begin{tabular}{llrrr}\n\\toprule\n" + _banner(5)
+            + r"Family & Comparison & $\bar d$ & Seed-block $95\%$ CI & $p_{\mathrm{Holm}}$ " + r"\\" + "\n\\midrule\n"
+            + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
+
+
+TABLES["seed_block_sensitivity"] = seed_block_sensitivity
 
 
 def main() -> int:
@@ -275,6 +307,9 @@ def main() -> int:
     stats_path = analysis_dir() / "make_tables_run.json"
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     run.add_output(str(out_dir))
+    if skipped:
+        run.fail(reason=f"Required tables missing or invalid: {skipped}", summary_path=stats_path)
+        return 1
     run.ok(key_stats={"written": len(written), "skipped": len(skipped),
                       "dummy": is_dummy()},
            summary_path=stats_path)

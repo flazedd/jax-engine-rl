@@ -11,8 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     code = [p for directory in ('agents', 'beliefs', 'envs', 'training', 'evaluation',
-                                'scripts', 'utils', 'plotting')
+                                'scripts', 'utils', 'plotting', 'oracles', 'tests')
             for p in (ROOT/directory).rglob('*.py')]
+    code += list((ROOT/'experiments/configs').rglob('*.yaml'))
+    code += [p for p in (ROOT/'reproduction').rglob('*') if p.is_file()]
     code += [ROOT/'uv.lock', ROOT/'pyproject.toml', ROOT/'REPRODUCE.md']
     outputs = [analysis_dir()/name for name in (
         'm5r_post_training_evaluation.json', 'm5r_posterior_vs_performance.json',
@@ -20,7 +22,9 @@ def main():
         'm5r_hypothesis_tests.json', 'm5r_belief_swap.json',
         'm5r_belief_swap_run.json', 'm5r_diagnostic_tests.json',
         'm5r_action_distributions.json', 'm5r_belief_quality_tests.json',
-        'm5r_belief_quality_mlp_tests.json', 'param_counts.json')]
+        'm5r_belief_quality_mlp_tests.json', 'param_counts.json',
+        'm5r_probe_confusion.json', 'm5r_method_return_tests.json',
+        'm5r_time_to_threshold_tests.json', 'm5r_seed_block_sensitivity.json')]
     def hashes(paths):
         return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(paths)}
@@ -38,7 +42,11 @@ def main():
                         'temporal curves smoothed before bootstrap percentile intervals',
                         'optimal-policy heatmap displays all numerical ties',
                         'module parameter counts checked against thesis table',
-                        'executed KL normalization, filter model and omission screen documented'],
+                        'executed KL normalization, filter model and omission screen documented',
+                        'shared training randomness disclosed and all 18 seed-block sensitivities reported',
+                        'isolated schema/render fixtures and content-hashed complete dependency graph',
+                        'fail-closed full training identity and checkpoint integrity',
+                        'complete required-artifact and comparison contract'],
         'code_sha256': hashes(code), 'analysis_sha256': hashes(outputs),
     }
     path=analysis_dir()/'thesis_correction_manifest.json'

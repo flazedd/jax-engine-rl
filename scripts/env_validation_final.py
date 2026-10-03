@@ -216,7 +216,7 @@ def _build_row(
         "label": spec["label"],
         "thesis_row": spec["thesis_row"],
         "env_config": spec["config"],
-        "stats_path": str(stats_path.relative_to(REPO_ROOT)),
+        "stats_path": str(stats_path.resolve()),
         "elapsed_sec": elapsed_sec,
         "measured": measured,
         "rounded_2dp": rounded,
@@ -284,7 +284,7 @@ def main() -> int:
     if run_mode != "full":
         print(
             f"[{SCRIPT}] run_mode={run_mode}: smoke test only. Writing to "
-            f"{OUT_DIR.relative_to(REPO_ROOT)} and leaving the full-mode "
+            f"{OUT_DIR} and leaving the full-mode "
             f"artifacts and appendix figures untouched. The reduced PPO budget "
             f"will not clear R2/R3.",
             flush=True,

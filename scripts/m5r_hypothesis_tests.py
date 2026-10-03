@@ -164,6 +164,7 @@ def _run_family_b(methods: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "n_permutations": permutation["n_permutations"],
             "loo": loo,
             "stable_under_seed_omission": loo["stable_under_run_omission"],
+            "stable_under_run_omission": loo["stable_under_run_omission"],
             "env": env,
             "method": method_cell, "baseline": baseline_cell,
             "n_method": len(method_seeds),

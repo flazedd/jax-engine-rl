@@ -50,7 +50,7 @@ def _evaluate_method(method_index: int, name: str, experiment: str) -> dict:
     directory = experiment_dir(experiment)
     checkpoints = sorted(directory.glob("checkpoint_seed_*.pkl"))
     seeds = [int(path.stem.rsplit("_", 1)[1]) for path in checkpoints]
-    if len(seeds) != 20:
+    if sorted(seeds) != list(range(20)):
         raise RuntimeError(f"{experiment}: expected 20 checkpoints, found {len(seeds)}")
 
     returns: list[float] = []

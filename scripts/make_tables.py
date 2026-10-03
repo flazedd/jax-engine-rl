@@ -271,7 +271,7 @@ def seed_block_sensitivity() -> str | None:
         rows.append(f"{families[item['family']]} & {label} & {_fmt(item['delta'], digits, plus=True)} "
                     f"& $[{lo:+.{digits}f},\\ {hi:+.{digits}f}]$ & {_fmt_p(item['paired_p_holm'])} " + r"\\")
     return ("\\begin{tabular}{llrrr}\n\\toprule\n" + _banner(5)
-            + r"Family & Comparison & $\bar d$ & Seed-block $95\%$ CI & $p_{\mathrm{Holm}}$ " + r"\\" + "\n\\midrule\n"
+            + r"Family & Comparison & $\bar d$ & Paired $95\%$ CI & $p_{\mathrm{Holm}}$ " + r"\\" + "\n\\midrule\n"
             + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
 
 

@@ -237,7 +237,7 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
                 fragment = f"{display} & ${mean:.2f}$ & ${sd:.2f}$ & $[{lo:.2f},\\ {hi:.2f}]$"
                 if fragment not in appendix:
                     findings.append({"kind":"thesis_table_drift", "table":"reference_levels", "row":key})
-    for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass", "$96.4\\%$ of the exact finite-horizon optimum"):
+    for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass", "$96.4\\%$ of the exact optimum over the finite horizon"):
         if fragment not in appendix:
             findings.append({"kind": "thesis_table_drift", "table": "environment_validation",
                              "expected_fragment": fragment})

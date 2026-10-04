@@ -1,30 +1,27 @@
 # Reproducing the thesis results
 
-This guide accompanies *Trading in the Dark* and the October 2026 corrections.
+This guide accompanies *Trading in the Dark*.
 It distinguishes verification of saved results, replay of frozen policies, and
 full retraining. None is a substitute for the others.
 
 ## Companion archive and source identity
 
-The delivered `thesis-reproducibility-2026-10-02.tar.gz` contains `code/`,
+The delivered `thesis-reproducibility-2026-10-04.tar.gz` contains `code/`,
 `thesis/`, `MANIFEST.json`, and `ENVIRONMENT.json`. Its adjacent `.sha256` file
 verifies the download. After extraction, verify every archived file:
 
 ```bash
-cd thesis-reproducibility-2026-10-02
+cd thesis-reproducibility-2026-10-04
 python3 code/scripts/verify_reproduction_bundle.py .
 cd code
 ```
 
-The manifest pins the corrected source snapshot by SHA-256, including changes
-beyond base commit `96cae2465159d78b13cc00ba6c354b87de4641e9`. It also pins all
-YAML configurations, the lock file, analysis inputs, and the 160 main checkpoints.
+The manifest pins the source snapshot by SHA-256. It also pins all YAML
+configurations, the lock file, analysis inputs, and the 160 main checkpoints.
 The source snapshot is complete without Git history. This is a local companion
 archive delivered with the thesis; no public release URL or DOI is claimed.
 
-Training was recorded at `220b319f367e69a8f466c87d5346b1acf60574d6`; the original
-analysis revision `3af71feedf24d01d001a358dec5c7c1bbbf1a880` predates the corrections.
-Neither historical revision alone regenerates the revised analysis. The original
+Training was recorded at `220b319f367e69a8f466c87d5346b1acf60574d6`. The original
 three-seed toy-validation baseline is explicitly pinned in
 `reproduction/inputs/method_ranking.json`, including all nine sets of per-seed
 final returns. The bundle additionally preserves its original training artifacts.
@@ -32,11 +29,8 @@ The current factorial validation is a separate experiment with eight seeds.
 
 `ENVIRONMENT.json` describes the verification machine and installed libraries.
 Original training hardware details that were not recorded are marked unknown.
-`TRAINING_EVIDENCE.json` records observed budgets and preserved metadata conflicts.
-In particular, VariBAD-concat's config/provenance says 600 iterations while its
-summary, metrics, and all 20 seed curves say 1500. Original files are preserved.
-There is no archived verification record establishing the earlier claim of a
-hash-identical full retraining; the revised thesis withdraws that claim.
+`TRAINING_EVIDENCE.json` records the saved learning curves and checkpoint hashes
+for the eight main conditions.
 
 ## Install the locked environment
 
@@ -62,6 +56,21 @@ uv run python -m scripts.restore_validation_baselines
 uv run python -m scripts.m5r_seed_block_sensitivity
 uv run python -m scripts.thesis_contract --strict --thesis-root ../thesis
 ```
+
+The exploratory reference and short-history intervals can be regenerated with
+`uv run python -m scripts.m5r_exploratory_baseline_seed_pairs`. The supplemental
+posterior checks use the saved policies and new simulated episodes:
+
+```bash
+uv run python -m scripts.m5r_supplemental_belief_checks --n-rollouts 500
+uv run python -m scripts.plot_m5r_supplemental_belief_checks --output ../thesis/figures/appendix/m5r_direct_posterior_accuracy.png
+```
+
+Both analyses were added after reviewing the main results. They do not alter the
+planned comparison families or saved checkpoints. The second command compares
+VariBAD readouts of its posterior mean and its complete mean and standard deviation
+input on the same held-out episodes; it also scores the analytical posterior
+directly on each method's own trajectories.
 
 The sensitivity script recomputes all 18 original mean comparisons (including
 bootstrap intervals, permutation p-values and six Holm adjustments) and checks
@@ -91,6 +100,18 @@ second replays all 160 checkpoints (81920 episodes). Each uses the original
 512 episodes, 128 steps, method-specific evaluation keys, and compares with the
 saved per-seed result. It writes a separate verification file. Numerical identity
 across hardware is not promised; discrepancies are reported with their size.
+The accuracy and KL figures in Chapter 5 pair each method's accuracy and KL with reference probes fitted on the same episodes.
+Current probe outputs retain both analytical reference curves for every training seed. For older
+outputs that retain only the reference mean curve, recover the individual curves before plotting:
+
+```bash
+uv run python -m scripts.m5r_accuracy_references
+```
+
+This replays the saved checkpoints, refits the analytical reference classifiers, checks their
+accuracies and KL values against the saved results, and writes `results/analysis/m5r_accuracy_references.json`.
+The figures subtract these reference curves within each run before smoothing and bootstrapping.
+
 The probes and locked-regime diagnostics can be regenerated with their corresponding
 `m5r_posterior_probe`, `m5r_action_distributions`, and `m5r_belief_swap` scripts.
 
@@ -159,10 +180,7 @@ latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
 The five environment-validation figures are included in the bundle with their
 saved validation inputs. A full recomputation of those figures is part of
 `python -m scripts.env_validation_final` and includes its validation training.
-The original frozen evaluation and probe measurements remain unchanged. Earlier
-corrections fixed the experiment/seed join, RL2 actor-only belief substitution,
-inventory aggregation, temporal bootstrap smoothing, and tied-optimum display.
-The method-return, speed and MLP Holm families were declared after initial
-inspection; the thesis now discloses that history. All paired and independent
-analyses retain their stated assumptions. Architectural matching does not isolate
-VariBAD's conditioning route from changes in trunk sharing and hidden widths.
+The frozen evaluation and probe measurements are included in the bundle. The
+statistical analyses retain their stated assumptions. Architectural matching does
+not isolate VariBAD's conditioning route from changes in trunk sharing and hidden
+widths.

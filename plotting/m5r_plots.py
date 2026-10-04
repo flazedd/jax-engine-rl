@@ -61,9 +61,10 @@ def _exact_full_information_diagnostics() -> dict[str, float]:
     """Scores for the exact full-information policy on the two behaviour plots.
 
     The action score uses the figure's usual locked-regime occupancy weighting.
-    The belief-swap score averages the same maximum total-variation distance
-    uniformly over all episode steps and inventory states, since the exact
-    policy has no learned belief vectors or recorded observation histories.
+    The substitution reference replaces the known regime, averages action
+    probabilities uniformly over episode steps before measuring maximum TV,
+    then averages uniformly over inventory states. It is a canonical reference,
+    not a measurement on the learned agents' observation pools.
     """
     config = _load_yaml_with_extends(
         REPO_ROOT / "experiments/configs/m5r_e9/oracle_ppo.yaml"
@@ -94,13 +95,15 @@ def _exact_full_information_diagnostics() -> dict[str, float]:
                        where=counts[..., None] > 0)
     action = float(regime_separation_per_seed(tables[None], counts[None])[0])
 
-    # For a fixed (step, inventory) situation, changing the known regime makes
-    # the deterministic exact policy either keep the same action (TV=0) or
-    # choose another one (TV=1).
-    swap = float(np.mean([
-        1.0 if len(set(policy[t, q].tolist())) > 1 else 0.0
-        for t in range(n_t) for q in range(n_inv)
-    ]))
+    # Match the diagnostic's order: average action probabilities first, then
+    # compare regime inputs. Reversing these operations prevents cancellation.
+    mean_probs = np.eye(n_actions)[policy].mean(axis=0)  # [inventory, regime, action]
+    pairs = [(i, j) for i in range(n_reg) for j in range(i + 1, n_reg)]
+    per_inventory = np.max([
+        0.5 * np.abs(mean_probs[:, i] - mean_probs[:, j]).sum(axis=-1)
+        for i, j in pairs
+    ], axis=0)
+    swap = float(per_inventory.mean())
     return {"action": action, "swap": swap}
 def _both_targets(name: str) -> list[Path]:
     """Both destinations for a chart: the repo tree and the thesis tree.
@@ -1190,94 +1193,113 @@ def _probe_levels_figure(
 
 
 def plot_m5r_probe_kl_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
-    """Divergence to the analytical posterior across the episode, in levels.
-
-    Levels rather than the paired difference, because the reader needs the
-    distance from the posterior before the contrast between architectures, and
-    a difference figure cannot show it. The paired contrast on both metrics is
-    the appendix figure.
-    """
-    _probe_levels_figure(
-        out_path, _draw_probe_kl_levels_per_t,
-        "KL to the analytical posterior",
-        ["Analytical residual\n(RL² concat rollouts)"], env_label,
-    )
+    """Absolute KL and paired excess KL relative to each run's reference probe."""
+    _plot_probe_levels_and_reference_gap(out_path, env_label, metric="kl")
 
 
 def plot_m5r_probe_acc_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
-    """Regime decodability across the episode, in levels, as the counterpart to
-    the divergence figure under the second of the two probe metrics."""
-    _probe_levels_figure(
-        out_path, _draw_probe_acc_levels_per_t,
-        "Probe test accuracy",
-        ["Analytical posterior\n(RL² concat rollouts)", "Random guess"], env_label,
-    )
+    """Absolute accuracy and paired gaps to each run's own posterior probe."""
+    _plot_probe_levels_and_reference_gap(out_path, env_label, metric="acc")
 
 
-def plot_m5r_probe_accuracy_since_change(
-    out_path: Path, env_label: str = MEDIUM_ENV,
-) -> None:
-    """Check how quickly each representation reflects a changed regime."""
+def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric: str) -> None:
+    if metric not in {"acc", "kl"}:
+        raise ValueError(metric)
+    suffix = "test_acc" if metric == "acc" else "kl"
+    reference_suffix = "" if metric == "acc" else "_kl"
+    reference_path = RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json"
+    references = json.loads(reference_path.read_text()) if reference_path.exists() else None
+    if references is not None and references["environment"] != env_label:
+        raise ValueError("Reference curves use a different environment")
     apply_style()
-    panels = (("logistic", "Linear probe"), ("mlp", "MLP probe"))
-    fig, axes = plt.subplots(1, 2, figsize=(10.6, 6.4), sharey=True)
-    drew_any = False
-    for ax, (classifier, title) in zip(axes, panels):
-        probe = _load_probe_for_per_t(classifier)
-        env_block = (probe or {}).get("per_method_per_env", {}).get(env_label, {})
-        analytical_drawn = False
-        labels = None
+    fig, axes = plt.subplots(2, 2, figsize=(11.0, 8.0), sharex=True, sharey="row")
+    for col, (classifier, title) in enumerate((("logistic", "Linear probe"), ("mlp", "MLP probe"))):
+        source = _load_probe_for_per_t(classifier)
         for cell in CELLS:
-            result = env_block.get(cell, {})
-            key = "method_test_acc_since_change_per_seed"
-            if key not in result:
-                continue
-            values = np.asarray(result[key], dtype=float)
-            labels = result["steps_since_change_labels"]
-            x = np.arange(len(labels))
+            block = source["per_method_per_env"][env_label][cell]
+            method = np.asarray(block[f"method_per_t_{suffix}_per_seed"], dtype=float)
+            seeds = [p["seed"] for p in source["scatter_points"] if p["method"] == cell and p["env_label"] == env_label]
+            if f"analytical_per_t_{suffix}_per_seed" in block:
+                reference = np.asarray(block[f"analytical_per_t_{suffix}_per_seed"], dtype=float)
+            elif references is not None:
+                reference = np.asarray([references["methods"][cell][str(seed)][classifier + reference_suffix] for seed in seeds])
+            else:
+                raise ValueError("Missing per-run references: run scripts.m5r_accuracy_references")
+            if reference.shape != method.shape:
+                raise ValueError(f"Unmatched reference shape for {cell}")
+            np.testing.assert_allclose(reference.mean(axis=0), block[f"analytical_per_t_{suffix}_mean"], atol=1e-10)
             color, linestyle = _VARIANT_LEVEL_STYLE[cell]
-            ax.plot(x, np.nanmean(values, axis=0), color=color,
-                    linestyle=linestyle, linewidth=2.2,
-                    label=_VARIANT_LEVEL_LABEL[cell])
-            if not analytical_drawn:
-                analytical = np.asarray(
-                    result["analytical_test_acc_since_change_per_seed"],
-                    dtype=float,
-                )
-                ax.plot(x, np.nanmean(analytical, axis=0),
-                        color=_ANALYTICAL_COLOR, linewidth=2.6,
-                        label="Analytical posterior\n(RL² concat rollouts)")
-                analytical_drawn = True
-            drew_any = True
-        ax.axhline(1.0 / 3.0, color="#999999", linestyle=":",
-                   linewidth=1.2, label="Random guess")
-        if labels is not None:
-            ax.set_xticks(np.arange(len(labels)), labels)
-        ax.set_title(title, fontsize=14, loc="left")
-        ax.set_xlabel("Steps since the latest regime change", fontsize=12)
-        ax.set_ylim(0.0, 1.0)
-        polish(ax)
-    if not drew_any:
-        print(f"[m5r_plots] skip {out_path.name}: no switch data")
-        plt.close(fig)
-        return
-    axes[0].set_ylabel("Probe test accuracy", fontsize=13)
-    handles = {}
-    for handle, label in zip(*axes[0].get_legend_handles_labels()):
-        handles.setdefault(label, handle)
-    order = [_VARIANT_LEVEL_LABEL[cell] for cell in CELLS]
-    order += ["Analytical posterior\n(RL² concat rollouts)", "Random guess"]
-    shown = [label for label in order if label in handles]
-    fig.legend([handles[label] for label in shown], shown, loc="lower center",
-               ncol=3, fontsize=12, bbox_to_anchor=(0.5, 0.0), frameon=True,
-               facecolor="white", edgecolor="#dddddd", framealpha=1.0)
-    fig.subplots_adjust(left=0.09, right=0.99, top=0.93, bottom=0.24,
-                        wspace=0.05)
+            for row, values in enumerate((method, (100 if metric == "acc" else 1) * (method - reference))):
+                mean, lo, hi = _mean_curve_ci(values)
+                t = np.arange(len(mean))
+                axes[row, col].plot(t, mean, color=color, linestyle=linestyle, linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
+                axes[row, col].fill_between(t, lo, hi, color=color, alpha=0.12)
+        axes[0, col].set_title(title, fontsize=14, loc="left")
+        if metric == "acc":
+            axes[0, col].axhline(1/3, color="#999999", linestyle=":", linewidth=1.2)
+            axes[0, col].set_ylim(0.25, 1.0)
+        else:
+            axes[0, col].set_ylim(bottom=0)
+        axes[1, col].axhline(0, color="#555555", linestyle=":", linewidth=1.5)
+        axes[1, col].set_xlabel("Step within episode", fontsize=12)
+        for row in range(2):
+            polish(axes[row, col])
+            axes[row, col].tick_params(labelsize=11)
+    axes[0, 0].set_ylabel("Regime prediction accuracy" if metric == "acc" else "KL to analytical posterior", fontsize=12)
+    axes[1, 0].set_ylabel("Accuracy gap to own reference\n(percentage points)" if metric == "acc" else "Excess KL over own reference", fontsize=12)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, fontsize=11, bbox_to_anchor=(0.5, 0.005))
+    fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=0.14, hspace=0.20, wspace=0.08)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
 
+
+def plot_m5r_probe_accuracy_since_change(
+    out_path: Path, env_label: str = MEDIUM_ENV,
+) -> None:
+    """Recovery accuracy and paired gaps to references on each run's own episodes."""
+    apply_style()
+    fig, axes = plt.subplots(2, 2, figsize=(11.0, 8.0), sharex=True, sharey="row")
+    for col, (classifier, title) in enumerate((("logistic", "Linear probe"), ("mlp", "MLP probe"))):
+        source = _load_probe_for_per_t(classifier)
+        labels = None
+        for cell in CELLS:
+            block = source["per_method_per_env"][env_label][cell]
+            method = np.asarray(block["method_test_acc_since_change_per_seed"], dtype=float)
+            reference = np.asarray(block["analytical_test_acc_since_change_per_seed"], dtype=float)
+            if method.shape != reference.shape or not np.isfinite(method).all() or not np.isfinite(reference).all():
+                raise ValueError(f"Missing or unmatched recovery values for {classifier}/{cell}")
+            if labels is not None and labels != block["steps_since_change_labels"]:
+                raise ValueError("Recovery bins differ between methods")
+            labels = block["steps_since_change_labels"]
+            x = np.arange(len(labels))
+            color, linestyle = _VARIANT_LEVEL_STYLE[cell]
+            for row, values in enumerate((method, 100 * (method - reference))):
+                mean, lo, hi = _mean_curve_ci(values, smoothing_window=1)
+                axes[row, col].plot(x, mean, color=color, linestyle=linestyle,
+                                    linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
+                axes[row, col].fill_between(x, lo, hi, color=color, alpha=0.12)
+        axes[0, col].set_title(title, fontsize=14, loc="left")
+        axes[0, col].axhline(1 / 3, color="#999999", linestyle=":", linewidth=1.2)
+        axes[0, col].set_ylim(0, 1)
+        axes[1, col].axhline(0, color="#555555", linestyle=":", linewidth=1.5)
+        axes[1, col].set_xticks(np.arange(len(labels)), labels)
+        axes[1, col].set_xlabel("Steps since the latest regime change", fontsize=12)
+        for row in range(2):
+            polish(axes[row, col])
+            axes[row, col].tick_params(labelsize=11)
+    axes[0, 0].set_ylabel("Regime prediction accuracy", fontsize=12)
+    axes[1, 0].set_ylabel("Accuracy gap to own reference\n(percentage points)", fontsize=12)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, fontsize=11,
+               bbox_to_anchor=(0.5, 0.005))
+    fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=0.14, hspace=0.20, wspace=0.08)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
 
 
 def _diagnostic_separation_per_seed(diagnostic: str) -> dict[str, np.ndarray] | None:
@@ -1314,7 +1336,7 @@ def _diagnostic_separation_per_seed(diagnostic: str) -> dict[str, np.ndarray] | 
 
 
 def plot_m5r_diagnostic_separation(
-    out_path: Path, diagnostic: str = "action",
+    out_path: Path, diagnostic: str = "action", ax=None,
 ) -> None:
     """Per-run separation score of each variant.
 
@@ -1328,7 +1350,9 @@ def plot_m5r_diagnostic_separation(
         print(f"[m5r_plots] skip diagnostic_separation ({diagnostic}): data missing")
         return
     apply_style()
-    fig, ax = plt.subplots(figsize=(8.4, 5.2))
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(8.4, 5.2))
 
     # Two method groups, the two architectures side by side inside each.
     positions = {"rl2_concat": 0.0, "rl2_hypernet": 1.0,
@@ -1352,12 +1376,10 @@ def plot_m5r_diagnostic_separation(
     refs = {k: float(np.nanmean(per_seed[k]))
             for k in ("regime_agnostic_ppo", "belief_ppo", "oracle_ppo")
             if k in per_seed}
-    if diagnostic == "action":
-        refs["exact_full_information"] = _exact_full_information_diagnostics()[diagnostic]
+    refs["exact_full_information"] = _exact_full_information_diagnostics()[diagnostic]
     ax.set_xlim(-0.6, 5.1)
     _draw_refs(ax, refs, label_x=4.05,
-               label_offsets=({"exact_full_information": 5, "oracle_ppo": -4}
-                              if diagnostic == "action" else None))
+               label_offsets={"exact_full_information": 5, "oracle_ppo": -4})
     ax.set_xticks(list(positions.values()))
     ax.set_xticklabels(["RL²\nConcat", "RL²\nHypernet",
                         "VariBAD\nConcat", "VariBAD\nHypernet"], fontsize=11)
@@ -1367,9 +1389,32 @@ def plot_m5r_diagnostic_separation(
     ax.set_ylabel(ylabel, fontsize=12)
     ax.set_ylim(-0.05, 1.12)
     polish(ax)
+    if not standalone:
+        return
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path); plt.close(fig)
+    print(f"[m5r_plots] wrote {out_path}")
+
+
+def plot_m5r_diagnostics_combined(out_path: Path) -> None:
+    """Two diagnostic panels using the same data and statistics as the standalone plots."""
+    apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.3), sharey=True)
+    for ax, diagnostic, title in zip(axes, ("action", "swap"),
+                                    ("(a) Policy response", "(b) Belief substitution")):
+        plot_m5r_diagnostic_separation(out_path, diagnostic, ax=ax)
+        ax.set_title(title, loc="left", fontsize=13)
+        ax.set_ylabel("Change in action distribution" if diagnostic == "action" else "", fontsize=12)
+        ax.tick_params(labelsize=11)
+        for label in ax.texts:
+            label.set_fontsize(8.5)
+            label.set_x(5.05)
+            label.set_ha("right")
+    fig.tight_layout(w_pad=1.5)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
 
 
@@ -1393,6 +1438,8 @@ def main() -> int:
         plot_m5r_probe_acc_per_t(target)
     for target in _both_targets("m5r_probe_accuracy_since_change.png"):
         plot_m5r_probe_accuracy_since_change(target)
+    for target in _both_targets("m5r_diagnostics_combined.png"):
+        plot_m5r_diagnostics_combined(target)
     for target in _both_targets("m5r_action_separation.png"):
         plot_m5r_diagnostic_separation(target, diagnostic="action")
     for target in _both_targets("m5r_belief_swap_separation.png"):

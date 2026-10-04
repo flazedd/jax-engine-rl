@@ -161,6 +161,7 @@ FIGURE_HOME: dict[str, str] = {
     "m5r_probe_kl_per_t.png": "results/RQ2",
     "m5r_probe_acc_per_t.png": "results/RQ2",
     "m5r_action_separation.png": "results/RQ2",
+    "m5r_diagnostics_combined.png": "results/RQ2",
     "m5r_belief_swap_separation.png": "results/RQ2",
     "m5r_posterior_vs_performance.png": "results/RQ2",
     # Chapter 5 — RQ3: replication in-domain and in a second domain

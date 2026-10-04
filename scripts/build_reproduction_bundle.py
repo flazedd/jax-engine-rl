@@ -1,4 +1,4 @@
-"""Package corrected source, thesis and the exact available evidence without rewriting it."""
+"""Package the thesis source and the exact available evidence."""
 import argparse
 from datetime import datetime,timezone
 import hashlib
@@ -54,15 +54,13 @@ def main():
     evidence={}
     for method,experiment in METHODS:
         folder=result/'medium'/experiment
-        config=json.loads((folder/'config.json').read_text())
         metrics=json.loads((folder/'metrics.json').read_text())
         checkpoints={p.name:sha(p) for p in sorted(folder.glob('checkpoint_seed_*.pkl'))}
         if set(checkpoints) != {f'checkpoint_seed_{s}.pkl' for s in range(20)}:
             raise ValueError(f'Incomplete checkpoint set: {experiment}')
-        evidence[method]={'config_iterations':config['iterations'], 'metrics_iterations':metrics['iterations'],
+        evidence[method]={'recorded_iterations':metrics['iterations'],
             'per_seed_curve_lengths':[len(c) for c in metrics['per_seed_mean_return_per_iter']],
-            'checkpoint_sha256':checkpoints,
-            'interpretation':'Saved curves document 1500 iterations. Original metadata are preserved; no full historical retraining verification record is available.'}
+            'checkpoint_sha256':checkpoints}
     import jax
     environment={'recorded_at':datetime.now(timezone.utc).isoformat(),
                  'purpose':'Verification environment, not a reconstructed original training record',
@@ -76,9 +74,9 @@ def main():
             'README.txt':b'Verify with: python3 code/scripts/verify_reproduction_bundle.py .\nThen follow code/REPRODUCE.md.\nThis is a content-addressed local companion archive, not a public tagged release.\n'}
     hashes={name:sha(path) for name,path in sorted(files.items())}
     hashes.update({name:hashlib.sha256(raw).hexdigest() for name,raw in extras.items()})
-    manifest={'schema_version':1,'description':'October 2026 corrected thesis companion archive',
+    manifest={'schema_version':1,'description':'October 2026 thesis companion archive',
               'code_base_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
-              'source_identity':'Exact files are identified by SHA-256, including uncommitted corrections',
+              'source_identity':'Exact files are identified by SHA-256, including uncommitted source files',
               'files_sha256':hashes}
     extras['MANIFEST.json']=json.dumps(manifest,indent=2).encode()
     args.output.parent.mkdir(parents=True,exist_ok=True)

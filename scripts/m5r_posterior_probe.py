@@ -293,9 +293,11 @@ def main() -> int:
                 "method_per_t_test_acc_mean": method_per_t.mean(axis=0).tolist(),
                 "method_per_t_test_acc_per_seed": method_per_t.tolist(),
                 "analytical_per_t_test_acc_mean": analytical_per_t.mean(axis=0).tolist(),
+                "analytical_per_t_test_acc_per_seed": analytical_per_t.tolist(),
                 "method_per_t_kl_mean": method_per_t_kl.mean(axis=0).tolist(),
                 "method_per_t_kl_per_seed": method_per_t_kl.tolist(),
                 "analytical_per_t_kl_mean": analytical_per_t_kl.mean(axis=0).tolist(),
+                "analytical_per_t_kl_per_seed": analytical_per_t_kl.tolist(),
                 "steps_since_change_labels": probe["steps_since_change_labels"],
                 "method_test_acc_since_change_mean": np.nanmean(
                     method_since_change, axis=0

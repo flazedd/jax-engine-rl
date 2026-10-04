@@ -51,3 +51,6 @@ texput.log
 results-retrained/
 figures-retrained/
 retrained-thesis/
+
+# Local reproduction output
+reproduced/

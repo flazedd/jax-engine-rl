@@ -1,64 +1,83 @@
-# Trading in the Dark: Belief-Conditioned Meta-Reinforcement Learning for Regime-Switching Market Making
+# Trading in the Dark
 
-Research code for the master's thesis *Trading in the Dark: Belief-Conditioned Meta-Reinforcement Learning for
-Regime-Switching Market Making*.
+**Research code, saved results, and trained agents for the master's thesis**
 
-The experiments compare RL² and VariBAD under two ways of providing a learned belief to the
-policy: concatenation and hypernetwork conditioning. They are evaluated in a regime-switching
-market-making environment against agents with no regime belief, a short observation history, the
-analytical posterior, or the true regime.
+*Belief-Conditioned Meta-Reinforcement Learning for Regime-Switching Market Making*
 
-## Installation
+The research asks whether an agent trades better because it learns more about a hidden market
+regime, or because it uses that information more effectively. The experiments compare RL² and
+VariBAD with concatenation and hypernetwork conditioning in a controlled market-making simulator.
+Four reference agents provide different amounts of information about the regime.
 
-The project requires Python 3.12 and [uv](https://docs.astral.sh/uv/). From the repository root:
+## Start here
+
+| What you want to do | Where to start |
+| --- | --- |
+| Check the reported results and regenerate charts and tables | Follow the quick start below |
+| Evaluate the saved agents without training | [Replay saved agents](REPRODUCE.md#replay-saved-agents) |
+| Train all agents again | [Repeat the experiments](REPRODUCE.md#repeat-the-experiments) |
+| Find the configuration or data behind a result | [Map from thesis to repository](REPRODUCE.md#map-from-thesis-to-repository) |
+
+**Everything needed for the saved-result checks is included in this repository.** No separate
+companion archive, private directory, or external data account is required. The compressed data
+include all 160 main checkpoints, results for 20 training seeds per condition, and supporting
+validation experiments. [Data inventory and checksums](reproduction/data/README.md).
+
+## Quick start: reproduce the saved results
+
+Use Python 3.12 and [uv](https://docs.astral.sh/uv/). Run these commands in a terminal:
 
 ```bash
+git clone https://github.com/flazedd/jax-engine-rl.git
+cd jax-engine-rl
 uv sync --locked
-uv run python -c "import jax; print(jax.devices())"
+uv run python -m scripts.reproduce_saved_results
 ```
 
-The lock file fixes the package versions used by the experiments.
+This verifies and unpacks the saved data, recalculates the main statistical comparisons, and
+regenerates the result figures and LaTeX tables. It does **not** train agents. It writes into a new
+`reproduced/` directory and leaves the published inputs unchanged.
+
+On success, the command prints `Saved result reproduction passed`. Open:
+
+- `reproduced/verification.json` for the overall check and links to stage logs.
+- `reproduced/figures/` for regenerated charts.
+- `reproduced/tables/` for generated LaTeX tables.
+- `reproduced/results/audits/thesis_contract.json` for the scientific consistency check.
+
+Use `--output another-directory` to repeat the check without overwriting a previous run.
+The [full reproduction guide](REPRODUCE.md) explains what is checked, what requires checkpoint
+replay, and how to repeat training. Saved-data verification establishes consistency of the
+reported measurements; replay and retraining provide additional checks.
 
 ## Check the installation
 
 ```bash
+uv run python -c "import jax; print(jax.devices())"
 uv run pytest -q
 uv run python -m scripts.run_matched_programme --dry-run
 ```
 
-The first command runs the tests. The second prints the experimental plan without training any
-agents. A synthetic run checks the complete analysis and plotting pipeline:
-
-```bash
-uv run python -m scripts.run_matched_programme --dummy
-```
-
-## Reproduce the thesis results
-
-The complete experiment is started with one command and can be resumed after interruption:
-
-```bash
-uv run python -m scripts.run_matched_programme
-```
-
-This run is computationally expensive. See [REPRODUCE.md](REPRODUCE.md) for the execution order,
-outputs, validation checks, and instructions for monitoring a run.
+The last command lists the experiment stages without running them. The locked installation
+supports CPU execution. Full training is substantially more expensive than the saved-result
+checks; do not start it just to view the results.
 
 ## Repository layout
 
 | Path | Contents |
-|---|---|
-| `agents/` | PPO, RL², VariBAD, and reference agents |
-| `beliefs/` | Analytical HMM posterior and oracle belief |
-| `envs/` | Market-making environment, wrappers, and validation tasks |
-| `experiments/configs/m5r_e9/` | Final configurations used for the thesis results |
-| `training/` | Training loop, configuration loading, and PPO updates |
-| `evaluation/` | Metrics, probes, diagnostics, and statistical procedures |
-| `scripts/` | Reproduction driver and individual analysis commands |
-| `plotting/` | Figure generation |
-| `figures/` | Figures generated from the reported experiments |
-| `tables/` | Generated LaTeX result tables |
-| `tests/` | Automated tests |
+| --- | --- |
+| [`REPRODUCE.md`](REPRODUCE.md) | Commands, expected outputs, and experimental scope |
+| [`reproduction/data/`](reproduction/data/) | Compressed saved evidence, checkpoints, and SHA-256 manifest |
+| [`experiments/configs/m5r_e9/`](experiments/configs/m5r_e9/) | Final configurations for the eight conditions |
+| `agents/`, `training/` | Agent architectures and training code |
+| `envs/`, `beliefs/`, `oracles/` | Simulator, analytical posterior, and dynamic programming references |
+| `evaluation/` | Return measurements, probes, diagnostics, and statistics |
+| `scripts/`, `plotting/` | Reproduction commands, analyses, tables, and figures |
+| [`figures/`](figures/) | Charts available to browse without running code |
+| `tests/` | Automated checks |
 
-The thesis contains the complete method definitions and experimental justification. This
-repository focuses on executable code and reproduction instructions.
+The training code was recorded at commit
+[`220b319f367e`](https://github.com/flazedd/jax-engine-rl/commit/220b319f367e69a8f466c87d5346b1acf60574d6).
+Use the current repository for reproduction: it includes the analysis and presentation used by
+the final thesis. Record `git rev-parse HEAD` with any new reproduction so the exact code version
+is identifiable.

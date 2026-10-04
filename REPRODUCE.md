@@ -1,138 +1,135 @@
 # Reproducing the thesis results
 
-This guide accompanies *Trading in the Dark*.
-It distinguishes verification of saved results, replay of frozen policies, and
-full retraining. None is a substitute for the others.
+Start with the [README quick start](README.md#quick-start-reproduce-the-saved-results).
+All commands below run from the repository root with Python 3.12 and `uv sync --locked` completed.
+No local thesis checkout or separately delivered archive is needed.
 
-## Companion archive and source identity
+## Three reproduction routes
 
-The delivered `thesis-reproducibility-2026-10-04.tar.gz` contains `code/`,
-`thesis/`, `MANIFEST.json`, and `ENVIRONMENT.json`. Its adjacent `.sha256` file
-verifies the download. After extraction, verify every archived file:
+| Route | Uses | What it checks |
+| --- | --- | --- |
+| Saved results | Published measurements and learning curves | Statistical comparisons, tables, and plots |
+| Checkpoint replay | Saved model weights and new simulated episodes | Whether the saved agents reproduce the evaluation returns |
+| Full retraining | Code, configurations, and fixed seeds | Whether a new training run reproduces the research findings |
+
+The first route is the shortest. The other two require more computation. Exact numerical
+agreement across hardware is not assumed; keep the output logs and report any differences.
+
+## Recalculate the reported results
 
 ```bash
-cd thesis-reproducibility-2026-10-04
-python3 code/scripts/verify_reproduction_bundle.py .
-cd code
+uv run python -m scripts.reproduce_saved_results
 ```
 
-The manifest pins the source snapshot by SHA-256. It also pins all YAML
-configurations, the lock file, analysis inputs, and the 160 main checkpoints.
-The source snapshot is complete without Git history. This is a local companion
-archive delivered with the thesis; no public release URL or DOI is claimed.
-
-Training was recorded at `220b319f367e69a8f466c87d5346b1acf60574d6`. The original
-three-seed toy-validation baseline is explicitly pinned in
-`reproduction/inputs/method_ranking.json`, including all nine sets of per-seed
-final returns. The bundle additionally preserves its original training artifacts.
-The current factorial validation is a separate experiment with eight seeds.
-
-`ENVIRONMENT.json` describes the verification machine and installed libraries.
-Original training hardware details that were not recorded are marked unknown.
-`TRAINING_EVIDENCE.json` records the saved learning curves and checkpoint hashes
-for the eight main conditions.
-
-## Install the locked environment
-
-Use Python 3.12 and [uv](https://docs.astral.sh/uv/):
+The command creates `reproduced/`, verifies the data checksums, and works on a separate copy of
+the saved inputs. It fails if the output directory is already nonempty. To run it again:
 
 ```bash
-uv sync --locked
-uv run python -c "import platform, jax; print(platform.platform()); print(jax.devices())"
-uv run pytest -q
+uv run python -m scripts.reproduce_saved_results --output reproduced-again
 ```
 
-The normal pytest suite includes environment, belief-filter, and observation
-invariants, including the final e9 environment, plus the regression tests for
-cache identity, required artifacts, comparison schemas, and dependency tracking.
-Training-based validation is separate and runs in the full programme.
+The command performs these steps:
 
-## Verify the saved scientific results
+1. Restore the pinned original implementation-validation baseline.
+2. Recompute all 18 primary mean comparisons and check them against the saved results, then
+   calculate sensitivity to shared training seeds and the exploratory reference comparisons.
+3. Generate the result tables and figures, including comparisons with analytical reference
+   probes on each method's own observations and the full-information policy reference.
+4. Check the required data, training budgets, comparison families, and numerical consistency.
 
-These commands use the bundle's saved data and do not train agents or refit probes:
+`verification.json` records whether every step passed. Each stage has its own log. The strict
+contract report is `results/audits/thesis_contract.json` within the output directory; a successful
+check has `n_findings: 0`. It requires both probe families, evaluation, policy diagnostics,
+confusion matrices, six comparison families, and all eight sets of 20 learning curves with
+1,500 iterations each.
 
-```bash
-uv run python -m scripts.restore_validation_baselines
-uv run python -m scripts.m5r_seed_block_sensitivity
-uv run python -m scripts.thesis_contract --strict --thesis-root ../thesis
-```
+Figures are written to `figures/`, and generated LaTeX tables to `tables/`, inside the selected
+output directory. The five environment-validation charts are already in the repository's
+`figures/appendix/`; recomputing those charts requires the environment validation experiment
+(`uv run python -m scripts.env_validation_final`), which includes training. They are not silently
+presented as freshly regenerated by the saved-result command.
 
-The exploratory reference and short-history intervals can be regenerated with
-`uv run python -m scripts.m5r_exploratory_baseline_seed_pairs`. The supplemental
-posterior checks use the saved policies and new simulated episodes:
+This route uses saved probe measurements. It does not refit classifiers or generate new policy
+trajectories. The strict check without a thesis checkout checks scientific data; it does not
+check prose or manually typeset thesis tables.
 
-```bash
-uv run python -m scripts.m5r_supplemental_belief_checks --n-rollouts 500
-uv run python -m scripts.plot_m5r_supplemental_belief_checks --output ../thesis/figures/appendix/m5r_direct_posterior_accuracy.png
-```
+## Replay saved agents
 
-Both analyses were added after reviewing the main results. They do not alter the
-planned comparison families or saved checkpoints. The second command compares
-VariBAD readouts of its posterior mean and its complete mean and standard deviation
-input on the same held-out episodes; it also scores the analytical posterior
-directly on each method's own trajectories.
-
-The sensitivity script recomputes all 18 original mean comparisons (including
-bootstrap intervals, permutation p-values and six Holm adjustments) and checks
-them against the saved results before calculating the seed-block analysis.
-Training uses shared seeds and rollout-key schedules across conditions. The
-original working-independence analysis is retained explicitly. The added paired
-bootstrap/sign-flip analysis preserves seed blocks; sign flips require symmetric
-paired differences or within-pair exchangeability under the null. Correlation
-resamples preserve all four variants within a seed and recenter each draw.
-This post-analysis check changes none of the 18 significance decisions.
-
-The strict contract requires evaluation, both probes, primary diagnostics,
-confusion data, all six comparison families, all eight training budgets and
-20-by-1500 learning curves. Missing or malformed required data fail. The optional
-history-substitution analyses are checked if present. With `--thesis-root`, it
-also checks all seven generated tables and the manually typeset result rows.
-
-## Replay frozen checkpoints
+Unpack the measurements and checkpoints into a new `results/` directory:
 
 ```bash
+uv run python -m scripts.prepare_results --checkpoints
 uv run python -m scripts.verify_checkpoint_replay
+```
+
+The replay command evaluates seed 0 for all eight conditions: 4,096 episodes in total. To check
+all 160 main checkpoints instead:
+
+```bash
 uv run python -m scripts.verify_checkpoint_replay --all-seeds
 ```
 
-The first command replays seed 0 from all eight conditions (4096 episodes); the
-second replays all 160 checkpoints (81920 episodes). Each uses the original
-512 episodes, 128 steps, method-specific evaluation keys, and compares with the
-saved per-seed result. It writes a separate verification file. Numerical identity
-across hardware is not promised; discrepancies are reported with their size.
-The accuracy and KL figures in Chapter 5 pair each method's accuracy and KL with reference probes fitted on the same episodes.
-Current probe outputs retain both analytical reference curves for every training seed. For older
-outputs that retain only the reference mean curve, recover the individual curves before plotting:
+Each checkpoint runs for 512 episodes of 128 steps with the original evaluation keys. The
+command reports each difference and writes `results/analysis/checkpoint_replay_verification.json`.
+It exits unsuccessfully if a difference exceeds the absolute tolerance (default `1e-10`).
+A discrepancy requires inspection; changing the tolerance does not establish agreement.
+
+`prepare_results` checks both archive and individual file hashes before writing. Existing
+identical files are accepted; differing files are never replaced. If `results/` already contains
+your own runs, use a separate destination and direct the subsequent commands to it:
+
+```bash
+uv run python -m scripts.prepare_results --checkpoints --destination results-published
+export THESIS_RESULTS_ROOT="$PWD/results-published"
+uv run python -m scripts.verify_checkpoint_replay
+```
+
+To repeat the representation and policy measurements using the saved checkpoints:
+
+```bash
+uv run python -m scripts.m5r_posterior_probe
+uv run python -m scripts.m5r_posterior_probe --classifier mlp
+uv run python -m scripts.m5r_action_distributions
+uv run python -m scripts.m5r_belief_swap
+uv run python -m scripts.m5r_probe_confusion
+uv run python -m scripts.m5r_supplemental_belief_checks --n-rollouts 500
+```
+
+These commands write new analysis outputs under `THESIS_RESULTS_ROOT` (default `results/`).
+Use a separate destination to preserve another run. The supplemental check compares VariBAD's
+posterior means with its full mean and standard deviation input and directly classifies regimes
+using the analytical posterior on each method's own trajectories.
+
+The published data include the analytical reference curves for the updated accuracy, KL, and
+regime-change figures. To recover reference curves from older probe outputs:
 
 ```bash
 uv run python -m scripts.m5r_accuracy_references
 ```
 
-This replays the saved checkpoints, refits the analytical reference classifiers, checks their
-accuracies and KL values against the saved results, and writes `results/analysis/m5r_accuracy_references.json`.
-The figures subtract these reference curves within each run before smoothing and bootstrapping.
+This replays checkpoints, refits reference classifiers, checks their aggregate scores against
+the saved results, and writes `analysis/m5r_accuracy_references.json`.
 
-The probes and locked-regime diagnostics can be regenerated with their corresponding
-`m5r_posterior_probe`, `m5r_action_distributions`, and `m5r_belief_swap` scripts.
+## Repeat the experiments
 
-## Preflight and full retraining
-
-Inspect the dependency-complete plan and run the deterministic rendering smoke test:
+First check the installation and print the execution plan:
 
 ```bash
+uv run pytest -q
 uv run python -m scripts.run_matched_programme --dry-run
+```
+
+A synthetic run checks the core pipeline and rendering without training:
+
+```bash
 uv run python -m scripts.run_matched_programme --dummy
 uv run python -m scripts.verify_clean_preflight
 ```
 
-The synthetic preflight uses checked-in schema fixtures, requires no archived
-results, and executes the real table and figure renderers. It does not validate
-training or statistically coherent synthetic results. It unconditionally redirects
-all output roots into a new temporary directory, prints that directory, marks
-outputs synthetic, and never falls back to real JSON. Inherited thesis-publication
-paths are ignored. The temporary output can be removed after inspection.
+Synthetic outputs are labelled and isolated in temporary directories. They are not research
+results. The preflight checks that inherited publication paths remain untouched.
 
-Run training in a **new directory**, preserving the delivered evidence:
+Start full training in separate output directories:
 
 ```bash
 export THESIS_RESULTS_ROOT="$PWD/results-retrained"
@@ -141,46 +138,78 @@ export THESIS_FIG_ROOT="$PWD/retrained-thesis/figures"
 uv run python -m scripts.run_matched_programme
 ```
 
-The driver gates main training on configuration and foundation validation, trains
-the four references, checks reference ordering, trains the four meta-RL variants,
-and then runs evaluation, both probes, confusion collection, diagnostics, all six
-comparison families, seed-block sensitivity, tables and figures. The strict
-scientific contract runs after real outputs exist. Failed prerequisites block
-all dependants. Selecting a phase includes its transitive prerequisites.
+The driver validates the configuration and environment, runs implementation checks, trains the
+four reference agents and four learned variants, and performs evaluation, statistical analysis,
+and presentation. Each main condition uses 20 seeds, 1,500 iterations, 512 parallel environments,
+and 128 steps per episode: 98,304,000 environment steps per seed. Allow substantial compute time;
+no hardware-independent runtime estimate is provided.
 
-New runs record the complete resolved configuration, relevant source/lock hashes,
-and a checksum for each checkpoint. Resume validates these before changing any
-metadata. An incompatible or legacy cache is rejected, not relabelled or silently
-retrained in place. Analysis-stage receipts hash code/configuration, dependency
-outputs and every required output; deleting a secondary output or changing an
-input invalidates the receipt. `--force STAGE` reruns a named analysis stage.
+Progress and failures are recorded in `results-retrained/matched_programme_status.json`.
+Rerun the same command with the same environment variables after an interruption. Completed
+stages are reused only when their recorded inputs and outputs match. Failed prerequisites block
+dependent stages. Use `--force STAGE` to repeat a named analysis stage. Historical checkpoints
+are for evaluation; they are not accepted as verified resumable training caches.
 
-Results live under `foundations/`, `medium/`, and `analysis/` beneath
-`THESIS_RESULTS_ROOT`. Progress is in `matched_programme_status.json`. Setting
-`THESIS_FIG_ROOT` publishes figures there and tables in its sibling `tables/`.
-A fresh retraining is a new replication; do not automatically replace published
-numbers without reviewing its outputs.
-
-## Regenerate the corrected thesis presentation
-
-From the extracted `code/` directory:
+The supplementary full-belief check is run separately after the programme:
 
 ```bash
-export THESIS_FIG_ROOT="$(cd ../thesis && pwd)/figures"
+uv run python -m scripts.m5r_supplemental_belief_checks --n-rollouts 500
+uv run python -m scripts.plot_m5r_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/m5r_direct_posterior_accuracy.png"
+uv run python -m scripts.m5r_exploratory_baseline_seed_pairs
+```
+
+A new training run is a replication. Inspect differences before replacing the published numbers.
+Record the code commit, lock file, operating system, accelerator, driver, and library versions.
+The original training hardware was not recorded in the available evidence.
+
+## Statistical details
+
+The six primary correction sets contain 2, 2, 2, 4, 4, and 4 comparisons. The original analysis
+uses independent resampling across conditions. Training shares random streams between matching
+seeds, so a separate sensitivity analysis preserves groups of matching seeds. Its paired intervals
+and sign reversals retain every primary significance decision in the published data. Sign
+reversals require symmetric paired differences or exchangeability within pairs under the null;
+matching seeds alone does not establish that assumption.
+
+For correlations, resampling retains all four variants within a seed. Associations within
+variants subtract their means again in every resample. Reference and short-history comparisons
+are exploratory and are outside the 18 primary tests.
+
+## Map from thesis to repository
+
+Paths under `results/` refer to unpacked data. All analysis filenames are relative to `results/analysis/`.
+
+| Thesis material | Configuration, data, or command |
+| --- | --- |
+| Environment and analytical posterior (Chapter 3) | `envs/`, `beliefs/`, `oracles/`; `experiments/configs/m5r_e9/` |
+| Training settings (Chapter 4, Appendix C) | Eight YAML configurations in `experiments/configs/m5r_e9/`; `results/medium/*/{config,metrics,summary}.json` |
+| Return and learning speed (Chapter 5) | `m5r_post_training_evaluation.json`, `m5r_method_return_tests.json`, `m5r_time_to_threshold_tests.json` |
+| Regime information and its relation to return | `m5r_posterior_vs_performance*.json`, `m5r_belief_quality*_tests.json`, `m5r_accuracy_references.json` |
+| Policy response and belief substitution | `m5r_action_distributions.json`, `m5r_belief_swap.json`, `m5r_diagnostic_tests.json` |
+| Environment and implementation checks (Appendix B) | `results/foundations/`; `scripts.env_validation_final`; `plotting.m4_plots` |
+| Confusion matrices and full-belief checks | `m5r_probe_confusion.json`, `m5r_supplemental_belief_checks.json` |
+| Sensitivity to shared training seeds | `m5r_seed_block_sensitivity.json`, `m5r_exploratory_baseline_seed_pairs.json` |
+| Generated tables | `scripts.make_tables` |
+| Main and supporting charts | `plotting.m5r_plots`, `plotting.reference_levels`, `plotting.m5r_action_inventory_heatmap` |
+
+The thesis equations and interpretations remain in the thesis. The repository supplies the
+executable procedures and saved evidence.
+
+## Optional: update a local thesis checkout
+
+The repository works on its own. If you also have the LaTeX thesis, use its actual path:
+
+```bash
+export THESIS_FIG_ROOT="/absolute/path/to/thesis/figures"
 uv run python -m plotting.m5r_plots
 uv run python -m plotting.reference_levels
 uv run python -m plotting.m5r_action_inventory_heatmap
 uv run python -m plotting.m4_plots
 uv run python -m scripts.make_tables
-uv run python -m scripts.thesis_contract --strict --thesis-root ../thesis
-cd ../thesis
-latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+uv run python -m scripts.plot_m5r_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/m5r_direct_posterior_accuracy.png"
+uv run python -m scripts.thesis_contract --strict --thesis-root "/absolute/path/to/thesis"
 ```
 
-The five environment-validation figures are included in the bundle with their
-saved validation inputs. A full recomputation of those figures is part of
-`python -m scripts.env_validation_final` and includes its validation training.
-The frozen evaluation and probe measurements are included in the bundle. The
-statistical analyses retain their stated assumptions. Architectural matching does
-not isolate VariBAD's conditioning route from changes in trunk sharing and hidden
-widths.
+These commands require unpacked results or `THESIS_RESULTS_ROOT` pointing to them. The final
+check also compares generated and manually typeset thesis tables. Compile the thesis from its
+own directory with `latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex`.

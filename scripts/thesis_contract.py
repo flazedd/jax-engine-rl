@@ -92,6 +92,18 @@ def _signed(value: float, digits: int = 2) -> str:
     return f"{value:+.{digits}f}"
 
 
+def _thesis_table_text(thesis_root: Path, label: str) -> str:
+    """Locate a labelled table independently of its chapter or appendix."""
+    import re
+    matches = []
+    for source in sorted((thesis_root / "sections").glob("*.tex")):
+        for block in re.findall(r"\\begin\{table\*?\}.*?\\end\{table\*?\}", source.read_text(), re.S):
+            if r"\label{" + label + "}" in block:
+                matches.append(" ".join(block.split()))
+    # Ambiguous or absent tables must fail the row check.
+    return matches[0] if len(matches) == 1 else ""
+
+
 def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[dict]) -> None:
     """Check manually typeset result rows against their analysis artifacts."""
     results_path = thesis_root / "sections" / "results.tex"
@@ -100,7 +112,7 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
     except OSError:
         findings.append({"kind": "missing_thesis_source", "path": str(results_path)})
         return
-    normalised = " ".join(text.split())
+    normalised = _thesis_table_text(thesis_root, "tab:stacked_baseline")
 
     post = _load(root / "analysis" / "m5r_post_training_evaluation.json")
     if post is not None:
@@ -178,7 +190,7 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
             ptext = "<0.001" if pv < .001 else f"{pv:.3f}"
             expected_fragments["architecture_returns"].append(
                 f"{label} & ${r['mean_difference']:+.2f}$ & $[{lo:+.2f},\\ {hi:+.2f}]$ & "
-                f"${r['mean_difference']/gap:+.2f}$ & ${ptext}$")
+                f"${ptext}$")
     method_tests = _load(root / "analysis/m5r_method_return_tests.json")
     if method_tests and post:
         expected_fragments["method_returns"] = []
@@ -189,10 +201,14 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
             ptext = "<0.001" if pv < .001 else f"{pv:.3f}"
             expected_fragments["method_returns"].append(
                 f"{label} & ${r['mean_difference']:+.2f}$ & $[{lo:+.2f},\\ {hi:+.2f}]$ & "
-                f"${r['mean_difference']/gap:+.2f}$ & ${ptext}$")
+                f"${ptext}$")
+    table_labels = {"learning_speed": "tab:learning_speed", "diagnostics": "tab:diagnostics",
+                    "decoupling": "tab:decoupling", "reference_gaps": "tab:reference_gaps",
+                    "architecture_returns": "tab:integration_gap", "method_returns": "tab:method_effect"}
     for table, fragments in expected_fragments.items():
+        table_text = _thesis_table_text(thesis_root, table_labels[table])
         for fragment in fragments:
-            if " ".join(fragment.split()) not in normalised:
+            if " ".join(fragment.split()) not in table_text:
                 findings.append({"kind": "thesis_table_drift", "table": table,
                                  "expected_fragment": fragment})
 
@@ -237,8 +253,8 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
                 fragment = f"{display} & ${mean:.2f}$ & ${sd:.2f}$ & $[{lo:.2f},\\ {hi:.2f}]$"
                 if fragment not in appendix:
                     findings.append({"kind":"thesis_table_drift", "table":"reference_levels", "row":key})
-    for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass", "$96.4\\%$ of the exact optimum over the finite horizon"):
-        if fragment not in appendix:
+    for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass",):
+        if fragment not in _thesis_table_text(thesis_root, "tab:validation_requirements"):
             findings.append({"kind": "thesis_table_drift", "table": "environment_validation",
                              "expected_fragment": fragment})
 

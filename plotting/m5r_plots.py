@@ -1257,9 +1257,16 @@ def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric:
 
 
 def plot_m5r_probe_accuracy_since_change(
-    out_path: Path, env_label: str = MEDIUM_ENV,
+    out_path: Path, env_label: str = MEDIUM_ENV, reference_kind: str = "analytical",
 ) -> None:
     """Recovery accuracy and paired gaps to references on each run's own episodes."""
+    audit_path = resolve_data(RESULTS_ROOT / "analysis" / "m5r_recovery_audit.json")
+    if not audit_path.exists():
+        audit_path = REPO_ROOT / "reproduction" / "data" / "m5r_recovery_audit.json"
+    if audit_path.exists():
+        return _plot_extended_recovery(out_path, env_label, reference_kind, audit_path)
+    if reference_kind != "analytical":
+        raise ValueError("Direct posterior comparison requires m5r_recovery_audit.json")
     apply_style()
     fig, axes = plt.subplots(2, 2, figsize=(11.0, 8.0), sharex=True, sharey="row")
     for col, (classifier, title) in enumerate((("logistic", "Linear probe"), ("mlp", "MLP probe"))):
@@ -1300,6 +1307,63 @@ def plot_m5r_probe_accuracy_since_change(
     fig.savefig(out_path)
     plt.close(fig)
     print(f"[m5r_plots] wrote {out_path}")
+
+
+def _plot_extended_recovery(out_path, env_label, reference_kind, audit_path):
+    """Extended recovery from replay-verified scores; matched test masks for all predictors."""
+    if reference_kind not in {"analytical", "direct"}:
+        raise ValueError(reference_kind)
+    audit = json.loads(audit_path.read_text())
+    if audit["environment"] != env_label:
+        raise ValueError("Recovery audit environment differs")
+    bins = np.asarray(audit["bins"])
+    x = bins.mean(axis=1)
+    apply_style()
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8), sharex=True, sharey="row")
+    for col, (classifier, title) in enumerate((("logistic", "Linear probe"), ("mlp", "MLP probe"))):
+        source = _load_probe_for_per_t(classifier)
+        for cell in CELLS:
+            rows = sorted((r for r in audit["rows"] if r["method"] == cell), key=lambda r: r["seed"])
+            if [r["seed"] for r in rows] != list(range(20)):
+                raise ValueError(f"Incomplete recovery audit for {cell}")
+            originals = {p['seed']: p for p in source['scatter_points']
+                         if p['method'] == cell and p['env_label'] == env_label}
+            for role in ('method', 'analytical'):
+                np.testing.assert_allclose(
+                    [r['probes'][classifier][role]['accuracy'] for r in rows],
+                    [originals[r['seed']][role + '_test_acc'] for r in rows], atol=1e-10,
+                    err_msg='Recovery audit does not match selected saved probe results')
+            method = np.asarray([r["probes"][classifier]["method"]["since_change"] for r in rows], float)
+            reference = np.asarray([r["direct_since_change"] if reference_kind == "direct" else
+                                    r["probes"][classifier]["analytical"]["since_change"] for r in rows], float)
+            if not np.isfinite(method).all() or not np.isfinite(reference).all():
+                raise ValueError(f"Empty recovery bin for {cell}; combine sparse bins")
+            color, linestyle = _VARIANT_LEVEL_STYLE[cell]
+            for axis, values in zip(axes[:, col], (method, 100 * (method - reference))):
+                mean, lo, hi = _mean_curve_ci(values, smoothing_window=1)
+                axis.plot(x, mean, color=color, linestyle=linestyle, linewidth=2.2,
+                          marker='.', markersize=4, label=_VARIANT_LEVEL_LABEL[cell])
+                axis.fill_between(x, lo, hi, color=color, alpha=.12)
+        axes[0, col].set_title(title, loc='left', fontsize=14)
+        axes[0, col].axhline(1/3, color='#999999', linestyle=':', linewidth=1.2)
+        axes[0, col].set_ylim(0, 1)
+        axes[1, col].axhline(0, color='#555555', linestyle=':', linewidth=1.5)
+        axes[1, col].set_xlim(0, 126)
+        axes[1, col].set_xticks([0, 20, 40, 60, 80, 100, 120])
+        axes[1, col].set_xlabel('Steps since the latest regime change', fontsize=12)
+        for axis in axes[:, col]:
+            polish(axis)
+            axis.tick_params(labelsize=11)
+    axes[0, 0].set_ylabel('Regime prediction accuracy', fontsize=12)
+    ref_label = 'direct posterior' if reference_kind == 'direct' else 'fitted posterior probe'
+    axes[1, 0].set_ylabel(f'Method minus {ref_label}\n(percentage points)', fontsize=11)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=2, fontsize=11, bbox_to_anchor=(.5, .005))
+    fig.subplots_adjust(left=.11, right=.98, top=.95, bottom=.14, hspace=.20, wspace=.08)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f'[m5r_plots] wrote {out_path}')
 
 
 def _diagnostic_separation_per_seed(diagnostic: str) -> dict[str, np.ndarray] | None:

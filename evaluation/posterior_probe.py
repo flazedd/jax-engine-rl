@@ -287,6 +287,7 @@ def train_probe(
     classifier: str = "logistic",
     seed: int = 0,
     omega_TND: np.ndarray | None = None,  # [T, N, C] analytical belief, for KL
+    return_predictions: bool = False,
 ) -> dict[str, Any]:
     """Fit a regime classifier from belief→regime, return belief-quality metrics.
 
@@ -428,6 +429,9 @@ def train_probe(
     if kl_to_omega is not None:
         out["test_kl_to_omega"] = kl_to_omega
         out["per_t_test_kl_to_omega"] = per_t_kl
+    if return_predictions:
+        # Preserve test-episode order for paired, post-change diagnostic audits.
+        out["test_predictions"] = predictions
     return out
 
 

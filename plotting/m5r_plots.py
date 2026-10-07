@@ -1193,8 +1193,13 @@ def _probe_levels_figure(
 
 
 def plot_m5r_probe_kl_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
-    """Absolute KL and paired excess KL relative to each run's reference probe."""
-    _plot_probe_levels_and_reference_gap(out_path, env_label, metric="kl")
+    """Absolute KL to the posterior on each run's own trajectories."""
+    _plot_probe_levels_and_reference_gap(out_path, env_label, metric="kl", panels="level")
+
+
+def plot_m5r_probe_excess_kl_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
+    """Supporting comparison with each run's fitted posterior reference."""
+    _plot_probe_levels_and_reference_gap(out_path, env_label, metric="kl", panels="gap")
 
 
 def plot_m5r_probe_acc_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
@@ -1202,9 +1207,13 @@ def plot_m5r_probe_acc_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> Non
     _plot_probe_levels_and_reference_gap(out_path, env_label, metric="acc")
 
 
-def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric: str) -> None:
+def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric: str,
+                                       panels: str = "both") -> None:
     if metric not in {"acc", "kl"}:
         raise ValueError(metric)
+    if panels not in {"both", "level", "gap"}:
+        raise ValueError(panels)
+    selected = (0, 1) if panels == "both" else ((0,) if panels == "level" else (1,))
     suffix = "test_acc" if metric == "acc" else "kl"
     reference_suffix = "" if metric == "acc" else "_kl"
     reference_path = RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json"
@@ -1212,7 +1221,8 @@ def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric:
     if references is not None and references["environment"] != env_label:
         raise ValueError("Reference curves use a different environment")
     apply_style()
-    fig, axes = plt.subplots(2, 2, figsize=(11.0, 8.0), sharex=True, sharey="row")
+    fig, axes = plt.subplots(len(selected), 2, figsize=(11.0, 8.0 if panels == "both" else 4.8),
+                             sharex=True, sharey="row", squeeze=False)
     for col, (classifier, title) in enumerate((("logistic", "Linear probe"), ("mlp", "MLP probe"))):
         source = _load_probe_for_per_t(classifier)
         for cell in CELLS:
@@ -1229,27 +1239,34 @@ def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric:
                 raise ValueError(f"Unmatched reference shape for {cell}")
             np.testing.assert_allclose(reference.mean(axis=0), block[f"analytical_per_t_{suffix}_mean"], atol=1e-10)
             color, linestyle = _VARIANT_LEVEL_STYLE[cell]
-            for row, values in enumerate((method, (100 if metric == "acc" else 1) * (method - reference))):
+            values_by_panel = (method, (100 if metric == "acc" else 1) * (method - reference))
+            for row, panel in enumerate(selected):
+                values = values_by_panel[panel]
                 mean, lo, hi = _mean_curve_ci(values)
                 t = np.arange(len(mean))
                 axes[row, col].plot(t, mean, color=color, linestyle=linestyle, linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
                 axes[row, col].fill_between(t, lo, hi, color=color, alpha=0.12)
         axes[0, col].set_title(title, fontsize=14, loc="left")
-        if metric == "acc":
-            axes[0, col].axhline(1/3, color="#999999", linestyle=":", linewidth=1.2)
-            axes[0, col].set_ylim(0.25, 1.0)
-        else:
-            axes[0, col].set_ylim(bottom=0)
-        axes[1, col].axhline(0, color="#555555", linestyle=":", linewidth=1.5)
-        axes[1, col].set_xlabel("Step within episode", fontsize=12)
-        for row in range(2):
+        for row, panel in enumerate(selected):
+            if panel == 1:
+                axes[row, col].axhline(0, color="#555555", linestyle=":", linewidth=1.5)
+            elif metric == "acc":
+                axes[row, col].axhline(1/3, color="#999999", linestyle=":", linewidth=1.2)
+                axes[row, col].set_ylim(0.25, 1.0)
+            else:
+                axes[row, col].set_ylim(bottom=0)
             polish(axes[row, col])
             axes[row, col].tick_params(labelsize=11)
-    axes[0, 0].set_ylabel("Regime prediction accuracy" if metric == "acc" else "KL to analytical posterior", fontsize=12)
-    axes[1, 0].set_ylabel("Accuracy gap to own reference\n(percentage points)" if metric == "acc" else "Excess KL over own reference", fontsize=12)
+        axes[-1, col].set_xlabel("Step within episode", fontsize=12)
+    ylabels = (("Regime prediction accuracy", "Accuracy gap to own reference\n(percentage points)")
+               if metric == "acc" else ("KL to analytical posterior", "Excess KL over own reference"))
+    for row, panel in enumerate(selected):
+        axes[row, 0].set_ylabel(ylabels[panel], fontsize=12)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=2, fontsize=11, bbox_to_anchor=(0.5, 0.005))
-    fig.subplots_adjust(left=0.10, right=0.98, top=0.95, bottom=0.14, hspace=0.20, wspace=0.08)
+    fig.subplots_adjust(left=0.10, right=0.98, top=0.95 if panels == "both" else 0.93,
+                        bottom=0.14 if panels == "both" else 0.25,
+                        hspace=0.20, wspace=0.08)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
     plt.close(fig)
@@ -1498,6 +1515,8 @@ def main() -> int:
         plot_m5r_probe_delta_per_t(target)
     for target in _both_targets("m5r_probe_kl_per_t.png"):
         plot_m5r_probe_kl_per_t(target)
+    for target in _both_targets("m5r_probe_excess_kl_per_t.png"):
+        plot_m5r_probe_excess_kl_per_t(target)
     for target in _both_targets("m5r_probe_acc_per_t.png"):
         plot_m5r_probe_acc_per_t(target)
     for target in _both_targets("m5r_probe_accuracy_since_change.png"):

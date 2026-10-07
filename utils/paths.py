@@ -159,6 +159,7 @@ FIGURE_HOME: dict[str, str] = {
     "m5r_method_ladder.png": "results/RQ1",
     # Chapter 5 — RQ2: belief formed versus belief used
     "m5r_probe_kl_per_t.png": "results/RQ2",
+    "m5r_probe_excess_kl_per_t.png": "appendix",
     "m5r_probe_acc_per_t.png": "results/RQ2",
     "m5r_action_separation.png": "results/RQ2",
     "m5r_diagnostics_combined.png": "results/RQ2",

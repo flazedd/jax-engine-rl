@@ -12,6 +12,18 @@ from training.config import AgentConfig, EnvConfig, ExperimentConfig
 from utils import training_identity as identity
 
 
+def test_parameter_audit_uses_main_programme_configurations():
+    from scripts.param_counts import TARGETS
+    from training.config import CONFIG_ROOT, load_config
+
+    audited = {load_config(CONFIG_ROOT / relative).experiment_name
+               for _, relative in TARGETS}
+    scheduled = {load_config(path).experiment_name
+                 for path in driver.CONFIGS.glob('*.yaml')}
+    assert len(audited) == 8
+    assert audited == scheduled
+
+
 def configuration():
     return ExperimentConfig('test_identity', EnvConfig('dummy'), AgentConfig('dummy'),
                             iterations=2, num_seeds=1, parallel_envs=16, rollout_length=32).to_dict()

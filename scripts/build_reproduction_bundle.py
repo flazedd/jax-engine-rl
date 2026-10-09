@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 
-from scripts.m5r_post_training_evaluation import METHODS
+from scripts.post_training_evaluation import METHODS
 from utils.paths import results_root
 
 ROOT=Path(__file__).resolve().parents[1]

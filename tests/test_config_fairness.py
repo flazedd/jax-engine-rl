@@ -23,10 +23,10 @@ LEGACY_SPEC = {
         ("regime_agnostic", "m3_regime_agnostic.yaml", "reference"),
         ("belief_ppo", "m3_belief.yaml", "regime"),
         ("oracle_ppo", "m3_oracle.yaml", "regime"),
-        ("rl2_concat", "m5r_locked/rl2_concat.yaml", "meta"),
-        ("rl2_hypernet", "m5r_locked/rl2_hypernet.yaml", "meta"),
-        ("varibad_concat", "m5r_locked/varibad_concat.yaml", "meta"),
-        ("varibad_hypernet", "m5r_locked/varibad_hypernet.yaml", "meta"),
+        ("rl2_concat", "rsmm_legacy/rl2_concat.yaml", "meta"),
+        ("rl2_hypernet", "rsmm_legacy/rl2_hypernet.yaml", "meta"),
+        ("varibad_concat", "rsmm_legacy/varibad_concat.yaml", "meta"),
+        ("varibad_hypernet", "rsmm_legacy/varibad_hypernet.yaml", "meta"),
     ],
 }
 

@@ -52,14 +52,14 @@ BACKUP = RESULTS / "_backup_pre_sweep_redesign"
 # compares methods on identical inputs, optimiser settings, budget and
 # capacity. `scripts.config_fairness_audit` enforces that; changing a config
 # here without re-running the audit breaks the comparison.
-REFS = [("regime_agnostic", "m5r_matched/regime_agnostic.yaml"),
-        ("belief", "m5r_matched/belief_ppo.yaml"),
-        ("oracle", "m5r_matched/oracle_ppo.yaml"),
-        ("stacked_obs", "m5r_matched/stacked_obs.yaml")]
-CELLS = [("rl2_concat", "m5r_matched/rl2_concat.yaml"),
-         ("rl2_hypernet", "m5r_matched/rl2_hypernet.yaml"),
-         ("varibad_concat", "m5r_matched/varibad_concat.yaml"),
-         ("varibad_hypernet", "m5r_matched/varibad_hypernet.yaml")]
+REFS = [("regime_agnostic", "rsmm_matched/regime_agnostic.yaml"),
+        ("belief", "rsmm_matched/belief_ppo.yaml"),
+        ("oracle", "rsmm_matched/oracle_ppo.yaml"),
+        ("stacked_obs", "rsmm_matched/stacked_obs.yaml")]
+CELLS = [("rl2_concat", "rsmm_matched/rl2_concat.yaml"),
+         ("rl2_hypernet", "rsmm_matched/rl2_hypernet.yaml"),
+         ("varibad_concat", "rsmm_matched/varibad_concat.yaml"),
+         ("varibad_hypernet", "rsmm_matched/varibad_hypernet.yaml")]
 
 # (env_label, env_yaml_rel). Medium (e_final) is the shared centre, already done.
 ENVS = [
@@ -182,7 +182,7 @@ def main() -> int:
     # --env-filter runs don't overwrite each other's single-env output file.
     for label, _ in envs:
         for clf in (["--classifier", "mlp"], []):
-            cmd = ["uv", "run", "python", "-m", "scripts.m5r_posterior_probe",
+            cmd = ["uv", "run", "python", "-m", "scripts.posterior_probe",
                    "--env-filter", label, "--n-rollouts", str(rollouts),
                    "--tag", f"sweep_{label}", *clf]
             print(f"[sweep] probe: {' '.join(cmd)}", flush=True)

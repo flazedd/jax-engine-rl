@@ -25,8 +25,8 @@ def test_rl2_substitution_identity(integration, simplex, layernorm):
                                      np.asarray(updated)[::-1], 'rl2')
     assert np.max(np.abs(actual-changed)) > 1e-8
 
-from scripts.m5r_refresh_probe_returns import evaluation_returns_for_seeds, refresh_probe
-from scripts.m5r_hypothesis_tests import _within_variant_correlation
+from scripts.refresh_probe_returns import evaluation_returns_for_seeds, refresh_probe
+from scripts.hypothesis_tests import _within_variant_correlation
 
 def test_seed_join_uses_ids_and_rejects_missing_or_duplicate_ids():
     methods={'m':{'experiment':'e','seeds':[0,1,10,2],
@@ -48,7 +48,7 @@ def test_within_variant_correlation_removes_offsets_and_keeps_run_pair():
 
 
 def test_temporal_intervals_smooth_before_quantiles():
-    from plotting.m5r_plots import _mean_curve_ci, _independent_delta_ci
+    from plotting.trading_results import _mean_curve_ci, _independent_delta_ci
     # Each run has the same two-step mean despite opposite raw trajectories.
     # Any whole-run bootstrap must therefore give a degenerate smoothed CI.
     curves = np.array([[0., 2.], [2., 0.]])
@@ -66,7 +66,7 @@ def test_policy_heatmap_keeps_boundary_ties():
     from training.config import _load_yaml_with_extends
     from pathlib import Path
     cfg = _load_yaml_with_extends(Path(__file__).resolve().parents[1] /
-                                 'experiments/configs/m5r_e9/oracle_ppo.yaml')
+                                 'experiments/configs/main/oracle_ppo.yaml')
     vi = solve_value_iteration(MarketMakingV1(**cfg['env']['params']))
     tied = _tied_optimal_actions(vi.Q)
     np.testing.assert_array_equal(tied[0, 1], [True, False, True])

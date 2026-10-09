@@ -1,6 +1,6 @@
 # Second-POMDP external-validity probe — RL² with concat integration on
 # CartPoleRegimeV1. Matched-compute (~5k params) and seed protocol mirror
-# the main paper's M5R locked configs (m5r_locked/rl2_concat.yaml) so the
+# the main paper's M5R locked configs (rsmm_legacy/rl2_concat.yaml) so the
 # cross-env comparison is cleanly attributable to "different env" rather
 # than "different hyperparameters".
 extends:

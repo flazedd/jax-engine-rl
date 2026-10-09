@@ -1,10 +1,6 @@
-# Second-POMDP external-validity probe — VariBAD with hypernet integration on
-# CartPoleRegimeV1. Matched-compute (~5k params) and seed protocol mirror
-# rsmm_legacy/varibad_hypernet.yaml.
 extends:
-  - base/base_varibad.yaml
-  - envs/e_cartpole_v1.yaml
-experiment_name: m_cartpole_varibad_hypernet
+- rsmm_base/varibad_hypernet.yaml
+experiment_name: m5r_locked_varibad_hypernet_PLACEHOLDER
 iterations: 200
 parallel_envs: 512
 rollout_length: 128

@@ -1,10 +1,6 @@
-# Second-POMDP external-validity probe — RL² with hypernet integration on
-# CartPoleRegimeV1. Matched-compute (~5k params) and seed protocol mirror
-# rsmm_legacy/rl2_hypernet.yaml.
 extends:
-  - base/base_rl2.yaml
-  - envs/e_cartpole_v1.yaml
-experiment_name: m_cartpole_rl2_hypernet
+- rsmm_base/rl2_hypernet.yaml
+experiment_name: m5r_locked_rl2_hypernet_PLACEHOLDER
 iterations: 200
 parallel_envs: 512
 rollout_length: 128

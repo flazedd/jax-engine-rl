@@ -1,6 +1,6 @@
 # Second-POMDP external-validity probe — VariBAD with concat integration on
 # CartPoleRegimeV1. Matched-compute (~5k params) and seed protocol mirror
-# m5r_locked/varibad_concat.yaml.
+# rsmm_legacy/varibad_concat.yaml.
 #
 # Note on reward_decoder: cartpole reward is bounded {0, 1} per step rather
 # than the continuous PnL of MM, but Gaussian is kept here to mirror the

@@ -284,11 +284,11 @@ def plot_cross_env_2x2(out_path: Path) -> bool:
     row = cartpole (inversion). Left column = logistic, right = MLP.
     The four panels share x and y conventions so the cross-env contrast
     is visible at a glance."""
-    M5R = analysis_dir()
+    rsmm_analysis = analysis_dir()
     CP = cartpole_dir()
     paths = {
-        ("MM", "logistic"): M5R / "m5r_posterior_vs_performance.json",
-        ("MM", "mlp"): M5R / "m5r_posterior_vs_performance_mlp.json",
+        ("MM", "logistic"): rsmm_analysis / "m5r_posterior_vs_performance.json",
+        ("MM", "mlp"): rsmm_analysis / "m5r_posterior_vs_performance_mlp.json",
         ("Cartpole", "logistic"): CP / "stats_cartpole_posterior_vs_performance.json",
         ("Cartpole", "mlp"): CP / "stats_cartpole_posterior_vs_performance_mlp.json",
     }

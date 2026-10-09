@@ -5,7 +5,7 @@ import jax
 import numpy as np
 from evaluation.action_distribution import collect_action_regime_rollouts
 from evaluation.posterior_probe import load_experiment
-from scripts.m5r_post_training_evaluation import METHODS, N_EPISODES, EPISODE_LENGTH
+from scripts.post_training_evaluation import METHODS, N_EPISODES, EPISODE_LENGTH
 from utils.paths import analysis_dir, experiment_dir
 
 

@@ -68,7 +68,7 @@ checks; do not start it just to view the results.
 | --- | --- |
 | [`REPRODUCE.md`](REPRODUCE.md) | Commands, expected outputs, and experimental scope |
 | [`reproduction/data/`](reproduction/data/) | Compressed saved evidence, checkpoints, and SHA-256 manifest |
-| [`experiments/configs/m5r_e9/`](experiments/configs/m5r_e9/) | Final configurations for the eight conditions |
+| [`experiments/configs/main/`](experiments/configs/main/) | Final configurations for the eight conditions |
 | `agents/`, `training/` | Agent architectures and training code |
 | `envs/`, `beliefs/`, `oracles/` | Simulator, analytical posterior, and dynamic programming references |
 | `evaluation/` | Return measurements, probes, diagnostics, and statistics |

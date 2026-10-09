@@ -1,0 +1,20 @@
+# M5R fair-tune base — RL² hypernet on the held-out tuning environment.
+# hidden_dim and hypernet sizing are locked so the cell sits at ~5k
+# parameters, the matched-compute target shared with the references.
+extends:
+  - base/base_rl2.yaml
+  - envs/rsmm_tuning.yaml
+experiment_name: m5r_tune_rl2_hypernet_base
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    integration: hypernet
+    hidden_dim: 24
+    hypernet_target_hidden: 4
+    hypernet_hidden: 8
+    policy_trunk_layers: 0
+    policy_trunk_hidden: 0

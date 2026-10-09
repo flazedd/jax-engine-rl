@@ -156,18 +156,18 @@ def experiment_dir(name: str) -> Path:
 FIGURE_HOME: dict[str, str] = {
     # Chapter 5 — RQ1: performance under each conditioning architecture
     "fig_rq1_learning_curves.png": "results/RQ1",
-    "m5r_method_ladder.png": "results/RQ1",
+    "method_ladder.png": "results/RQ1",
     # Chapter 5 — RQ2: belief formed versus belief used
-    "m5r_probe_kl_per_t.png": "results/RQ2",
-    "m5r_probe_excess_kl_per_t.png": "appendix",
-    "m5r_probe_acc_per_t.png": "results/RQ2",
-    "m5r_action_separation.png": "results/RQ2",
-    "m5r_diagnostics_combined.png": "results/RQ2",
-    "m5r_belief_swap_separation.png": "results/RQ2",
-    "m5r_posterior_vs_performance.png": "results/RQ2",
+    "probe_kl_per_t.png": "results/RQ2",
+    "probe_excess_kl_per_t.png": "appendix",
+    "probe_acc_per_t.png": "results/RQ2",
+    "action_separation.png": "results/RQ2",
+    "diagnostics_combined.png": "results/RQ2",
+    "belief_swap_separation.png": "results/RQ2",
+    "posterior_vs_performance.png": "results/RQ2",
     # Chapter 5 — RQ3: replication in-domain and in a second domain
     # learning curves support the time-to-threshold result of RQ1
-    "m5r_learning_curves.png": "results/RQ1",
+    "learning_curves.png": "results/RQ1",
     # Appendix A — environment validity (R1–R4) and implementation validation
     "fig_M2_R1_policy_heatmap.png": "appendix",
     "fig_M2_R1_value_loss_distribution.png": "appendix",
@@ -176,11 +176,11 @@ FIGURE_HOME: dict[str, str] = {
     "fig_M2_R4_posterior_entropy.png": "appendix",
     "factorial_toys.png": "appendix",
     # the paired per-timestep contrast supports the levels figure of RQ2
-    "m5r_probe_delta_per_t.png": "appendix",
-    "m5r_probe_accuracy_since_change.png": "appendix",
+    "probe_delta_per_t.png": "appendix",
+    "probe_accuracy_since_change.png": "appendix",
     # Appendix B — second domain
     # Appendix C — supporting RSMM charts
-    "m5r_action_given_regime_inventory.png": "appendix",
+    "action_given_regime_inventory.png": "appendix",
     # Produced but not included: kept in the appendix tree so the two-folder
     # rule holds, and deliberately absent from every .tex.
     "fig_M0_dummy_learning_curve.png": "appendix",

@@ -43,7 +43,7 @@ VARIANTS = [
 ]
 
 # Matched-compute architecture knobs at ~5k parameters per cell, matching
-# the m5r_locked configurations used on MarketMakingV1. Injected into the
+# the rsmm_legacy configurations used on MarketMakingV1. Injected into the
 # m4_<method>_<env>.yaml template before training.
 MATCHED_COMPUTE_KNOBS = {
     ("rl2", "concat"): {

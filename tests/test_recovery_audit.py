@@ -1,6 +1,6 @@
 import numpy as np
 
-from scripts.m5r_recovery_audit import ages_since_change, summarize
+from scripts.recovery_audit import ages_since_change, summarize
 
 
 def test_recovery_age_excludes_initial_regime_and_resets_at_each_change():

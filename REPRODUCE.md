@@ -15,6 +15,19 @@ No local thesis checkout or separately delivered archive is needed.
 The first route is the shortest. The other two require more computation. Exact numerical
 agreement across hardware is not assumed; keep the output logs and report any differences.
 
+## File names and saved-data compatibility
+
+Active scripts and figures use descriptive names. For example, the regime probe is
+`scripts.posterior_probe`, policy substitution is `scripts.belief_swap`, and the main plotting
+module is `plotting.trading_results`. The eight main configurations are in
+`experiments/configs/main/`; other RSMM configurations use the `rsmm_` prefix.
+
+Published analysis filenames and experiment identifiers retain their historical `m5r_` prefix.
+The renamed scripts read and write those same data paths, so saved checkpoints and results
+remain usable without migration. The reproduction archives, their manifests, and their
+checksums are unchanged. Use the current commands in this guide; old Python module names
+have been replaced. Historical run metadata may still record the original module or config path.
+
 ## Recalculate the reported results
 
 ```bash
@@ -87,12 +100,12 @@ uv run python -m scripts.verify_checkpoint_replay
 To repeat the representation and policy measurements using the saved checkpoints:
 
 ```bash
-uv run python -m scripts.m5r_posterior_probe
-uv run python -m scripts.m5r_posterior_probe --classifier mlp
-uv run python -m scripts.m5r_action_distributions
-uv run python -m scripts.m5r_belief_swap
-uv run python -m scripts.m5r_probe_confusion
-uv run python -m scripts.m5r_supplemental_belief_checks --n-rollouts 500
+uv run python -m scripts.posterior_probe
+uv run python -m scripts.posterior_probe --classifier mlp
+uv run python -m scripts.action_distributions
+uv run python -m scripts.belief_swap
+uv run python -m scripts.probe_confusion
+uv run python -m scripts.supplemental_belief_checks --n-rollouts 500
 ```
 
 These commands write new analysis outputs under `THESIS_RESULTS_ROOT` (default `results/`).
@@ -104,7 +117,7 @@ The published data include the analytical reference curves for the updated accur
 regime-change figures. To recover reference curves from older probe outputs:
 
 ```bash
-uv run python -m scripts.m5r_accuracy_references
+uv run python -m scripts.accuracy_references
 ```
 
 This replays checkpoints, refits reference classifiers, checks their aggregate scores against
@@ -153,9 +166,9 @@ are for evaluation; they are not accepted as verified resumable training caches.
 The supplementary full-belief check is run separately after the programme:
 
 ```bash
-uv run python -m scripts.m5r_supplemental_belief_checks --n-rollouts 500
-uv run python -m scripts.plot_m5r_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/m5r_direct_posterior_accuracy.png"
-uv run python -m scripts.m5r_exploratory_baseline_seed_pairs
+uv run python -m scripts.supplemental_belief_checks --n-rollouts 500
+uv run python -m scripts.plot_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/direct_posterior_accuracy.png"
+uv run python -m scripts.exploratory_baseline_seed_pairs
 ```
 
 A new training run is a replication. Inspect differences before replacing the published numbers.
@@ -181,8 +194,8 @@ Paths under `results/` refer to unpacked data. All analysis filenames are relati
 
 | Thesis material | Configuration, data, or command |
 | --- | --- |
-| Environment and analytical posterior (Chapter 3) | `envs/`, `beliefs/`, `oracles/`; `experiments/configs/m5r_e9/` |
-| Training settings (Chapter 4, Appendix C) | Eight YAML configurations in `experiments/configs/m5r_e9/`; `results/medium/*/{config,metrics,summary}.json` |
+| Environment and analytical posterior (Chapter 3) | `envs/`, `beliefs/`, `oracles/`; `experiments/configs/main/` |
+| Training settings (Chapter 4, Appendix C) | Eight YAML configurations in `experiments/configs/main/`; `results/medium/*/{config,metrics,summary}.json` |
 | Return and learning speed (Chapter 5) | `m5r_post_training_evaluation.json`, `m5r_method_return_tests.json`, `m5r_time_to_threshold_tests.json` |
 | Regime information and its relation to return | `m5r_posterior_vs_performance*.json`, `m5r_belief_quality*_tests.json`, `m5r_accuracy_references.json` |
 | Policy response and belief substitution | `m5r_action_distributions.json`, `m5r_belief_swap.json`, `m5r_diagnostic_tests.json` |
@@ -190,7 +203,7 @@ Paths under `results/` refer to unpacked data. All analysis filenames are relati
 | Confusion matrices and full-belief checks | `m5r_probe_confusion.json`, `m5r_supplemental_belief_checks.json` |
 | Sensitivity to shared training seeds | `m5r_seed_block_sensitivity.json`, `m5r_exploratory_baseline_seed_pairs.json` |
 | Generated tables | `scripts.make_tables` |
-| Main and supporting charts | `plotting.m5r_plots`, `plotting.reference_levels`, `plotting.m5r_action_inventory_heatmap` |
+| Main and supporting charts | `plotting.trading_results`, `plotting.reference_levels`, `plotting.action_inventory_heatmap` |
 
 The thesis equations and interpretations remain in the thesis. The repository supplies the
 executable procedures and saved evidence.
@@ -201,12 +214,12 @@ The repository works on its own. If you also have the LaTeX thesis, use its actu
 
 ```bash
 export THESIS_FIG_ROOT="/absolute/path/to/thesis/figures"
-uv run python -m plotting.m5r_plots
+uv run python -m plotting.trading_results
 uv run python -m plotting.reference_levels
-uv run python -m plotting.m5r_action_inventory_heatmap
+uv run python -m plotting.action_inventory_heatmap
 uv run python -m plotting.m4_plots
 uv run python -m scripts.make_tables
-uv run python -m scripts.plot_m5r_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/m5r_direct_posterior_accuracy.png"
+uv run python -m scripts.plot_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/direct_posterior_accuracy.png"
 uv run python -m scripts.thesis_contract --strict --thesis-root "/absolute/path/to/thesis"
 ```
 

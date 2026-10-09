@@ -28,7 +28,7 @@ dist/
 .env.*
 
 # Experiment output
-results/
+/results/
 logs/
 figures_dummy/
 tables/
@@ -38,6 +38,7 @@ tmp/
 experiments/configs/m5r_trials/
 experiments/configs/m5r_gate/
 experiments/configs/m5r_final/
+experiments/configs/rsmm_sweep/
 
 # LaTeX output created during local figure checks
 *.aux

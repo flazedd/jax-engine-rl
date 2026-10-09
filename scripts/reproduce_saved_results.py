@@ -29,18 +29,18 @@ def main() -> int:
                MPLCONFIGDIR=str(output / '.matplotlib'), THESIS_DUMMY='0')
     steps = [
         ('scripts.restore_validation_baselines', []),
-        ('scripts.m5r_seed_block_sensitivity', []),
-        ('scripts.m5r_exploratory_baseline_seed_pairs', []),
+        ('scripts.seed_block_sensitivity', []),
+        ('scripts.exploratory_baseline_seed_pairs', []),
         ('scripts.make_tables', []),
-        ('scripts.summarize_m5r_full_belief',
+        ('scripts.summarize_full_belief',
          ['--mlp', str(DATA / 'm5r_full_belief_mlp.json'),
           '--table', str(output / 'tables/full_belief_probe.tex')]),
-        ('plotting.m5r_plots', []),
+        ('plotting.trading_results', []),
         ('plotting.reference_levels', []),
-        ('plotting.m5r_action_inventory_heatmap', []),
+        ('plotting.action_inventory_heatmap', []),
         ('plotting.m4_plots', []),
-        ('scripts.plot_m5r_supplemental_belief_checks',
-         ['--output', str(output / 'figures/appendix/m5r_direct_posterior_accuracy.png')]),
+        ('scripts.plot_supplemental_belief_checks',
+         ['--output', str(output / 'figures/appendix/direct_posterior_accuracy.png')]),
         ('scripts.thesis_contract', ['--strict']),
     ]
     report = {'status': 'running', 'steps': [], 'output': str(output)}

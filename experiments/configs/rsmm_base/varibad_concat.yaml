@@ -1,0 +1,21 @@
+# M5R fair-tune base — VariBAD concat on the held-out tuning environment.
+# Gaussian reward decoder for the continuous-reward MM env.
+# hidden_dim, latent_dim, and policy_trunk_* are locked so the cell sits
+# at ~5k parameters, the matched-compute target shared with references.
+extends:
+  - base/base_varibad.yaml
+  - envs/rsmm_tuning.yaml
+experiment_name: m5r_tune_varibad_concat_base
+iterations: 200
+parallel_envs: 512
+rollout_length: 128
+num_seeds: 1
+seed_base: 0
+agent:
+  params:
+    integration: concat
+    reward_decoder: gaussian
+    hidden_dim: 20
+    latent_dim: 2
+    policy_trunk_layers: 2
+    policy_trunk_hidden: 20

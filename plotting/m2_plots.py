@@ -259,6 +259,7 @@ def plot_posterior_entropy(ent_curve: np.ndarray, output_path: Path) -> None:
 def plot_belief_ppo_gap(
     bars: dict[str, tuple[float, list[float]]], output_path: Path,
     budget: dict | None = None,
+    value_decimals: int = 1,
 ) -> None:
     """Bar chart: regime-agnostic, Belief-PPO, Oracle-PPO, with CIs."""
     apply_style()
@@ -288,7 +289,7 @@ def plot_belief_ppo_gap(
     )
     # Bold value labels above the upper CI cap.
     for x, mean, ci in zip(xs, means, cis):
-        ax.annotate(f"{mean:.1f}", xy=(x, ci[1]),
+        ax.annotate(f"{mean:.{value_decimals}f}", xy=(x, ci[1]),
                     xytext=(0, 6), textcoords="offset points",
                     ha="center", va="bottom", fontsize=8.5,
                     fontweight="bold", color="#333333")

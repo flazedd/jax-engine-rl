@@ -38,16 +38,17 @@ class VIResult:
     policy: np.ndarray
     # Q[inv, regime, action] — action-value function.
     Q: np.ndarray
-    # Expected undiscounted per-step reward under optimal policy, per regime,
+    # Expected undiscounted per-step reward under the discounted-optimal
+    # stationary policy, per regime,
     # = per_regime_expected_episode_return / episode_length.
     per_regime_expected_step_reward: np.ndarray
-    # Expected undiscounted T-step return under the optimal policy with the
-    # regime locked to r, starting from the reset inventory (q=0 when
+    # Expected undiscounted T-step return under that policy with the regime
+    # locked to r, starting from the reset inventory (q=0 when
     # reset_inventory_range=0). Computed by forward rollout of the policy-
     # induced Markov chain — matches what PPO measures with lock_regime=r.
     per_regime_expected_episode_return: np.ndarray
-    # Expected undiscounted T-step return under the optimal policy on the
-    # full regime-switching env, with initial regime drawn from
+    # Expected undiscounted T-step return under that policy on the full
+    # regime-switching env, with initial regime drawn from
     # env.initial_distribution and initial inventory q=0.
     mixed_expected_episode_return: float
 
@@ -291,13 +292,14 @@ def solve_value_iteration(env: MarketMakingV1) -> VIResult:
 
 
 def finite_horizon_optimum(env: MarketMakingV1) -> float:
-    """The true optimum of the objective PPO maximises.
+    """Exact optimum of the undiscounted episode-return evaluation metric.
 
-    Backward induction over `episode_length` steps with no discounting, which is
-    what an episode return actually is. `solve_value_iteration` reports the
-    undiscounted value of the *discounted*-optimal stationary policy, a lower
-    bound; this is the exact ceiling, and is what R2 and any "fraction of
-    optimum" figure should be stated against.
+    Backward induction over `episode_length` steps with no discounting matches
+    the reported evaluation return. PPO training instead uses discounted
+    advantages, so this is an evaluation ceiling rather than the exact training
+    objective. `solve_value_iteration` reports the undiscounted value of the
+    *discounted*-optimal stationary policy, a lower bound. Use this function for
+    R2 and any "fraction of optimum" figure.
     """
     P, R = _transition_tables(env)
     n_inv, n_reg, n_act, _, _ = P.shape

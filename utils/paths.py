@@ -158,6 +158,7 @@ FIGURE_HOME: dict[str, str] = {
     "fig_rq1_learning_curves.png": "results/RQ1",
     "method_ladder.png": "results/RQ1",
     # Chapter 5 — RQ2: belief formed versus belief used
+    "probe_main_summary.png": "results/RQ2",
     "probe_kl_per_t.png": "results/RQ2",
     "probe_excess_kl_per_t.png": "appendix",
     "probe_acc_per_t.png": "results/RQ2",

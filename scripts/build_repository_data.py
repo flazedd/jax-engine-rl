@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import hashlib
+import shutil
 import json
 from pathlib import Path
 import subprocess
 import tarfile
 
 from scripts.post_training_evaluation import METHODS
-from scripts.prepare_results import digest
+from scripts.prepare_results import DATA, SUPPLEMENTAL_FILES, digest
 from utils.paths import results_root
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +32,7 @@ def build(destination: Path) -> dict:
             raise ValueError(f'Incomplete checkpoint set for {experiment}')
     destination.mkdir(parents=True, exist_ok=True)
     manifest = {
-        'schema_version': 1,
+        'schema_version': 2,
         'description': 'Saved evidence for Trading in the Dark; extract relative to the results directory.',
         'training_commit': '220b319f367e69a8f466c87d5346b1acf60574d6',
         'source_commit_at_packaging': subprocess.check_output(
@@ -59,6 +59,12 @@ def build(destination: Path) -> dict:
             'files_sha256': {p.relative_to(root).as_posix(): digest(p) for p in selected},
         }
         print(f'{name}: {len(selected)} files, {path.stat().st_size / 1e6:.1f} MB')
+    manifest['supplemental_files_sha256'] = {}
+    for name in SUPPLEMENTAL_FILES:
+        source, target = DATA / name, destination / name
+        if source.resolve() != target.resolve():
+            shutil.copyfile(source, target)
+        manifest['supplemental_files_sha256'][name] = digest(target)
     (destination / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
 

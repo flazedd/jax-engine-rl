@@ -24,9 +24,9 @@ module is `plotting.trading_results`. The eight main configurations are in
 
 Published analysis filenames and experiment identifiers retain their historical `m5r_` prefix.
 The renamed scripts read and write those same data paths, so saved checkpoints and results
-remain usable without migration. The reproduction archives, their manifests, and their
-checksums are unchanged. Use the current commands in this guide; old Python module names
-have been replaced. Historical run metadata may still record the original module or config path.
+remain usable without migration. The current release refreshes derived learning-speed results
+to use completed 25-iteration window endpoints and updates the archive checksums together.
+Use the current commands in this guide; old Python module names have been replaced. Historical run metadata may still record the original module or config path.
 
 ## Recalculate the reported results
 
@@ -87,7 +87,7 @@ command reports each difference and writes `results/analysis/checkpoint_replay_v
 It exits unsuccessfully if a difference exceeds the absolute tolerance (default `1e-10`).
 A discrepancy requires inspection; changing the tolerance does not establish agreement.
 
-`prepare_results` checks both archive and individual file hashes before writing. Existing
+`prepare_results` checks archive, individual file, and supplemental analysis input hashes before writing. Existing
 identical files are accepted; differing files are never replaced. If `results/` already contains
 your own runs, use a separate destination and direct the subsequent commands to it:
 
@@ -176,6 +176,11 @@ Record the code commit, lock file, operating system, accelerator, driver, and li
 The original training hardware was not recorded in the available evidence.
 
 ## Statistical details
+
+Learning speed is the zero-based index at the end of the first complete 25-iteration window
+whose mean reaches the target. Unreached targets are censored at the 1,500-iteration budget.
+Linear regime-probe comparisons are primary; MLP comparisons assess classifier sensitivity
+and use a separate correction set. The main summary figure displays the MLP sensitivity curves.
 
 The six primary correction sets contain 2, 2, 2, 4, 4, and 4 comparisons. The original analysis
 uses independent resampling across conditions. Training shares random streams between matching

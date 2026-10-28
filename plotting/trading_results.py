@@ -745,7 +745,7 @@ def _threshold_curve(experiment: str) -> np.ndarray | None:
 def _iterations_to(curve: np.ndarray, target: float) -> float | None:
     smoothed = np.convolve(curve, np.ones(_SPEED_SMOOTH) / _SPEED_SMOOTH, mode="valid")
     idx = int(np.argmax(smoothed >= target))
-    return float(idx) if smoothed[idx] >= target else None
+    return float(idx + _SPEED_SMOOTH - 1) if smoothed[idx] >= target else None
 
 
 def plot_speedup_sweep(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
@@ -1192,6 +1192,63 @@ def _probe_levels_figure(
     print(f"[trading_results] wrote {out_path}")
 
 
+def plot_probe_main_summary(out_path: Path, env_label: str = MEDIUM_ENV,
+                            presentation: bool = False) -> None:
+    """MLP accuracy and primary KL with the RL2 concatenation accuracy reference."""
+    apply_style()
+    source = _load_probe_for_per_t("mlp")
+    references = json.loads((RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json").read_text())
+    if references["environment"] != env_label:
+        raise ValueError("Reference curves use a different environment")
+    fig, axes = plt.subplots(1, 2, figsize=(8.8, 2.8) if presentation else (11, 5.0))
+    for cell in CELLS:
+        block = source["per_method_per_env"][env_label][cell]
+        color, linestyle = _VARIANT_LEVEL_STYLE[cell]
+        for ax, suffix in zip(axes, ("test_acc", "kl")):
+            values = np.asarray(block[f"method_per_t_{suffix}_per_seed"], dtype=float)
+            mean, lo, hi = _mean_curve_ci(values)
+            ax.plot(np.arange(len(mean)), mean, color=color, linestyle=linestyle,
+                    linewidth=2.2, label=_VARIANT_LEVEL_LABEL[cell])
+            ax.fill_between(np.arange(len(mean)), lo, hi, color=color, alpha=0.12)
+        seeds = [p["seed"] for p in source["scatter_points"]
+                 if p["method"] == cell and p["env_label"] == env_label]
+        reference = (np.asarray(block["analytical_per_t_test_acc_per_seed"], dtype=float)
+                     if "analytical_per_t_test_acc_per_seed" in block else
+                     np.asarray([references["methods"][cell][str(seed)]["mlp"] for seed in seeds]))
+        np.testing.assert_allclose(reference.mean(axis=0), block["analytical_per_t_test_acc_mean"], atol=1e-10)
+        if cell == "rl2_concat":
+            mean, _, _ = _mean_curve_ci(reference)
+            axes[0].plot(np.arange(len(mean)), mean, color=_ANALYTICAL_COLOR,
+                         linestyle=":", linewidth=1.8,
+                         label="Fitted posterior reference (RL² concat)")
+    axes[0].axhline(1 / 3, color="#999999", linestyle="--", linewidth=1.1, label="Random guessing")
+    axes[0].set_ylim(0.25, 1)
+    axes[1].set_ylim(bottom=0)
+    for ax, title, ylabel in zip(axes, ("(a) Regime accuracy", "(b) KL divergence"),
+                               ("Accuracy" if presentation else "Regime prediction accuracy",
+                                "KL divergence" if presentation else "KL to analytical posterior")):
+        ax.set_title(title, loc="left", fontsize=14 if presentation else None)
+        ax.set_ylabel(ylabel, fontsize=13 if presentation else None)
+        ax.set_xlabel("Episode step" if presentation else "Step within episode",
+                      fontsize=13 if presentation else None)
+        polish(ax)
+        if presentation:
+            ax.tick_params(labelsize=11)
+            ax.set_xticks([0, 60, 120])
+    handles, labels = axes[0].get_legend_handles_labels()
+    if presentation:
+        labels = [label.replace("Hypernetwork", "hypernet").replace("Concat", "concat")
+                  .replace("Fitted posterior reference (RL² concat)", "Posterior ref. (RL² concat)")
+                  for label in labels]
+    fig.legend(handles, labels, loc="lower center", ncol=3, fontsize=10,
+               bbox_to_anchor=(0.5, 0.01))
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.87 if presentation else 0.91,
+                        bottom=0.38 if presentation else 0.25, wspace=0.32 if presentation else 0.28)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+
+
 def plot_probe_kl_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
     """Absolute KL to the posterior on each run's own trajectories."""
     _plot_probe_levels_and_reference_gap(out_path, env_label, metric="kl", panels="level")
@@ -1519,6 +1576,10 @@ def main() -> int:
         plot_probe_excess_kl_per_t(target)
     for target in _both_targets("probe_acc_per_t.png"):
         plot_probe_acc_per_t(target)
+    for target in _both_targets("probe_main_summary.png"):
+        plot_probe_main_summary(target)
+        plot_probe_main_summary(target.parents[2] / "slides" / "probe_main_summary.png",
+                                presentation=True)
     for target in _both_targets("probe_accuracy_since_change.png"):
         plot_probe_accuracy_since_change(target)
     for target in _both_targets("diagnostics_combined.png"):

@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from scripts.prepare_results import DATA, prepare
+from scripts.prepare_results import DATA, digest, prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,7 +43,10 @@ def main() -> int:
          ['--output', str(output / 'figures/appendix/direct_posterior_accuracy.png')]),
         ('scripts.thesis_contract', ['--strict']),
     ]
-    report = {'status': 'running', 'steps': [], 'output': str(output)}
+    report = {'status': 'running', 'steps': [], 'output': str(output),
+              'data_manifest_sha256': digest(DATA / 'manifest.json'),
+              'source_commit': subprocess.check_output(
+                  ['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}
     report_path = output / 'verification.json'
     for module, arguments in steps:
         print(f'Running {module}', flush=True)

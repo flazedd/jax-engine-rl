@@ -81,3 +81,40 @@ def test_thesis_table_can_move_to_appendix_without_losing_checks(tmp_path):
     assert _thesis_table_text(tmp_path, 'tab:integration_gap') != expected
     (sections / 'results.tex').write_text(table)
     assert _thesis_table_text(tmp_path, 'tab:integration_gap') == ''
+
+
+@pytest.mark.parametrize('problem', ['corrupt', 'missing_manifest_entry', 'missing_file'])
+def test_supplemental_inputs_verify_before_extraction(tmp_path, problem):
+    from scripts.prepare_results import SUPPLEMENTAL_FILES
+    data = archive(tmp_path)
+    manifest_path = data / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['schema_version'] = 2
+    manifest['supplemental_files_sha256'] = {}
+    for name in SUPPLEMENTAL_FILES:
+        (data / name).write_text('{}')
+        manifest['supplemental_files_sha256'][name] = digest(data / name)
+    if problem == 'corrupt':
+        (data / SUPPLEMENTAL_FILES[0]).write_text('{"changed": true}')
+    elif problem == 'missing_manifest_entry':
+        del manifest['supplemental_files_sha256'][SUPPLEMENTAL_FILES[0]]
+    else:
+        (data / SUPPLEMENTAL_FILES[0]).unlink()
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises((ValueError, FileNotFoundError)):
+        prepare(data, tmp_path / 'results')
+    assert not (tmp_path / 'results').exists()
+
+
+def test_verified_supplemental_inputs_allow_extraction(tmp_path):
+    from scripts.prepare_results import SUPPLEMENTAL_FILES
+    data = archive(tmp_path)
+    manifest_path = data / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['schema_version'] = 2
+    manifest['supplemental_files_sha256'] = {}
+    for name in SUPPLEMENTAL_FILES:
+        (data / name).write_text('{}')
+        manifest['supplemental_files_sha256'][name] = digest(data / name)
+    manifest_path.write_text(json.dumps(manifest))
+    assert prepare(data, tmp_path / 'results') == 1

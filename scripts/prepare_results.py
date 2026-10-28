@@ -9,6 +9,7 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'reproduction' / 'data'
+SUPPLEMENTAL_FILES = ('m5r_full_belief_mlp.json', 'm5r_recovery_audit.json')
 
 
 def digest(path: Path) -> str:
@@ -19,6 +20,14 @@ def digest(path: Path) -> str:
 def prepare(data: Path, destination: Path, checkpoints: bool = False) -> int:
     """Validate every selected archive before writing; never replace differing files."""
     manifest = json.loads((data / 'manifest.json').read_text())
+    supplemental = manifest.get('supplemental_files_sha256', {})
+    if manifest.get('schema_version', 1) >= 2 and set(supplemental) != set(SUPPLEMENTAL_FILES):
+        raise ValueError('Incomplete supplemental input manifest')
+    for name, expected in supplemental.items():
+        if name not in SUPPLEMENTAL_FILES:
+            raise ValueError(f'Unexpected supplemental input: {name}')
+        if digest(data / name) != expected:
+            raise ValueError(f'Supplemental checksum mismatch: {name}')
     selected = ['saved-results.tar.gz']
     if checkpoints:
         selected.append('checkpoints.tar.gz')

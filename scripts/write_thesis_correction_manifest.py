@@ -18,6 +18,10 @@ def main():
     code += [p for p in (ROOT/'reproduction').rglob('*')
              if p.is_file() and p.name != 'manifest.json' and p.suffix != '.gz']
     code += [ROOT/'uv.lock', ROOT/'pyproject.toml', ROOT/'REPRODUCE.md']
+    # Ignore historical local files that cannot exist in a clean checkout.
+    tracked = set(subprocess.check_output(
+        ['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0'))
+    code = [p for p in code if p.relative_to(ROOT).as_posix() in tracked]
     outputs = [analysis_dir()/name for name in (
         'm5r_post_training_evaluation.json', 'm5r_posterior_vs_performance.json',
         'm5r_posterior_vs_performance_mlp.json', 'm5r_refresh_probe_returns_run.json',

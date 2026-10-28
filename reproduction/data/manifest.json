@@ -2,12 +2,12 @@
   "schema_version": 2,
   "description": "Saved evidence for Trading in the Dark; extract relative to the results directory.",
   "training_commit": "220b319f367e69a8f466c87d5346b1acf60574d6",
-  "source_commit_at_packaging": "8e8eefe18726e74a90e2f06af47217483ae0d09d",
+  "source_commit_at_packaging": "91fe0e01df50928f5fc426557588bd918024c16d",
   "source_identity": "The Git commit containing this manifest identifies the reproduction code. Archive and file hashes identify the saved evidence.",
   "archives": {
     "saved-results.tar.gz": {
-      "sha256": "58293ff4a2542c170242371dae7fa0b7fa2aac291d964436ecf4c309f64ee68b",
-      "bytes": 54624555,
+      "sha256": "d678903393387fdcb1dc71296fbf6d599752274c3a9b2767b7c7fd0169f05a28",
+      "bytes": 54619520,
       "files_sha256": {
         "_archive/m4_bridge_rl2_mm/config.json": "b0e75543555e2b882bd93a47bfedc7304810364bc6ad3285f3b28d4bde05abb4",
         "_archive/m4_bridge_rl2_mm/eval.json": "ca650825d000493f7c29f19fcdac0f9d5d472bbe4e895513b1df6bf379d96ff8",
@@ -104,7 +104,7 @@
         "analysis/preflight_verification.json": "c30dffd9de186a105fbaf5a4f0049e7160c5a8fe72f902ca13ecd985f86e3f50",
         "analysis/reference_ordering_gate.json": "04cc26dac34f96204c291123b3637f548916b8e19afaed556c83aae76d4c099d",
         "analysis/reference_ordering_gate_run.json": "2ed5775adca9ed078430eb04b1024ceb2087be48c556fda7e3755f342156e7ed",
-        "analysis/thesis_correction_manifest.json": "851cc115f8d4c6a28118d0fe49fa5bc5898fc9907630ce558266b408f46e1689",
+        "analysis/thesis_correction_manifest.json": "b1b9b0c27a287ee4341dfb1791970642e34bc06f2e72dee07fab5019766746e5",
         "foundations/env_validation/_smoke_super_fast/e9_stats.json": "1a81fe3f20baecfa15d5178b1096c6e34e8b689ea33ff7e5b19298df8db536cc",
         "foundations/env_validation/_smoke_super_fast/e_final_stats.json": "aea776a5436117e871f65f4eac26e534a03903144213634e517a475c94fa13df",
         "foundations/env_validation/_smoke_super_fast/figures/e9/fig_M2_R1_policy_heatmap.png": "0d27b62e032c0e1f4ebc9cacf1e2650584242e8d9da0f43db6bda06d77b1573b",

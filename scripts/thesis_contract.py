@@ -508,6 +508,19 @@ def audit(root: Path, thesis_root: Path | None = None) -> dict:
     except (KeyError, TypeError, ValueError, IndexError, ZeroDivisionError) as exc:
         report = {"comparisons_checked": 0, "findings": [{"kind": "invalid_artifact_schema", "error": str(exc)}]}
     report["findings"] = findings + report["findings"]
+    # This later descriptive evaluation is separate from the 18 original tests.
+    # If supplied, its cached summary must reproduce from all 80 run records.
+    natural = root / 'analysis/natural_switch_evaluation.json'
+    if natural.exists():
+        try:
+            from scripts.summarize_natural_switches import summarize
+            from scripts.prepare_results import digest
+            expected = summarize(json.loads(natural.read_text()))
+            expected['input_sha256'] = digest(natural)
+            if _load(root / 'analysis/natural_switch_summary.json') != expected:
+                raise ValueError('Natural-switch summary differs from recomputation')
+        except (KeyError, TypeError, ValueError, IndexError) as exc:
+            report['findings'].append({'kind': 'invalid_natural_switch_evaluation', 'error': str(exc)})
     report["n_findings"] = len(report["findings"])
     return report
 

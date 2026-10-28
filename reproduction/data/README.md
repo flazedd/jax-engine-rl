@@ -5,7 +5,7 @@ agents. They contain synthetic experiment data; no market-data subscription is n
 
 | File | Contents |
 | --- | --- |
-| `saved-results.tar.gz` | Evaluation returns, learning curves, resolved settings, probe outputs, analytical reference curves, diagnostics, statistical comparisons, and validation results |
+| `saved-results.tar.gz` | Evaluation returns, learning curves, resolved settings, probe outputs, analytical reference curves, diagnostics, statistical comparisons, validation results, and the additional natural-switch trading evaluation |
 | `checkpoints.tar.gz` | All 160 main checkpoints plus saved checkpoints for supporting validation experiments |
 | `manifest.json` | SHA-256 hashes of both archives, every file inside, and both supplemental JSON inputs, plus the original training commit |
 | `m5r_recovery_audit.json` | Verified replay of all 80 main runs: extended recovery bins, direct posterior predictions, and fitted-reference comparisons |

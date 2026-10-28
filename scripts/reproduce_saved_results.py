@@ -41,6 +41,7 @@ def main() -> int:
         ('plotting.m4_plots', []),
         ('scripts.plot_supplemental_belief_checks',
          ['--output', str(output / 'figures/appendix/direct_posterior_accuracy.png')]),
+        ('scripts.summarize_natural_switches', ['--output-root', str(output), '--verify-saved']),
         ('scripts.thesis_contract', ['--strict']),
     ]
     report = {'status': 'running', 'steps': [], 'output': str(output),

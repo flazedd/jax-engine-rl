@@ -52,6 +52,7 @@ def collect_action_regime_rollouts(
       - action: the action the policy took, shape [T, N]
       - regime: the true regime active during that step, shape [T, N]
       - reward: per-step reward, shape [T, N] (for sanity checks)
+      - post_inventory: post-fill inventory, before terminal reset, shape [T, N]
       - done: episode boundary marker, shape [T, N]
 
     Handles both memoryless (PPO / Belief-PPO / Oracle-PPO — agent.act
@@ -76,6 +77,7 @@ def collect_action_regime_rollouts(
     out_action = []
     out_regime = []
     out_inventory = []
+    out_post_inventory = []
     out_reward = []
     out_done = []
 
@@ -121,6 +123,8 @@ def collect_action_regime_rollouts(
         out_regime.append(np.asarray(info["regime"]))
         if q_pre is not None:
             out_inventory.append(np.asarray(q_pre))
+        if "inventory" in info:
+            out_post_inventory.append(np.asarray(info["inventory"]))
         out_reward.append(np.asarray(rewards))
         out_done.append(np.asarray(dones))
 
@@ -138,6 +142,8 @@ def collect_action_regime_rollouts(
     }
     if out_inventory:
         out["inventory"] = np.stack(out_inventory).astype(np.int32)
+    if out_post_inventory:
+        out["post_inventory"] = np.stack(out_post_inventory).astype(np.int32)
     return out
 
 

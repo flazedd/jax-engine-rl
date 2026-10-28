@@ -66,6 +66,10 @@ This route uses saved probe measurements. It does not refit classifiers or gener
 trajectories. The strict check without a thesis checkout checks scientific data; it does not
 check prose or manually typeset thesis tables.
 
+It also regenerates the additional descriptive analysis of trading after natural regime
+switches from `analysis/natural_switch_evaluation.json`: the figure, interval sample counts,
+and paired seed-level uncertainty. This analysis is outside the original 18 comparisons.
+
 ## Replay saved agents
 
 Unpack the measurements and checkpoints into a new `results/` directory:
@@ -124,6 +128,37 @@ This replays checkpoints, refits reference classifiers, checks their aggregate s
 the saved results, and writes `analysis/m5r_accuracy_references.json`.
 
 ## Repeat the experiments
+
+### Additional evaluation after natural regime switches
+
+After extracting the checkpoints, replay the four learned conditions with the original
+evaluation keys (512 episodes for each of 20 trained seeds per condition):
+
+```bash
+uv run python -m scripts.natural_switch_evaluation
+uv run python -m scripts.summarize_natural_switches --output-root natural-switch-report
+```
+
+The evaluator records each completed run and resumes only when its source, reference,
+checkpoint, and configuration hashes match. Each run must reproduce its published mean
+episode return within absolute tolerance `1e-10`. No gradients, forced switches, or environment
+overrides are used. To retain a previous evaluation, pass a new `--output` path and use that
+path as `--input` to the summarizer.
+
+Age zero is the first decision under the new reward-generating regime. Windows end before
+another switch or after the last trading decision; initial regime draws are not switches.
+Positive inventory penalties use post-fill inventory before terminal reset. Eligible steps
+are averaged within each seed, then the 20 seed means receive equal weight. Pointwise 95%
+intervals use 10,000 seed bootstrap draws; hypernetwork-minus-concatenation differences retain
+matching training-seed pairs. Evaluation episodes differ between conditions. These additional
+comparisons are descriptive and are not adjusted for multiplicity.
+
+Counts include distinct contributing episodes, switches, and steps for every interval. Counts
+must not be summed across intervals. Later intervals select switches sufficiently early in the
+episode followed by a sufficiently long uninterrupted regime, so their composition changes.
+The evaluation does not isolate adaptation from inherited inventory, regime identity, or history.
+
+### Retraining
 
 First check the installation and print the execution plan:
 

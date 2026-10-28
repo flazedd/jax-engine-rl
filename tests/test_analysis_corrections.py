@@ -59,6 +59,18 @@ def test_temporal_intervals_smooth_before_quantiles():
     np.testing.assert_allclose([mean, lo, hi], np.ones((3, 2)))
 
 
+def test_paired_temporal_contrast_retains_common_seed_noise():
+    from plotting.trading_results import _paired_delta_ci
+    # The shared seed effect is large but cancels exactly within each pair.
+    # Independently resampling configurations would spuriously widen this CI.
+    baseline = np.arange(20.)[:, None] * np.array([[1., 10., -3.]])
+    contrast = np.array([2., 4., 6.])
+    mean, lo, hi = _paired_delta_ci(baseline + contrast, baseline, n_boot=200)
+    np.testing.assert_allclose([mean, lo, hi], np.tile(contrast, (3, 1)))
+    with pytest.raises(ValueError):
+        _paired_delta_ci(baseline, baseline[:-1], n_boot=10)
+
+
 def test_policy_heatmap_keeps_boundary_ties():
     from envs.market_making_v1 import MarketMakingV1
     from oracles.value_iteration import solve_value_iteration

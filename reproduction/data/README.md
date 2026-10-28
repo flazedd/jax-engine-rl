@@ -45,6 +45,10 @@ The original implementation baseline uses three seeds; the separate factorial im
 checks use eight. Main comparisons use 20 seeds per condition. These are separate experiments,
 not additional seeds for the main comparison.
 
+The saved analyses include the primary seed-paired comparisons in
+`analysis/m5r_primary_seed_block_analysis.json`. The original independence estimates remain
+available alongside them. No checkpoint or fitted probe measurement changed in this revision.
+
 The original training commit identifies the training implementation. The Git commit containing
 these files identifies the reproduction code; the manifest identifies the exact published data.
 The `source_commit_at_packaging` field records the base commit at packaging time, not a claim

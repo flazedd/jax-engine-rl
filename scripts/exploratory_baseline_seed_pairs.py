@@ -1,7 +1,8 @@
 """Exploratory paired intervals for reference and short-history comparisons.
 
-These comparisons were not part of the 18 planned tests. The output is descriptive
-and does not alter the original confidence intervals or Holm families.
+These comparisons are outside the original 18 corrected comparisons. Their paired
+intervals are used in the current descriptive tables, without new hypothesis
+claims or changes to the Holm families.
 """
 import json
 
@@ -36,7 +37,7 @@ def main():
         mean, interval, p = paired_comparison(values[high], values[low])
         rows.append({"high": high, "low": low, "mean_difference": mean,
                      "paired_bootstrap_ci": interval, "signflip_p_uncorrected": p})
-    output = {"status": "exploratory post-review analysis; no planned test or multiplicity adjustment",
+    output = {"status": "exploratory paired analysis; outside the original correction families",
               "seeds": list(range(20)), "bootstrap_draws": 10000, "sign_flips": 100000,
               "rows": rows}
     path = analysis_dir() / "m5r_exploratory_baseline_seed_pairs.json"

@@ -6,8 +6,8 @@
   "source_identity": "The Git commit containing this manifest identifies the reproduction code. Archive and file hashes identify the saved evidence.",
   "archives": {
     "saved-results.tar.gz": {
-      "sha256": "9666b0fa9d05c5bef8d47c7af8e58e4ec92d5d6af9011fa73a2f47fe478236ab",
-      "bytes": 54650316,
+      "sha256": "e9c2e56ffdde75584c0df7f1823d82e018e6bdcca5fe337dac8642ae822757c1",
+      "bytes": 54655798,
       "files_sha256": {
         "_archive/m4_bridge_rl2_mm/config.json": "b0e75543555e2b882bd93a47bfedc7304810364bc6ad3285f3b28d4bde05abb4",
         "_archive/m4_bridge_rl2_mm/eval.json": "ca650825d000493f7c29f19fcdac0f9d5d472bbe4e895513b1df6bf379d96ff8",
@@ -64,7 +64,7 @@
         "analysis/m5r_belief_swap_run.json": "a9ce86b60a23e6a969ddfd2aa2c6101ed88d3118812f7c6f60dd56c8c9bae827",
         "analysis/m5r_diagnostic_tests.json": "55ff1c26d3e6f9f05fc36c76c0536ad5e6ac7dbdca01b8b3cb9ed83576915f1a",
         "analysis/m5r_diagnostic_tests_run.json": "a05a51515a015b4cff8c48bbd0e4b21db0ae7497a18b6040a143cbb181f7e28c",
-        "analysis/m5r_exploratory_baseline_seed_pairs.json": "9121db702e33d60e129d55ad54a3bf5dcc731c17fd94a57d08a149997374d25a",
+        "analysis/m5r_exploratory_baseline_seed_pairs.json": "53f32b2c77689d7bc984c1f712160c9406b5b82ab2f64b5861d9855764454f54",
         "analysis/m5r_final_run.json": "cf49778f734e98547121b08f909d6a70c3c95a90d491ec61de240dfa4990cb6f",
         "analysis/m5r_hypothesis_tests.json": "74236e5c26b3af3bd9545adb6a26f659210ff04ed62cd038c63b1b57751ebd75",
         "analysis/m5r_hypothesis_tests_run.json": "de74bc3f395b25859df4a9524e623bca985ecf98b1b6b8b2afc0906c0dc0610b",
@@ -92,6 +92,7 @@
         "analysis/m5r_posterior_vs_performance_mlp.json": "f28d98b23e871a91a782815cc4f6f4c05600e6ef6c991401a38d637bc777d7d6",
         "analysis/m5r_posterior_vs_performance_mlp_run.json": "8b0d5b205687df9f9aeb9875fb6c85efc6e94e34f12e9cd466ad867f9e629712",
         "analysis/m5r_posterior_vs_performance_run.json": "2bbc90fcc3f3cfac734ae48b3437fbf1b18512486acd2f2d4fa461c4a8308425",
+        "analysis/m5r_primary_seed_block_analysis.json": "eb2a281c5f455c4c6d4caa598fb442b579eaabb4eac9939098bec0e9c958cb71",
         "analysis/m5r_probe_confusion.json": "eb533dddef38617f1122dad58e1099670621324b14f223125412701ed2c8730f",
         "analysis/m5r_refresh_probe_returns_run.json": "8c3ae1072719e3a809ca3dbd5f2f0edbce2cf59d7b52ee48ff1a5fb22752fe57",
         "analysis/m5r_return_tests_run.json": "e0dee45402fcfc00978d32c483a14a5a53de75f6d5882045e340143051bac0d2",
@@ -106,7 +107,7 @@
         "analysis/preflight_verification.json": "c30dffd9de186a105fbaf5a4f0049e7160c5a8fe72f902ca13ecd985f86e3f50",
         "analysis/reference_ordering_gate.json": "04cc26dac34f96204c291123b3637f548916b8e19afaed556c83aae76d4c099d",
         "analysis/reference_ordering_gate_run.json": "2ed5775adca9ed078430eb04b1024ceb2087be48c556fda7e3755f342156e7ed",
-        "analysis/thesis_correction_manifest.json": "fe9112caab78394cf8c5d297eb005de0c27cbfeab32d768b8849dee5d0e7b367",
+        "analysis/thesis_correction_manifest.json": "e41748b96a85c22493e94bfc9ba46302ed1b21c3db8fc1a34f8fa9a3d7727b78",
         "foundations/env_validation/_smoke_super_fast/e9_stats.json": "1a81fe3f20baecfa15d5178b1096c6e34e8b689ea33ff7e5b19298df8db536cc",
         "foundations/env_validation/_smoke_super_fast/e_final_stats.json": "aea776a5436117e871f65f4eac26e534a03903144213634e517a475c94fa13df",
         "foundations/env_validation/_smoke_super_fast/figures/e9/fig_M2_R1_policy_heatmap.png": "0d27b62e032c0e1f4ebc9cacf1e2650584242e8d9da0f43db6bda06d77b1573b",

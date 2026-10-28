@@ -64,7 +64,7 @@ PARAM_BUDGET_BAND = (4_900, 5_100)
 PROBE_TIMESTEPS = 64_000
 PROBE_TRAIN_TIMESTEPS = 51_200
 PROBE_TEST_TIMESTEPS = 12_800
-PRIMARY_PROBE = "logistic"        # linear probe is the main instrument
+PRIMARY_PROBE = "logistic"        # primary classifier in original mean-only comparisons
 ROBUSTNESS_PROBE = "mlp"
 PRIMARY_BELIEF_METRIC = "method_kl_to_omega"
 DECODABILITY_METRIC = "method_test_acc"
@@ -136,8 +136,9 @@ COMPARISON_SETS = {
     ),
 }
 
-# Fields every corrected comparison must carry, so a figure or table can always
-# report what the protocol says is reported.
+# Original independence-analysis fields, retained for verification and sensitivity.
+# Primary paired inference uses the first four fields; the original omission
+# screen is not a paired omission test (scripts.primary_seed_block_analysis).
 REQUIRED_COMPARISON_FIELDS = (
     "mean_difference",
     "delta_ci",

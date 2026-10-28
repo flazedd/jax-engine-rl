@@ -111,7 +111,8 @@ def test_graph_has_all_scientific_and_secondary_dependencies():
     assert {'foundations:env_validation','foundations:impl_validation'} <= set(stages['train:belief_ppo'].depends_on)
     assert 'analysis:posterior_probe_mlp' in stages['analysis:belief_quality_tests'].depends_on
     assert 'analysis:probe_confusion' in stages['figures:tables'].depends_on
-    assert 'analysis:diagnostic_tests' in stages['figures:main'].depends_on
+    assert {'analysis:diagnostic_tests', 'analysis:primary_seed_block',
+            'analysis:accuracy_references', 'analysis:recovery_audit'} <= set(stages['figures:main'].depends_on)
     assert {p.name for p in stages['analysis:return_tests'].outputs} == {'m5r_method_return_tests.json','m5r_time_to_threshold_tests.json'}
     assert len(stages['figures:tables'].outputs) == 7
 

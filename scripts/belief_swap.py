@@ -1,10 +1,10 @@
 """Belief substitution diagnostic in the RSMM experiments.
 
-Companion to `scripts.action_distributions`. That script measures what a
-policy did across locked regimes; this one holds the observation fixed and
-swaps only the belief, so a policy that responds to the regime by steering
-inventory rather than by changing its action at a given inventory is still
-credited, and each method uses its own rollout-derived observation pools.
+Companion to `scripts.action_distributions`. For actors reading only inventory
+and a learned representation, same-inventory substitution targets the same
+regime-conditioned action distribution as action rollouts. Sampling, weighting
+and finite pool support differ; this is not an independent mechanism test or
+a way to recover effects operating solely through inventory occupancy.
 
 Outputs:
   - results/analysis/m5r_belief_swap.json

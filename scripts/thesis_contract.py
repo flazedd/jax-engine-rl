@@ -27,6 +27,8 @@ import numpy as np
 
 from evaluation import protocol as P
 from evaluation.metrics import bootstrap_independent_mean_ci
+from scripts.primary_seed_block_analysis import load_primary
+from scripts.seed_block_sensitivity import paired_comparison
 from utils.paths import results_root
 from utils.script_output import ScriptRun
 
@@ -113,6 +115,20 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
         findings.append({"kind": "missing_thesis_source", "path": str(results_path)})
         return
     normalised = _thesis_table_text(thesis_root, "tab:stacked_baseline")
+    primary = load_primary(root)
+    def primary_row(family, original):
+        name = original.get("name", original.get("method", ""))
+        return next(r for r in primary["families"][family]
+                    if r.get("name", r.get("method", "")) == name
+                    and r.get("metric", "") == original.get("metric", ""))
+    def paired_returns(methods, high, low):
+        arrays = []
+        for key in (high, low):
+            row = methods[key]
+            lookup = dict(zip(row["seeds"], row["per_seed_evaluation_return"], strict=True))
+            arrays.append(np.array([lookup[s] for s in range(20)]))
+        mean, interval, _ = paired_comparison(*arrays, n_permutations=1)
+        return mean, *interval
 
     post = _load(root / "analysis" / "m5r_post_training_evaluation.json")
     if post is not None:
@@ -130,7 +146,7 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
         }
         for label, key in labels.items():
             other = np.asarray(methods[key]["per_seed_evaluation_return"], dtype=float)
-            mean, lo, hi = bootstrap_independent_mean_ci(stacked, other)
+            mean, lo, hi = paired_returns(methods, "stacked_obs_ppo", key)
             row = (f"{label} & ${_signed(mean)}$ & $[{_signed(lo)},\\ {_signed(hi)}]$ "
                    f"& ${_signed(mean / gap)}$")
             if row not in normalised:
@@ -144,7 +160,8 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
         def rounded(value, digits):
             return format(Decimal(str(round(value, 10))).quantize(Decimal(10)**-digits,
                           rounding=ROUND_HALF_UP), f".{digits}f")
-        for r in speed["comparisons"]:
+        for original in speed["comparisons"]:
+            r = primary_row("speed", original)
             label = "RL\\textsuperscript{2}" if r["method"] == "rl2" else "VariBAD"
             lo,hi = r["delta_ci"]
             expected_fragments["learning_speed"].append(
@@ -155,7 +172,8 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
     if diagnostics:
         for tag,label in [("locked_regime_action_distribution", "Policy response"),
                           ("belief_swap_belief_only", "Belief substitution")]:
-            for method, r in diagnostics["results"][tag].items():
+            for method, original in diagnostics["results"][tag].items():
+                r = primary_row("diagnostics", original)
                 method_label = "RL\\textsuperscript{2}" if method == "RL2" else method
                 lo,hi = r["delta_ci"]
                 pvalue = r["holm_corrected_p"]
@@ -167,23 +185,21 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
     if hypotheses:
         for classifier in ("logistic", "mlp"):
             for key in ("overall", "within_variant"):
-                r = hypotheses["family_c"][classifier][key]
-                lo,hi = r["ci"]
+                r = primary["correlations"]["linear" if classifier == "logistic" else "mlp"][key]
+                lo,hi = r["seed_block_ci"]
                 expected_fragments["decoupling"].append(
-                    f"${r['correlation']:.3f}$ & $[{lo:.3f},\\ {hi:.3f}]$")
+                    f"${r['r']:.3f}$ & $[{lo:.3f},\\ {hi:.3f}]$")
     if post:
         expected_fragments["reference_gaps"] = []
         for high, low, label in (("belief_ppo", "regime_agnostic_ppo", "Belief-PPO $-$ regime-agnostic PPO"),
                                  ("oracle_ppo", "belief_ppo", "Oracle-PPO $-$ Belief-PPO")):
-            difference, lower, upper = bootstrap_independent_mean_ci(
-                post["methods"][high]["per_seed_evaluation_return"],
-                post["methods"][low]["per_seed_evaluation_return"])
+            difference, lower, upper = paired_returns(post["methods"], high, low)
             expected_fragments["reference_gaps"].append(
                 f"{label} & ${difference:+.2f}$ & $[{lower:+.2f},\\ {upper:+.2f}]$")
     # Main architecture/method effect tables, not only the supplementary rows.
     if hypotheses and post:
         expected_fragments["architecture_returns"] = []
-        for r in hypotheses["family_b"]["results"].values():
+        for r in primary["families"]["architecture_returns"]:
             label = "RL\\textsuperscript{2}" if r["method"].startswith("rl2") else "VariBAD"
             lo, hi = r["delta_ci"]
             pv = r["holm_corrected_p"]
@@ -194,7 +210,7 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
     method_tests = _load(root / "analysis/m5r_method_return_tests.json")
     if method_tests and post:
         expected_fragments["method_returns"] = []
-        for r in method_tests["comparisons"]:
+        for r in primary["families"]["method_returns"]:
             label = "Concatenation" if r["architecture"] == "concat" else "Hypernetwork"
             lo, hi = r["delta_ci"]
             pv = r["holm_corrected_p"]
@@ -414,7 +430,8 @@ def _audit(root: Path, thesis_root: Path | None = None) -> dict:
         "protocol": {
             "seeds": P.SEEDS, "bootstrap_resamples": P.BOOTSTRAP_RESAMPLES,
             "alpha": P.ALPHA, "alternative": P.ALTERNATIVE,
-            "hypothesis_test": "random-label permutation",
+            "hypothesis_test": "paired sign flip (primary); random-label permutation (sensitivity)",
+            "bootstrap": "shared training-seed blocks (primary)",
             "correction": P.CORRECTION,
         },
         "comparisons_checked": checked_comparisons,
@@ -490,6 +507,27 @@ def _required_inputs(root: Path) -> list[dict]:
           and sensitivity["seed_ids"] == list(range(P.SEEDS))
           and all(finite(r["paired_bootstrap_ci"], (2,)) and 0 <= r["paired_p_holm"] <= 1
                   for r in sensitivity["comparisons"]))
+    primary = require("analysis/m5r_primary_seed_block_analysis.json")
+    def check_primary():
+        expected_sizes = {"architecture_returns": 2, "method_returns": 2, "speed": 2,
+                          "probe": 4, "probe_mlp": 4, "diagnostics": 4}
+        if set(primary["families"]) != set(expected_sizes):
+            return False
+        pairs = {(r["family"], r["comparison"], r["metric"]): r for r in sensitivity["comparisons"]}
+        for family, size in expected_sizes.items():
+            rows = primary["families"][family]
+            if len(rows) != size:
+                return False
+            for r in rows:
+                name = r.get("name", r.get("method", ""))
+                expected = pairs[family, name, r.get("metric", "")]
+                if not np.allclose([r["mean_difference"], *r["delta_ci"], r["permutation_p"], r["holm_corrected_p"]],
+                    [expected["delta"], *expected["paired_bootstrap_ci"], expected["paired_signflip_p"], expected["paired_p_holm"]],
+                    rtol=0, atol=1e-12):
+                    return False
+        return (len(primary["robustness_comparisons"]) == 8
+                and primary["correlations"] == sensitivity["correlations"])
+    check("primary seed-block inference", check_primary)
     confusion = require("analysis/m5r_probe_confusion.json")
     for method in P.METHOD_ARMS:
         check("confusion:" + method, lambda m=method: finite(confusion["by_method"][m]["row_normalized"], (3,3))

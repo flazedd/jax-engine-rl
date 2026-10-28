@@ -1,16 +1,17 @@
-"""Counterfactual belief-swap diagnostic.
+"""Policy probabilities under regime-conditioned representation substitution.
 
-The locked-regime action distribution measures what a policy *did*. It has two
-known blind spots: a policy that responds to the regime by steering into
-different inventories rather than by acting differently at the same inventory
-is scored as unresponsive, and the inventory levels where the comparison is
-possible at all shrink to whatever the policy visits in every regime.
+For RL2 and VariBAD, the actor reads only inventory and its representation.
+Drawing representations from each regime at the same inventory therefore
+estimates the same conditional action distribution as fixed-regime action
+rollouts, in the population limit. The scores differ through probability
+averaging versus action sampling, inventory weighting, and finite pool support.
+They are complementary measurements, not independent tests of a mechanism.
+Neither recovers effects operating solely through different inventory occupancy.
 
-This diagnostic measures the belief-to-action map instead. The observation is
-held fixed and only the belief input is varied, so the question becomes: given
-the same situation, does this policy act differently when it believes it is in
-a different regime? Each method supplies its own rollout-derived observation and belief pools.
-Inputs are held fixed across substitutions within a method, not across methods.
+Reference agents also read previous-action/reward inputs; holding those fixed
+can distinguish substitution from their rollout conditional distributions.
+Each method supplies its own pools. Substitution changes the whole history
+representation, not regime information alone, and does not measure return gain.
 
 The null is exact rather than empirical. A policy with no belief input, the
 regime-agnostic agent, cannot respond to a swapped belief and scores zero by
@@ -22,9 +23,8 @@ Belief substitution per method family:
   - Belief / Oracle PPO : the explicitly located regime block in the observation.
   - Regime-agnostic / stacked-obs : no belief input, so the score is zero.
 
-Belief spaces differ across method families, so absolute values compare only
-within a method. The concat-versus-hypernet comparison, which is the decisive
-one, is within-method by construction.
+Even within a method, architecture comparisons combine different learned
+representation distributions with different policy mappings.
 """
 from __future__ import annotations
 

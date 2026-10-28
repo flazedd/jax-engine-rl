@@ -31,6 +31,7 @@ def main():
         'm5r_belief_quality_mlp_tests.json', 'param_counts.json',
         'm5r_probe_confusion.json', 'm5r_method_return_tests.json',
         'm5r_time_to_threshold_tests.json', 'm5r_seed_block_sensitivity.json',
+        'm5r_primary_seed_block_analysis.json',
         'natural_switch_evaluation.json', 'natural_switch_summary.json')]
     def hashes(paths, base=ROOT, prefix=''):
         return {prefix + p.relative_to(base).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -57,7 +58,10 @@ def main():
                         'fail-closed full training identity and checkpoint integrity',
                         'complete required-artifact and comparison contract',
                         'learning speed reports completed window endpoints; primary and paired tests recalculated',
-                        'additional natural-switch trading evaluation with seed-level uncertainty and interval sample counts'],
+                        'additional natural-switch trading evaluation with seed-level uncertainty and interval sample counts',
+                        'seed-block inference promoted to primary with original independence estimates retained',
+                        'paired temporal contrasts aligned by explicit seed identifiers',
+                        'same-inventory behavioural diagnostic overlap documented'],
         'code_sha256': hashes(code), 'analysis_sha256': hashes(outputs, results_root(), 'results/'),
     }
     path=analysis_dir()/'thesis_correction_manifest.json'

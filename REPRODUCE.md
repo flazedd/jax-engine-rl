@@ -24,8 +24,9 @@ module is `plotting.trading_results`. The eight main configurations are in
 
 Published analysis filenames and experiment identifiers retain their historical `m5r_` prefix.
 The renamed scripts read and write those same data paths, so saved checkpoints and results
-remain usable without migration. The current release refreshes derived learning-speed results
-to use completed 25-iteration window endpoints and updates the archive checksums together.
+remain usable without migration. The current release uses seed-paired inference for the main comparisons, retaining the original
+independence analysis for transparency. It also retains the corrected completed-window
+learning-speed calculation. Archive checksums identify the released measurements and analyses.
 Use the current commands in this guide; old Python module names have been replaced. Historical run metadata may still record the original module or config path.
 
 ## Recalculate the reported results
@@ -44,8 +45,9 @@ uv run python -m scripts.reproduce_saved_results --output reproduced-again
 The command performs these steps:
 
 1. Restore the pinned original implementation-validation baseline.
-2. Recompute all 18 primary mean comparisons and check them against the saved results, then
-   calculate sensitivity to shared training seeds and the exploratory reference comparisons.
+2. Verify the original 18 independence-based comparisons, calculate their seed-paired counterparts,
+   and publish the paired estimates as the primary analysis. Recalculate exploratory paired
+   reference comparisons and preserve the six original correction families.
 3. Generate the result tables and figures, including comparisons with analytical reference
    probes on each method's own observations and the full-information policy reference.
 4. Check the required data, training budgets, comparison families, and numerical consistency.
@@ -69,6 +71,25 @@ check prose or manually typeset thesis tables.
 It also regenerates the additional descriptive analysis of trading after natural regime
 switches from `analysis/natural_switch_evaluation.json`: the figure, interval sample counts,
 and paired seed-level uncertainty. This analysis is outside the original 18 comparisons.
+
+## Primary analysis and retained sensitivity results
+
+`scripts.seed_block_sensitivity` retains its historical name: it verifies the original
+independence analysis and recalculates paired bootstrap intervals and sign-flip tests.
+`scripts.primary_seed_block_analysis` publishes `analysis/m5r_primary_seed_block_analysis.json`,
+which the current tables and thesis use. Each primary comparison retains its original
+independence estimate alongside it. All 18 corrected significance decisions agree.
+The change to primary inference was made during review, not preregistered.
+
+Matching seed identifiers, rather than array position, define pairs. Sign flips still require
+symmetry of paired differences or exchangeability within pairs under the null; equal means
+alone do not suffice. Exploratory full-input VariBAD probes remain outside the six correction
+families. The temporal architecture-contrast plot now resamples matching seed pairs as well.
+
+For the learned agents, same-inventory belief substitution and fixed-regime action frequencies
+target the same conditional action distributions in the population limit. Sampling, weighting
+and finite support differ. The two scores are complementary measurements, not independent
+mechanism tests. Their saved measurements have not changed.
 
 ## Replay saved agents
 

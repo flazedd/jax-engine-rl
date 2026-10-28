@@ -914,6 +914,22 @@ def _independent_delta_ci(hyper: np.ndarray, concat: np.ndarray,
             np.percentile(means,2.5,axis=0), np.percentile(means,97.5,axis=0))
 
 
+def _paired_delta_ci(hyper: np.ndarray, concat: np.ndarray,
+                     n_boot: int = 10_000, smoothing_window: int = 1) -> tuple:
+    """Whole-seed bootstrap after aligning the two arrays by seed identifier."""
+    hyper, concat = np.asarray(hyper), np.asarray(concat)
+    if hyper.shape != concat.shape or hyper.ndim != 2:
+        raise ValueError('Expected aligned run-by-time arrays with identical shapes')
+    delta = _smooth_curve(hyper - concat, smoothing_window)
+    rng = np.random.default_rng(0)
+    means = np.empty((n_boot, delta.shape[1]))
+    for start in range(0, n_boot, 1000):
+        size = min(1000, n_boot-start)
+        indices = rng.integers(len(delta), size=(size, len(delta)))
+        means[start:start+size] = delta[indices].mean(axis=1)
+    return delta.mean(axis=0), np.percentile(means, 2.5, axis=0), np.percentile(means, 97.5, axis=0)
+
+
 # The architecture contrast is the plotted quantity here, so a line identifies a
 # method. It keeps the colour and dash of that method's hypernetwork arm in the
 # levels figures, since the difference is taken in that arm's favour.
@@ -937,7 +953,7 @@ def _draw_probe_delta_per_t(
     ax, classifier: str, env_label: str = MEDIUM_ENV, metric: str = "acc",
 ) -> bool:
     """Draw hypernetwork-minus-concatenation belief quality at each
-    within-episode timestep, with independent runs, for both methods."""
+    within-episode timestep, preserving shared training-seed blocks."""
     key, _ = _PER_T_METRIC[metric]
     probe = _load_probe_for_per_t(classifier)
     if probe is None:
@@ -957,13 +973,17 @@ def _draw_probe_delta_per_t(
             print(f"[trading_results] skip {method} ({metric}): {key} missing, "
                   "rerun scripts.posterior_probe")
             continue
-        h = np.asarray(hyper[key])
-        c = np.asarray(concat[key])
+        hs, cs = hyper['seeds'], concat['seeds']
+        if len(set(hs)) != len(hs) or len(set(cs)) != len(cs) or set(hs) != set(cs):
+            raise ValueError(f'Cannot pair probe curves for {method}: seed identifiers differ')
+        order = sorted(hs)
+        h = np.asarray(hyper[key])[[hs.index(s) for s in order]]
+        c = np.asarray(concat[key])[[cs.index(s) for s in order]]
         if h.shape != c.shape:
             print(f"[trading_results] skip {method}: unpaired seed counts "
                   f"{h.shape[0]} vs {c.shape[0]}")
             continue
-        mean, lo, hi = _independent_delta_ci(h, c, smoothing_window=smoothing_window)
+        mean, lo, hi = _paired_delta_ci(h, c, smoothing_window=smoothing_window)
         ts = np.arange(mean.shape[0])
         ax.plot(ts, mean, color=color,
                 label=label, linewidth=2.2, linestyle=ls)
@@ -991,7 +1011,7 @@ def plot_probe_delta_per_t(out_path: Path, env_label: str = MEDIUM_ENV) -> None:
     The levels figure plots four variants against each other, where the
     method-to-method separation dominates the architecture contrast the
     comparison actually tests. This plots that contrast directly, with the
-    independent run resampling the statistical protocol uses. The divergence row comes
+    paired seed resampling the statistical protocol uses. The divergence row comes
     first because it is the primary metric, and it runs the other way round:
     a negative difference favours the hypernetwork there.
     """
@@ -1197,7 +1217,7 @@ def plot_probe_main_summary(out_path: Path, env_label: str = MEDIUM_ENV,
     """MLP accuracy and primary KL with the RL2 concatenation accuracy reference."""
     apply_style()
     source = _load_probe_for_per_t("mlp")
-    references = json.loads((RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json").read_text())
+    references = json.loads(resolve_data(RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json").read_text())
     if references["environment"] != env_label:
         raise ValueError("Reference curves use a different environment")
     fig, axes = plt.subplots(1, 2, figsize=(8.8, 2.8) if presentation else (11, 5.0))
@@ -1273,7 +1293,7 @@ def _plot_probe_levels_and_reference_gap(out_path: Path, env_label: str, metric:
     selected = (0, 1) if panels == "both" else ((0,) if panels == "level" else (1,))
     suffix = "test_acc" if metric == "acc" else "kl"
     reference_suffix = "" if metric == "acc" else "_kl"
-    reference_path = RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json"
+    reference_path = resolve_data(RESULTS_ROOT / "analysis" / "m5r_accuracy_references.json")
     references = json.loads(reference_path.read_text()) if reference_path.exists() else None
     if references is not None and references["environment"] != env_label:
         raise ValueError("Reference curves use a different environment")
@@ -1336,7 +1356,7 @@ def plot_probe_accuracy_since_change(
     """Recovery accuracy and paired gaps to references on each run's own episodes."""
     audit_path = resolve_data(RESULTS_ROOT / "analysis" / "m5r_recovery_audit.json")
     if not audit_path.exists():
-        audit_path = REPO_ROOT / "reproduction" / "data" / "m5r_recovery_audit.json"
+        audit_path = resolve_data(REPO_ROOT / "reproduction" / "data" / "m5r_recovery_audit.json")
     if audit_path.exists():
         return _plot_extended_recovery(out_path, env_label, reference_kind, audit_path)
     if reference_kind != "analytical":
@@ -1479,7 +1499,7 @@ def plot_diagnostic_separation(
     """Per-run separation score of each variant.
 
     One point per run, the mean of each variant as a bar, and
-    the reference levels behind them. The table reports the independent difference in means;
+    the reference levels behind them. The table reports the paired mean difference;
     this shows the level each variant reaches and how far it sits from the
     Belief-PPO reference, which a difference alone cannot say.
     """

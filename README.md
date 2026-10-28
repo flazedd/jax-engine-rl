@@ -46,6 +46,9 @@ On success, the command prints `Saved result reproduction passed`. Open:
 - `reproduced/results/audits/thesis_contract.json` for the scientific consistency check.
 
 Use `--output another-directory` to repeat the check without overwriting a previous run.
+The main contrasts use paired training-seed inference. Original independence estimates remain
+available as sensitivity results; trained checkpoints and measured returns are unchanged.
+
 The [full reproduction guide](REPRODUCE.md) explains what is checked, what requires checkpoint
 replay, and how to repeat training. Saved-data verification establishes consistency of the
 reported measurements; replay and retraining provide additional checks.

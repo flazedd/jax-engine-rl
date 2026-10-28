@@ -286,11 +286,20 @@ def build_plan() -> list[Stage]:
                               "analysis:post_training_evaluation", "analysis:posterior_probe", "analysis:posterior_probe_mlp"], est=5),
     ]
 
+    stages.append(_analysis("analysis:accuracy_references", "medium", "scripts.accuracy_references",
+                           final / "m5r_accuracy_references.json",
+                           depends_on=["analysis:posterior_probe", "analysis:posterior_probe_mlp"], est=30))
+    stages.append(_analysis("analysis:recovery_audit", "medium", "scripts.recovery_audit",
+                           final / "m5r_recovery_audit.json",
+                           depends_on=["analysis:posterior_probe", "analysis:posterior_probe_mlp"], est=30))
     stages.append(_analysis("analysis:probe_confusion", "medium", "scripts.probe_confusion",
                            final / "m5r_probe_confusion.json", depends_on=["analysis:posterior_probe"], est=30))
     statistics = ["analysis:hypothesis_tests", "analysis:return_tests", "analysis:diagnostic_tests", "analysis:belief_quality_tests"]
     stages.append(_analysis("analysis:seed_block_sensitivity", "medium", "scripts.seed_block_sensitivity",
                            final / "m5r_seed_block_sensitivity.json", depends_on=statistics, est=2))
+    stages.append(_analysis("analysis:primary_seed_block", "medium", "scripts.primary_seed_block_analysis",
+                           final / "m5r_primary_seed_block_analysis.json",
+                           depends_on=["analysis:seed_block_sensitivity"], est=2))
     presentation_inputs = [s.name for s in stages if s.phase == "medium" and s.kind != "train"]
 
     # ---- Phase 3: tables and figures -----------------------------------

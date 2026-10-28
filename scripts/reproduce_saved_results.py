@@ -31,6 +31,7 @@ def main() -> int:
         ('scripts.restore_validation_baselines', []),
         ('scripts.seed_block_sensitivity', []),
         ('scripts.exploratory_baseline_seed_pairs', []),
+        ('scripts.primary_seed_block_analysis', []),
         ('scripts.make_tables', []),
         ('scripts.summarize_full_belief',
          ['--mlp', str(DATA / 'm5r_full_belief_mlp.json'),

@@ -25,6 +25,7 @@ import numpy as np
 from evaluation.protocol import MEDIUM_ENV
 from utils.paths import analysis_dir, is_dummy, resolve_data, results_root, thesis_fig_dir
 from utils.script_output import ScriptRun
+from scripts.primary_seed_block_analysis import load_primary
 
 FINAL = lambda: analysis_dir()          # noqa: E731
 
@@ -70,7 +71,7 @@ def _fmt(x, nd=3, plus=False):
 
 # The four per-measurement probe tables of the posterior-quality probe, in the
 # order the methodology defines the metrics. Each is self-contained: the level
-# each architecture reaches, the independent difference in means between them, and the test
+# each architecture reaches, the seed-paired mean difference, and the test
 # the protocol requires of a reported comparison.
 _PROBE_METRIC_LABEL = {
     "method_test_acc": ("probe_decodability", 3),
@@ -92,11 +93,9 @@ def _fmt_p(p) -> str:
 
 
 def _belief_rows(metric: str, nd: int, with_holm: bool) -> list[str] | None:
-    tests = _load(FINAL() / "m5r_belief_quality_tests.json")
-    if tests is None:
-        return None
-    pool = list(tests.get("comparisons", []))
-    pool += list(tests.get("robustness_comparisons", []))
+    tests = load_primary(FINAL().parent)
+    pool = tests['families']['probe'] + tests['families']['probe_mlp']
+    pool += tests['robustness_comparisons']
     rows = []
     for method in ("rl2", "varibad"):
         for probe in ("linear", "mlp"):
@@ -140,7 +139,7 @@ def _belief_table(metric: str, with_holm: bool = True) -> str | None:
         return None
     n_cols = 8 if with_holm else 7
     head = (r"Method & Probe & Concatenation & Hypernetwork & $\bar{d}$ & "
-            r"$95\%$ CI & Seeds favouring")
+            r"$95\%$ CI & \shortstack{Seeds favouring\\hypernetwork}")
     if with_holm:
         head += r" & $p_{\text{Holm}}$"
     body = "\n".join(rows)
@@ -174,11 +173,11 @@ def probe_brier() -> str | None:
 
 
 def integration_gap() -> str | None:
-    tests = _load(FINAL() / "m5r_hypothesis_tests.json")
+    tests = load_primary(FINAL().parent)
     evals = _load(FINAL() / "m5r_post_training_evaluation.json")
     if tests is None:
         return None
-    results = tests.get("family_b", {}).get("results", {})
+    results = {r['method']: r for r in tests['families']['architecture_returns']}
 
     methods = evals.get("methods", {}) if evals else {}
     floor = methods.get("regime_agnostic_ppo", {}).get("evaluation_return_mean")
@@ -187,7 +186,7 @@ def integration_gap() -> str | None:
 
     rows = []
     for method, label in (("rl2", "RL\\textsuperscript{2}"), ("varibad", "VariBAD")):
-        r = results.get(f"{method}_hypernet_beats_concat_{MEDIUM_ENV}")
+        r = results.get(f"{method}_hypernet")
         if r is None:
             continue
         lo, hi = r.get("delta_ci", [None, None])
@@ -204,7 +203,7 @@ def integration_gap() -> str | None:
     body = "\n".join(rows)
     return f"""\\begin{{tabular}}{{lrrrr}}
 \\toprule
-{_banner(5)}Method & $\\bar{{d}}$ & $95\\%$ CI & Reference gap fraction & $p_{{\\mathrm{{Holm}}}}$ \\\\
+{_banner(5)}Method & $\\bar{{d}}$ & Paired $95\\%$ CI & $\\Delta G$ & $p_{{\\mathrm{{Holm}}}}$ \\\\
 \\midrule
 {body}
 \\bottomrule
@@ -268,7 +267,10 @@ def seed_block_sensitivity() -> str | None:
             label = method
         lo, hi = item["paired_bootstrap_ci"]
         digits = 1 if item["family"] == "speed" else 3
-        rows.append(f"{families[item['family']]} & {label} & {_fmt(item['delta'], digits, plus=True)} "
+        # Decimal half-up agrees with the manually typeset capped-time table.
+        from decimal import Decimal, ROUND_HALF_UP
+        delta = Decimal(str(round(item['delta'], 10))).quantize(Decimal(10)**-digits, rounding=ROUND_HALF_UP)
+        rows.append(f"{families[item['family']]} & {label} & ${delta:+.{digits}f}$ "
                     f"& $[{lo:+.{digits}f},\\ {hi:+.{digits}f}]$ & {_fmt_p(item['paired_p_holm'])} " + r"\\")
     return ("\\begin{tabular}{llrrr}\n\\toprule\n" + _banner(5)
             + r"Family & Comparison & $\bar d$ & Paired $95\%$ CI & $p_{\mathrm{Holm}}$ " + r"\\" + "\n\\midrule\n"

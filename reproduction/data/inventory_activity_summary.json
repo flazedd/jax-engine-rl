@@ -1,0 +1,3107 @@
+{
+  "description": "Post-fill absolute inventory and accepted fills on original evaluation episodes; no retraining.",
+  "inventory_timing": "After accepted fills, before terminal reset; includes final decision.",
+  "intervals": "10000 seed bootstrap resamples; RNG 0; paired differences; runs equally weighted.",
+  "rows": [
+    {
+      "method": "rl2_concat",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "90961873ddcae670c45cc51ed2a1fc93eed89aaf4cc5dc807d2c1f66f6948b79",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040000,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.61191355583287,
+      "absolute_inventory_distribution": [
+        0.287384033203125,
+        0.4501495361328125,
+        0.1402587890625,
+        0.06793212890625,
+        0.033447265625,
+        0.0208282470703125
+      ],
+      "mean_abs_inventory": 1.172393798828125,
+      "mean_squared_inventory": 2.678436279296875,
+      "large_inventory_fraction": 0.1222076416015625,
+      "bound_fraction": 0.0208282470703125,
+      "bid_fills": 20.787109375,
+      "ask_fills": 20.685546875,
+      "total_fills": 41.47265625,
+      "both_fill_steps": 2.96484375
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "924f42aafaef071f962a079b2ba320c9014bd02089a1aecaa8ee0995b953d7f9",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040001,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 44.444140069783316,
+      "absolute_inventory_distribution": [
+        0.2741241455078125,
+        0.426849365234375,
+        0.161895751953125,
+        0.0823516845703125,
+        0.0330352783203125,
+        0.0217437744140625
+      ],
+      "mean_abs_inventory": 1.238555908203125,
+      "mean_squared_inventory": 2.88775634765625,
+      "large_inventory_fraction": 0.1371307373046875,
+      "bound_fraction": 0.0217437744140625,
+      "bid_fills": 20.43359375,
+      "ask_fills": 20.81640625,
+      "total_fills": 41.25,
+      "both_fill_steps": 2.830078125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "aa57ed0488d95f0d71cff6e414bca36bf10b3ce5be493f3db8347b540196a703",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040002,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 46.79697242361726,
+      "absolute_inventory_distribution": [
+        0.3141326904296875,
+        0.4574127197265625,
+        0.1508331298828125,
+        0.044952392578125,
+        0.0197296142578125,
+        0.012939453125
+      ],
+      "mean_abs_inventory": 1.0375518798828125,
+      "mean_squared_inventory": 2.1044769287109375,
+      "large_inventory_fraction": 0.0776214599609375,
+      "bound_fraction": 0.012939453125,
+      "bid_fills": 20.884765625,
+      "ask_fills": 20.873046875,
+      "total_fills": 41.7578125,
+      "both_fill_steps": 2.9453125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "7c860027855a83714a36027cfa88369e57c7ac435808525fb6203a1e3c48648a",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040003,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.84521434164344,
+      "absolute_inventory_distribution": [
+        0.2823333740234375,
+        0.436859130859375,
+        0.158966064453125,
+        0.070953369140625,
+        0.031097412109375,
+        0.0197906494140625
+      ],
+      "mean_abs_inventory": 1.1909942626953125,
+      "mean_squared_inventory": 2.7036285400390625,
+      "large_inventory_fraction": 0.1218414306640625,
+      "bound_fraction": 0.0197906494140625,
+      "bid_fills": 20.693359375,
+      "ask_fills": 20.892578125,
+      "total_fills": 41.5859375,
+      "both_fill_steps": 2.994140625
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "fa95a245bfa7c1632cd1ffdbf66663e83e01ebe6648a2023798b87865b3d0c02",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040004,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.12578069180745,
+      "absolute_inventory_distribution": [
+        0.2704620361328125,
+        0.44879150390625,
+        0.1488189697265625,
+        0.072418212890625,
+        0.035919189453125,
+        0.023590087890625
+      ],
+      "mean_abs_inventory": 1.225311279296875,
+      "mean_squared_inventory": 2.86029052734375,
+      "large_inventory_fraction": 0.131927490234375,
+      "bound_fraction": 0.023590087890625,
+      "bid_fills": 20.25390625,
+      "ask_fills": 20.216796875,
+      "total_fills": 40.470703125,
+      "both_fill_steps": 2.67578125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "f04aac4aac8487149c9fadd922f71eda4a9bbcbb1dad93c3cc869934650e5c21",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040005,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.402929127296375,
+      "absolute_inventory_distribution": [
+        0.25909423828125,
+        0.4117431640625,
+        0.1887054443359375,
+        0.0770721435546875,
+        0.0397186279296875,
+        0.0236663818359375
+      ],
+      "mean_abs_inventory": 1.297576904296875,
+      "mean_squared_inventory": 3.087371826171875,
+      "large_inventory_fraction": 0.1404571533203125,
+      "bound_fraction": 0.0236663818359375,
+      "bid_fills": 20.62890625,
+      "ask_fills": 20.564453125,
+      "total_fills": 41.193359375,
+      "both_fill_steps": 3.052734375
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "da8072b412b05b9a1581d9ec47a43e32a166743b610718efb7c8aea4494dd270",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040006,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.320897946789046,
+      "absolute_inventory_distribution": [
+        0.2874298095703125,
+        0.4455718994140625,
+        0.1430511474609375,
+        0.0690460205078125,
+        0.033538818359375,
+        0.0213623046875
+      ],
+      "mean_abs_inventory": 1.179779052734375,
+      "mean_squared_inventory": 2.709869384765625,
+      "large_inventory_fraction": 0.1239471435546875,
+      "bound_fraction": 0.0213623046875,
+      "bid_fills": 20.642578125,
+      "ask_fills": 20.310546875,
+      "total_fills": 40.953125,
+      "both_fill_steps": 2.828125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "56d038dae60b0bb272710b4080fb4c97b1e8cc4971df84daa5a81eec7d7e0ef6",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040007,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 46.456737946668,
+      "absolute_inventory_distribution": [
+        0.295257568359375,
+        0.4827728271484375,
+        0.1429443359375,
+        0.048248291015625,
+        0.0198211669921875,
+        0.010955810546875
+      ],
+      "mean_abs_inventory": 1.0474700927734375,
+      "mean_squared_inventory": 2.0798187255859375,
+      "large_inventory_fraction": 0.0790252685546875,
+      "bound_fraction": 0.010955810546875,
+      "bid_fills": 20.037109375,
+      "ask_fills": 20.046875,
+      "total_fills": 40.083984375,
+      "both_fill_steps": 2.763671875
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "3625272154affd085688f8292d0d7396310ef36d7e12271821f089fb1665fe51",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040008,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.592089305384434,
+      "absolute_inventory_distribution": [
+        0.28057861328125,
+        0.4412841796875,
+        0.1485595703125,
+        0.0762939453125,
+        0.0354461669921875,
+        0.0178375244140625
+      ],
+      "mean_abs_inventory": 1.1982574462890625,
+      "mean_squared_inventory": 2.7352447509765625,
+      "large_inventory_fraction": 0.12957763671875,
+      "bound_fraction": 0.0178375244140625,
+      "bid_fills": 20.283203125,
+      "ask_fills": 19.900390625,
+      "total_fills": 40.18359375,
+      "both_fill_steps": 2.771484375
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "49b3c205b4f37e4930b1411d32e6d4989a806b4011a7db2e19ca2201dc28737f",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040009,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.51884713732579,
+      "absolute_inventory_distribution": [
+        0.2637481689453125,
+        0.417266845703125,
+        0.179046630859375,
+        0.0799713134765625,
+        0.037322998046875,
+        0.02264404296875
+      ],
+      "mean_abs_inventory": 1.2777862548828125,
+      "mean_squared_inventory": 3.0164642333984375,
+      "large_inventory_fraction": 0.1399383544921875,
+      "bound_fraction": 0.02264404296875,
+      "bid_fills": 20.875,
+      "ask_fills": 21.04296875,
+      "total_fills": 41.91796875,
+      "both_fill_steps": 3.212890625
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "235da5efa5178b421fe77ba1c9c0f5013e7790ab17e41ca44a4008c4ea2cfbbc",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040010,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.92099559801136,
+      "absolute_inventory_distribution": [
+        0.2829742431640625,
+        0.4393157958984375,
+        0.152191162109375,
+        0.074371337890625,
+        0.0325927734375,
+        0.0185546875
+      ],
+      "mean_abs_inventory": 1.1899566650390625,
+      "mean_squared_inventory": 2.7027740478515625,
+      "large_inventory_fraction": 0.125518798828125,
+      "bound_fraction": 0.0185546875,
+      "bid_fills": 20.83203125,
+      "ask_fills": 20.4921875,
+      "total_fills": 41.32421875,
+      "both_fill_steps": 2.955078125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "a1bf7bae0b7ba10526d052e907b44703837a45e1d2d32a21f8a72ba220ee0b63",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040011,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.00761663739104,
+      "absolute_inventory_distribution": [
+        0.2830963134765625,
+        0.4460906982421875,
+        0.140899658203125,
+        0.0721282958984375,
+        0.0345306396484375,
+        0.02325439453125
+      ],
+      "mean_abs_inventory": 1.19866943359375,
+      "mean_squared_inventory": 2.792694091796875,
+      "large_inventory_fraction": 0.129913330078125,
+      "bound_fraction": 0.02325439453125,
+      "bid_fills": 20.4609375,
+      "ask_fills": 20.591796875,
+      "total_fills": 41.052734375,
+      "both_fill_steps": 2.7734375
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "8c275778e764a84573bacfcf6aac7c995851f1e6ac1ee5f02f05fa5b4898875f",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040012,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.832323615839414,
+      "absolute_inventory_distribution": [
+        0.275390625,
+        0.4357757568359375,
+        0.1562042236328125,
+        0.0815277099609375,
+        0.034454345703125,
+        0.0166473388671875
+      ],
+      "mean_abs_inventory": 1.2138214111328125,
+      "mean_squared_inventory": 2.7617950439453125,
+      "large_inventory_fraction": 0.13262939453125,
+      "bound_fraction": 0.0166473388671875,
+      "bid_fills": 20.326171875,
+      "ask_fills": 20.373046875,
+      "total_fills": 40.69921875,
+      "both_fill_steps": 2.79296875
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "1a49ee6c0ecb988860d500fb3f2b12ec7874604a466bce443b6b95afbcbcb933",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040013,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.39150331334531,
+      "absolute_inventory_distribution": [
+        0.27203369140625,
+        0.43084716796875,
+        0.160003662109375,
+        0.085174560546875,
+        0.0320892333984375,
+        0.0198516845703125
+      ],
+      "mean_abs_inventory": 1.2339935302734375,
+      "mean_squared_inventory": 2.8471527099609375,
+      "large_inventory_fraction": 0.137115478515625,
+      "bound_fraction": 0.0198516845703125,
+      "bid_fills": 20.283203125,
+      "ask_fills": 20.083984375,
+      "total_fills": 40.3671875,
+      "both_fill_steps": 2.900390625
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "b52da136e03d531dc1644eb317eb3883d35c3fd428fadb4c108f0697ae5f1ab1",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040014,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.624999430423486,
+      "absolute_inventory_distribution": [
+        0.2860107421875,
+        0.4385528564453125,
+        0.1479339599609375,
+        0.0734405517578125,
+        0.0347442626953125,
+        0.019317626953125
+      ],
+      "mean_abs_inventory": 1.1903076171875,
+      "mean_squared_inventory": 2.7301025390625,
+      "large_inventory_fraction": 0.12750244140625,
+      "bound_fraction": 0.019317626953125,
+      "bid_fills": 20.01171875,
+      "ask_fills": 19.91015625,
+      "total_fills": 39.921875,
+      "both_fill_steps": 2.642578125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "482b54ca49d50aef4fdc82b6dd359d6346011e59310f4b63155012a84e773ef1",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040015,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.770409608550835,
+      "absolute_inventory_distribution": [
+        0.2671966552734375,
+        0.43414306640625,
+        0.1692352294921875,
+        0.07440185546875,
+        0.0337371826171875,
+        0.0212860107421875
+      ],
+      "mean_abs_inventory": 1.2371978759765625,
+      "mean_squared_inventory": 2.8526458740234375,
+      "large_inventory_fraction": 0.129425048828125,
+      "bound_fraction": 0.0212860107421875,
+      "bid_fills": 20.833984375,
+      "ask_fills": 21.025390625,
+      "total_fills": 41.859375,
+      "both_fill_steps": 3.09765625
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "12169bbcdfdbfc64a5b939915ca44eb096256c1a043407f4ed733277a954d01e",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040016,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 46.99482394594088,
+      "absolute_inventory_distribution": [
+        0.3011016845703125,
+        0.477294921875,
+        0.13555908203125,
+        0.050140380859375,
+        0.022857666015625,
+        0.0130462646484375
+      ],
+      "mean_abs_inventory": 1.0554962158203125,
+      "mean_squared_inventory": 2.1626739501953125,
+      "large_inventory_fraction": 0.0860443115234375,
+      "bound_fraction": 0.0130462646484375,
+      "bid_fills": 20.599609375,
+      "ask_fills": 20.529296875,
+      "total_fills": 41.12890625,
+      "both_fill_steps": 2.76171875
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "282fab4ff182b5ae78031d230944aea896eaf2c2bd568f747a2a3992d060e156",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040017,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.96865181834437,
+      "absolute_inventory_distribution": [
+        0.2650299072265625,
+        0.420318603515625,
+        0.17742919921875,
+        0.077728271484375,
+        0.036346435546875,
+        0.0231475830078125
+      ],
+      "mean_abs_inventory": 1.2694854736328125,
+      "mean_squared_inventory": 2.9898223876953125,
+      "large_inventory_fraction": 0.1372222900390625,
+      "bound_fraction": 0.0231475830078125,
+      "bid_fills": 20.5234375,
+      "ask_fills": 20.330078125,
+      "total_fills": 40.853515625,
+      "both_fill_steps": 3.005859375
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "c17890aed2100b2a364c09def75f121811f71a22d17b66d106744ea12c560af3",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040018,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 46.08076127350796,
+      "absolute_inventory_distribution": [
+        0.2710723876953125,
+        0.449310302734375,
+        0.1699676513671875,
+        0.0636749267578125,
+        0.0274505615234375,
+        0.018524169921875
+      ],
+      "mean_abs_inventory": 1.1826934814453125,
+      "mean_squared_inventory": 2.6045684814453125,
+      "large_inventory_fraction": 0.109649658203125,
+      "bound_fraction": 0.018524169921875,
+      "bid_fills": 20.37109375,
+      "ask_fills": 20.5859375,
+      "total_fills": 40.95703125,
+      "both_fill_steps": 2.845703125
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "488c5af5ee044d78b1dc9ee9f658147be02b9257374bfbf10ce215fea58a7ad3",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1040019,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 41.4464839794382,
+      "absolute_inventory_distribution": [
+        0.2624969482421875,
+        0.435333251953125,
+        0.170745849609375,
+        0.0672454833984375,
+        0.0420379638671875,
+        0.0221405029296875
+      ],
+      "mean_abs_inventory": 1.257415771484375,
+      "mean_squared_inventory": 2.94964599609375,
+      "large_inventory_fraction": 0.1314239501953125,
+      "bound_fraction": 0.0221405029296875,
+      "bid_fills": 20.544921875,
+      "ask_fills": 20.509765625,
+      "total_fills": 41.0546875,
+      "both_fill_steps": 2.974609375
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "1f0e4f097b3b3ee62d5e17ba2f65fdc7926630108fd150ab80227a5f5ef6a2ef",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050000,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 41.591210393169604,
+      "absolute_inventory_distribution": [
+        0.292205810546875,
+        0.4490203857421875,
+        0.1483306884765625,
+        0.0671539306640625,
+        0.0279388427734375,
+        0.015350341796875
+      ],
+      "mean_abs_inventory": 1.135650634765625,
+      "mean_squared_inventory": 2.477508544921875,
+      "large_inventory_fraction": 0.110443115234375,
+      "bound_fraction": 0.015350341796875,
+      "bid_fills": 20.181640625,
+      "ask_fills": 20.10546875,
+      "total_fills": 40.287109375,
+      "both_fill_steps": 2.8203125
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "6eec4242c9c97e2989c66020f5ab27e6de93d5b2fd56640cbefcfce9761d355d",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050001,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 47.18828107007721,
+      "absolute_inventory_distribution": [
+        0.3029937744140625,
+        0.454925537109375,
+        0.165496826171875,
+        0.043975830078125,
+        0.0222930908203125,
+        0.01031494140625
+      ],
+      "mean_abs_inventory": 1.05859375,
+      "mean_squared_inventory": 2.12725830078125,
+      "large_inventory_fraction": 0.0765838623046875,
+      "bound_fraction": 0.01031494140625,
+      "bid_fills": 21.06640625,
+      "ask_fills": 20.974609375,
+      "total_fills": 42.041015625,
+      "both_fill_steps": 3.0546875
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "8ac1d64da5fb4978eee15f7afdfcb91fcc7cba7029688a1c7de078fcb7c39bc3",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050002,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 48.98818344783649,
+      "absolute_inventory_distribution": [
+        0.327392578125,
+        0.4716339111328125,
+        0.1355133056640625,
+        0.035552978515625,
+        0.018280029296875,
+        0.011627197265625
+      ],
+      "mean_abs_inventory": 0.9805755615234375,
+      "mean_squared_inventory": 1.9168243408203125,
+      "large_inventory_fraction": 0.065460205078125,
+      "bound_fraction": 0.011627197265625,
+      "bid_fills": 20.92578125,
+      "ask_fills": 20.982421875,
+      "total_fills": 41.908203125,
+      "both_fill_steps": 2.958984375
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "78b083470a63a8d6f19b9e1bc53cd2ed2493cc3d614c7701979e871c4a5e82ed",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050003,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.255760964690126,
+      "absolute_inventory_distribution": [
+        0.287750244140625,
+        0.42926025390625,
+        0.1217803955078125,
+        0.094268798828125,
+        0.04132080078125,
+        0.0256195068359375
+      ],
+      "mean_abs_inventory": 1.2490081787109375,
+      "mean_squared_inventory": 3.0664215087890625,
+      "large_inventory_fraction": 0.1612091064453125,
+      "bound_fraction": 0.0256195068359375,
+      "bid_fills": 19.9453125,
+      "ask_fills": 19.876953125,
+      "total_fills": 39.822265625,
+      "both_fill_steps": 2.623046875
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "24faabdbda66b10ba1b2d8304af2f424fef6b1dcbaf726b44bb99721e92d7042",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050004,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 49.023437347554136,
+      "absolute_inventory_distribution": [
+        0.3260650634765625,
+        0.469146728515625,
+        0.1361541748046875,
+        0.0405731201171875,
+        0.01885986328125,
+        0.0092010498046875
+      ],
+      "mean_abs_inventory": 0.984619140625,
+      "mean_squared_inventory": 1.91070556640625,
+      "large_inventory_fraction": 0.068634033203125,
+      "bound_fraction": 0.0092010498046875,
+      "bid_fills": 20.53515625,
+      "ask_fills": 20.447265625,
+      "total_fills": 40.982421875,
+      "both_fill_steps": 2.978515625
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "34d858b261a1a6cd47c5a4857b66ffdf74d3013f374e0ff347cddacee7ec5776",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050005,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.91425704645371,
+      "absolute_inventory_distribution": [
+        0.2834014892578125,
+        0.413238525390625,
+        0.14013671875,
+        0.09832763671875,
+        0.0416412353515625,
+        0.02325439453125
+      ],
+      "mean_abs_inventory": 1.271331787109375,
+      "mean_squared_inventory": 3.106353759765625,
+      "large_inventory_fraction": 0.1632232666015625,
+      "bound_fraction": 0.02325439453125,
+      "bid_fills": 20.111328125,
+      "ask_fills": 20.078125,
+      "total_fills": 40.189453125,
+      "both_fill_steps": 2.634765625
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "3f7a9d973629eb0d9b2a4a20bca57cf2d8e7f13e69e0f77e6a0411aa87a5a8b4",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050006,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 49.25703111795883,
+      "absolute_inventory_distribution": [
+        0.3102569580078125,
+        0.4515228271484375,
+        0.16064453125,
+        0.0447845458984375,
+        0.0203704833984375,
+        0.012420654296875
+      ],
+      "mean_abs_inventory": 1.050750732421875,
+      "mean_squared_inventory": 2.13360595703125,
+      "large_inventory_fraction": 0.07757568359375,
+      "bound_fraction": 0.012420654296875,
+      "bid_fills": 21.041015625,
+      "ask_fills": 21.0390625,
+      "total_fills": 42.080078125,
+      "both_fill_steps": 3.1484375
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "9ab3152fe38da39ad7074eae83c42b6669efc97e5c3d82f28156cadade9b7131",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050007,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 45.468554346924066,
+      "absolute_inventory_distribution": [
+        0.312408447265625,
+        0.469635009765625,
+        0.1027679443359375,
+        0.0596923828125,
+        0.0375518798828125,
+        0.0179443359375
+      ],
+      "mean_abs_inventory": 1.09417724609375,
+      "mean_squared_inventory": 2.467376708984375,
+      "large_inventory_fraction": 0.1151885986328125,
+      "bound_fraction": 0.0179443359375,
+      "bid_fills": 20.486328125,
+      "ask_fills": 20.51171875,
+      "total_fills": 40.998046875,
+      "both_fill_steps": 2.814453125
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "ea89413ba7fed93e81dbc85430f0c6b6a75c0ebcda3d424ceec3dca2f8a83591",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050008,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 48.25986294505856,
+      "absolute_inventory_distribution": [
+        0.31396484375,
+        0.4814300537109375,
+        0.1214447021484375,
+        0.0485687255859375,
+        0.021209716796875,
+        0.0133819580078125
+      ],
+      "mean_abs_inventory": 1.0217742919921875,
+      "mean_squared_inventory": 2.0782318115234375,
+      "large_inventory_fraction": 0.083160400390625,
+      "bound_fraction": 0.0133819580078125,
+      "bid_fills": 20.3046875,
+      "ask_fills": 20.373046875,
+      "total_fills": 40.677734375,
+      "both_fill_steps": 2.771484375
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "9ef3218627353f7cb53ceb0a8db8fba70fbcef0539456b61249b5523bdf3c7ec",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050009,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 44.02773385096225,
+      "absolute_inventory_distribution": [
+        0.29229736328125,
+        0.463470458984375,
+        0.135498046875,
+        0.064453125,
+        0.0277099609375,
+        0.016571044921875
+      ],
+      "mean_abs_inventory": 1.12152099609375,
+      "mean_squared_inventory": 2.44317626953125,
+      "large_inventory_fraction": 0.108734130859375,
+      "bound_fraction": 0.016571044921875,
+      "bid_fills": 19.802734375,
+      "ask_fills": 19.904296875,
+      "total_fills": 39.70703125,
+      "both_fill_steps": 2.5234375
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "3ada6774701ddfbde6090dd0d584c60a657a65a3c7d4ef68a597f21c0ecb8baa",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050010,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 48.14013653251459,
+      "absolute_inventory_distribution": [
+        0.3202667236328125,
+        0.483001708984375,
+        0.131591796875,
+        0.039154052734375,
+        0.017181396484375,
+        0.0088043212890625
+      ],
+      "mean_abs_inventory": 0.9763946533203125,
+      "mean_squared_inventory": 1.8567657470703125,
+      "large_inventory_fraction": 0.0651397705078125,
+      "bound_fraction": 0.0088043212890625,
+      "bid_fills": 20.736328125,
+      "ask_fills": 20.630859375,
+      "total_fills": 41.3671875,
+      "both_fill_steps": 3.134765625
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "1c125695f812918765df7c44df9d3fb39016af6b2182ab0b6e50946f34d7480b",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050011,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 50.28212871134019,
+      "absolute_inventory_distribution": [
+        0.3248291015625,
+        0.4605712890625,
+        0.143829345703125,
+        0.04290771484375,
+        0.0191497802734375,
+        0.0087127685546875
+      ],
+      "mean_abs_inventory": 0.9971160888671875,
+      "mean_squared_inventory": 1.9462738037109375,
+      "large_inventory_fraction": 0.070770263671875,
+      "bound_fraction": 0.0087127685546875,
+      "bid_fills": 21.1796875,
+      "ask_fills": 21.12890625,
+      "total_fills": 42.30859375,
+      "both_fill_steps": 3.11328125
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "8ac21193897179c60b6e30a410427f08c69b18d683a960eb2352ce7987413424",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050012,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 49.46142560449516,
+      "absolute_inventory_distribution": [
+        0.3174285888671875,
+        0.4676666259765625,
+        0.1460723876953125,
+        0.0402069091796875,
+        0.0187530517578125,
+        0.0098724365234375
+      ],
+      "mean_abs_inventory": 1.0048065185546875,
+      "mean_squared_inventory": 1.9606781005859375,
+      "large_inventory_fraction": 0.0688323974609375,
+      "bound_fraction": 0.0098724365234375,
+      "bid_fills": 21.32421875,
+      "ask_fills": 21.248046875,
+      "total_fills": 42.572265625,
+      "both_fill_steps": 3.236328125
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "2783656f4bd03b18383a9cd187632434767459456b19a2851177fc4d08711596",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050013,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.75380802270956,
+      "absolute_inventory_distribution": [
+        0.2651824951171875,
+        0.4188232421875,
+        0.17449951171875,
+        0.081329345703125,
+        0.036376953125,
+        0.0237884521484375
+      ],
+      "mean_abs_inventory": 1.2762603759765625,
+      "mean_squared_inventory": 3.0255279541015625,
+      "large_inventory_fraction": 0.1414947509765625,
+      "bound_fraction": 0.0237884521484375,
+      "bid_fills": 21.1796875,
+      "ask_fills": 21.23046875,
+      "total_fills": 42.41015625,
+      "both_fill_steps": 3.19140625
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "9eab438bdb26aacb17ca5996d7e53d6aaa36f282b177c54126e443ab702f178f",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050014,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 48.35810526419664,
+      "absolute_inventory_distribution": [
+        0.3171539306640625,
+        0.470672607421875,
+        0.13690185546875,
+        0.0440826416015625,
+        0.019195556640625,
+        0.011993408203125
+      ],
+      "mean_abs_inventory": 1.0134735107421875,
+      "mean_squared_inventory": 2.0219879150390625,
+      "large_inventory_fraction": 0.0752716064453125,
+      "bound_fraction": 0.011993408203125,
+      "bid_fills": 20.61328125,
+      "ask_fills": 20.673828125,
+      "total_fills": 41.287109375,
+      "both_fill_steps": 2.994140625
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "857fbd84fe5b9b1990016f17f29174751a2d411b0fbd1abee2d3e608f864e554",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050015,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 48.602636453280866,
+      "absolute_inventory_distribution": [
+        0.326934814453125,
+        0.48370361328125,
+        0.1036224365234375,
+        0.0464935302734375,
+        0.025360107421875,
+        0.013885498046875
+      ],
+      "mean_abs_inventory": 1.0012969970703125,
+      "mean_squared_inventory": 2.0695343017578125,
+      "large_inventory_fraction": 0.0857391357421875,
+      "bound_fraction": 0.013885498046875,
+      "bid_fills": 20.650390625,
+      "ask_fills": 20.744140625,
+      "total_fills": 41.39453125,
+      "both_fill_steps": 2.904296875
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "bcb6a045e950005d1b817ee7570903a20c07972a25bf50d9863ac7f764dc12cf",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050016,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.00253848207649,
+      "absolute_inventory_distribution": [
+        0.2788543701171875,
+        0.4426727294921875,
+        0.1573028564453125,
+        0.0754852294921875,
+        0.028900146484375,
+        0.01678466796875
+      ],
+      "mean_abs_inventory": 1.183258056640625,
+      "mean_squared_inventory": 2.633270263671875,
+      "large_inventory_fraction": 0.1211700439453125,
+      "bound_fraction": 0.01678466796875,
+      "bid_fills": 20.37890625,
+      "ask_fills": 20.4296875,
+      "total_fills": 40.80859375,
+      "both_fill_steps": 2.943359375
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "a33995563fb3b100b49c12b7ea9cfdc21221972c347b14e206b5423e30789d12",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050017,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 44.59023380000144,
+      "absolute_inventory_distribution": [
+        0.2874603271484375,
+        0.4557037353515625,
+        0.1396331787109375,
+        0.0730133056640625,
+        0.028717041015625,
+        0.015472412109375
+      ],
+      "mean_abs_inventory": 1.146240234375,
+      "mean_squared_inventory": 2.51763916015625,
+      "large_inventory_fraction": 0.1172027587890625,
+      "bound_fraction": 0.015472412109375,
+      "bid_fills": 20.666015625,
+      "ask_fills": 20.533203125,
+      "total_fills": 41.19921875,
+      "both_fill_steps": 2.9453125
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "a1c5bd7258e1f60bd4a3b445f3f14f92d9777f318636e734b47fafc008fe8732",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050018,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 46.998925585074176,
+      "absolute_inventory_distribution": [
+        0.3009490966796875,
+        0.45977783203125,
+        0.1595611572265625,
+        0.042816162109375,
+        0.0243682861328125,
+        0.0125274658203125
+      ],
+      "mean_abs_inventory": 1.0674591064453125,
+      "mean_squared_inventory": 2.1864471435546875,
+      "large_inventory_fraction": 0.0797119140625,
+      "bound_fraction": 0.0125274658203125,
+      "bid_fills": 20.80859375,
+      "ask_fills": 20.75,
+      "total_fills": 41.55859375,
+      "both_fill_steps": 3.029296875
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "7e88dfd562e3445c1fc1b3d4a18b14738480cd1a745b92d29c4c1b9a0a8e0ea6",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1050019,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 45.15009709217702,
+      "absolute_inventory_distribution": [
+        0.2661895751953125,
+        0.4327545166015625,
+        0.177490234375,
+        0.076568603515625,
+        0.0322265625,
+        0.0147705078125
+      ],
+      "mean_abs_inventory": 1.2201995849609375,
+      "mean_squared_inventory": 2.7167205810546875,
+      "large_inventory_fraction": 0.123565673828125,
+      "bound_fraction": 0.0147705078125,
+      "bid_fills": 20.673828125,
+      "ask_fills": 20.62109375,
+      "total_fills": 41.294921875,
+      "both_fill_steps": 2.86328125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "7d930cca0d182633785a79da991bd59bd414bb54b8ab2b938b5d009c057a2be7",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060000,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 35.99599531856802,
+      "absolute_inventory_distribution": [
+        0.2751312255859375,
+        0.4099884033203125,
+        0.125030517578125,
+        0.1013031005859375,
+        0.051116943359375,
+        0.0374298095703125
+      ],
+      "mean_abs_inventory": 1.3555755615234375,
+      "mean_squared_inventory": 3.5754547119140625,
+      "large_inventory_fraction": 0.189849853515625,
+      "bound_fraction": 0.0374298095703125,
+      "bid_fills": 19.8046875,
+      "ask_fills": 19.98046875,
+      "total_fills": 39.78515625,
+      "both_fill_steps": 2.73046875
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "0c8385313906fb154c94d5e8b9ac7265c42329eadaa6a28e08de3910feb5413c",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060001,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 37.35302659445006,
+      "absolute_inventory_distribution": [
+        0.2822265625,
+        0.413238525390625,
+        0.1258697509765625,
+        0.097930908203125,
+        0.049285888671875,
+        0.0314483642578125
+      ],
+      "mean_abs_inventory": 1.3131561279296875,
+      "mean_squared_inventory": 3.3728790283203125,
+      "large_inventory_fraction": 0.1786651611328125,
+      "bound_fraction": 0.0314483642578125,
+      "bid_fills": 19.662109375,
+      "ask_fills": 19.62109375,
+      "total_fills": 39.283203125,
+      "both_fill_steps": 2.4921875
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "defaf78a9d7392341f454d0daaebd15cd2c57ad99e346383499413d98da20c69",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060002,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.69169845345459,
+      "absolute_inventory_distribution": [
+        0.284912109375,
+        0.4213409423828125,
+        0.12933349609375,
+        0.0976104736328125,
+        0.0413055419921875,
+        0.0254974365234375
+      ],
+      "mean_abs_inventory": 1.2655487060546875,
+      "mean_squared_inventory": 3.1154937744140625,
+      "large_inventory_fraction": 0.1644134521484375,
+      "bound_fraction": 0.0254974365234375,
+      "bid_fills": 20.1328125,
+      "ask_fills": 20.357421875,
+      "total_fills": 40.490234375,
+      "both_fill_steps": 2.748046875
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "dfd815320faaa6da54033028af804bdf1c3cb488d3b61879c9cce74a3fa468c9",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060003,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.76074141258141,
+      "absolute_inventory_distribution": [
+        0.2827301025390625,
+        0.409759521484375,
+        0.1294708251953125,
+        0.1024169921875,
+        0.04803466796875,
+        0.027587890625
+      ],
+      "mean_abs_inventory": 1.3060302734375,
+      "mean_squared_inventory": 3.307647705078125,
+      "large_inventory_fraction": 0.17803955078125,
+      "bound_fraction": 0.027587890625,
+      "bid_fills": 19.611328125,
+      "ask_fills": 19.939453125,
+      "total_fills": 39.55078125,
+      "both_fill_steps": 2.42578125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "8071d2a09bdff7b47e8ca386711b35f83acee7342da65044a846b64a72f3c097",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060004,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 37.59794841850089,
+      "absolute_inventory_distribution": [
+        0.2759552001953125,
+        0.4164581298828125,
+        0.1227874755859375,
+        0.1041717529296875,
+        0.0485687255859375,
+        0.0320587158203125
+      ],
+      "mean_abs_inventory": 1.3291168212890625,
+      "mean_squared_inventory": 3.4237213134765625,
+      "large_inventory_fraction": 0.1847991943359375,
+      "bound_fraction": 0.0320587158203125,
+      "bid_fills": 20.15234375,
+      "ask_fills": 20.283203125,
+      "total_fills": 40.435546875,
+      "both_fill_steps": 2.6640625
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "7535149cbce0f5e8df2d11d31596867fb29450464d72f70b25e02b9774ea7f6e",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060005,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 37.09413984569983,
+      "absolute_inventory_distribution": [
+        0.2754669189453125,
+        0.4215545654296875,
+        0.1259918212890625,
+        0.0996246337890625,
+        0.043487548828125,
+        0.03387451171875
+      ],
+      "mean_abs_inventory": 1.31573486328125,
+      "mean_squared_inventory": 3.36480712890625,
+      "large_inventory_fraction": 0.1769866943359375,
+      "bound_fraction": 0.03387451171875,
+      "bid_fills": 19.81640625,
+      "ask_fills": 20.0625,
+      "total_fills": 39.87890625,
+      "both_fill_steps": 2.61328125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "e861718bcdd3cb53f8efdd8456cf3c70a601ff811f5579a31898ea9ec7635a54",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060006,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.74423749356356,
+      "absolute_inventory_distribution": [
+        0.2869720458984375,
+        0.422027587890625,
+        0.1254119873046875,
+        0.100738525390625,
+        0.0416107177734375,
+        0.0232391357421875
+      ],
+      "mean_abs_inventory": 1.2577056884765625,
+      "mean_squared_inventory": 3.0770721435546875,
+      "large_inventory_fraction": 0.16558837890625,
+      "bound_fraction": 0.0232391357421875,
+      "bid_fills": 19.685546875,
+      "ask_fills": 19.470703125,
+      "total_fills": 39.15625,
+      "both_fill_steps": 2.42578125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "e36bffb538ed8f5963fad0bce1e53f709767c343c31f52674443e7f5a93cba6e",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060007,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 36.93915941278101,
+      "absolute_inventory_distribution": [
+        0.2781524658203125,
+        0.4150543212890625,
+        0.1332550048828125,
+        0.0968475341796875,
+        0.0480194091796875,
+        0.0286712646484375
+      ],
+      "mean_abs_inventory": 1.3075408935546875,
+      "mean_squared_inventory": 3.3047943115234375,
+      "large_inventory_fraction": 0.1735382080078125,
+      "bound_fraction": 0.0286712646484375,
+      "bid_fills": 19.84375,
+      "ask_fills": 20.015625,
+      "total_fills": 39.859375,
+      "both_fill_steps": 2.705078125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "c607142a18583ba14243bf6b02fd79498ad9c4c33abd9c007c52f5272bbfbff7",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060008,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.36044852650957,
+      "absolute_inventory_distribution": [
+        0.285430908203125,
+        0.4326324462890625,
+        0.12518310546875,
+        0.0893096923828125,
+        0.0404815673828125,
+        0.0269622802734375
+      ],
+      "mean_abs_inventory": 1.2476654052734375,
+      "mean_squared_inventory": 3.0589141845703125,
+      "large_inventory_fraction": 0.1567535400390625,
+      "bound_fraction": 0.0269622802734375,
+      "bid_fills": 20.05078125,
+      "ask_fills": 19.96875,
+      "total_fills": 40.01953125,
+      "both_fill_steps": 2.5625
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "8be94a7bfcff9f6f9f17e6774f20285c2b9cd7fa2de9286eec40e0e0b5877f4a",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060009,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.51669841474359,
+      "absolute_inventory_distribution": [
+        0.275482177734375,
+        0.4188690185546875,
+        0.1320953369140625,
+        0.102783203125,
+        0.04541015625,
+        0.025360107421875
+      ],
+      "mean_abs_inventory": 1.2998504638671875,
+      "mean_squared_inventory": 3.2328643798828125,
+      "large_inventory_fraction": 0.173553466796875,
+      "bound_fraction": 0.025360107421875,
+      "bid_fills": 20.40234375,
+      "ask_fills": 20.4765625,
+      "total_fills": 40.87890625,
+      "both_fill_steps": 2.880859375
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "7d8300af398f1cb6f79f5db03abefbc6b662b288bb0f3a1aeb03d90ec6cde91d",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060010,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 36.87812425847369,
+      "absolute_inventory_distribution": [
+        0.2781829833984375,
+        0.4093475341796875,
+        0.1302032470703125,
+        0.0989990234375,
+        0.0517578125,
+        0.0315093994140625
+      ],
+      "mean_abs_inventory": 1.331329345703125,
+      "mean_squared_inventory": 3.43701171875,
+      "large_inventory_fraction": 0.1822662353515625,
+      "bound_fraction": 0.0315093994140625,
+      "bid_fills": 19.7734375,
+      "ask_fills": 19.859375,
+      "total_fills": 39.6328125,
+      "both_fill_steps": 2.64453125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "3d0ae3ef4940de23a3be161a1529e8aa7ec5b4c6b3bb6249d15470e7742ccc27",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060011,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 36.61464772064937,
+      "absolute_inventory_distribution": [
+        0.2928619384765625,
+        0.415374755859375,
+        0.1220550537109375,
+        0.0935211181640625,
+        0.046722412109375,
+        0.0294647216796875
+      ],
+      "mean_abs_inventory": 1.274261474609375,
+      "mean_squared_inventory": 3.229461669921875,
+      "large_inventory_fraction": 0.169708251953125,
+      "bound_fraction": 0.0294647216796875,
+      "bid_fills": 19.49609375,
+      "ask_fills": 19.556640625,
+      "total_fills": 39.052734375,
+      "both_fill_steps": 2.599609375
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "ba324d9de1b90ee11c703c37c9d4708ecbb7a7ee8fb2f805570e387727e90aa7",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060012,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 37.37353439938306,
+      "absolute_inventory_distribution": [
+        0.2802581787109375,
+        0.409088134765625,
+        0.1255035400390625,
+        0.1007080078125,
+        0.0513458251953125,
+        0.0330963134765625
+      ],
+      "mean_abs_inventory": 1.3330841064453125,
+      "mean_squared_inventory": 3.4664154052734375,
+      "large_inventory_fraction": 0.185150146484375,
+      "bound_fraction": 0.0330963134765625,
+      "bid_fills": 20.181640625,
+      "ask_fills": 20.087890625,
+      "total_fills": 40.26953125,
+      "both_fill_steps": 2.76953125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "6455b58e7e2c280bd634063eaebfc7939015fa230794433b438c104b8897a0fb",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060013,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 37.73691331229929,
+      "absolute_inventory_distribution": [
+        0.2845458984375,
+        0.420166015625,
+        0.1254119873046875,
+        0.0980224609375,
+        0.0462493896484375,
+        0.025604248046875
+      ],
+      "mean_abs_inventory": 1.278076171875,
+      "mean_squared_inventory": 3.184112548828125,
+      "large_inventory_fraction": 0.1698760986328125,
+      "bound_fraction": 0.025604248046875,
+      "bid_fills": 19.849609375,
+      "ask_fills": 19.65625,
+      "total_fills": 39.505859375,
+      "both_fill_steps": 2.583984375
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "fefb92aabad2f66e839c4b52c6d539da91a40ab89740ec122e863f69111e7903",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060014,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.39619073470385,
+      "absolute_inventory_distribution": [
+        0.2900848388671875,
+        0.4351654052734375,
+        0.120513916015625,
+        0.0847015380859375,
+        0.04193115234375,
+        0.0276031494140625
+      ],
+      "mean_abs_inventory": 1.2360382080078125,
+      "mean_squared_inventory": 3.0405120849609375,
+      "large_inventory_fraction": 0.15423583984375,
+      "bound_fraction": 0.0276031494140625,
+      "bid_fills": 19.693359375,
+      "ask_fills": 19.630859375,
+      "total_fills": 39.32421875,
+      "both_fill_steps": 2.58203125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "79933d9227533b8e88385ef3d4bd9842fd512d6616042a0655fea7f14f41a84a",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060015,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 36.78662033546425,
+      "absolute_inventory_distribution": [
+        0.2719268798828125,
+        0.421966552734375,
+        0.1302337646484375,
+        0.0933685302734375,
+        0.0469207763671875,
+        0.03558349609375
+      ],
+      "mean_abs_inventory": 1.3281402587890625,
+      "mean_squared_inventory": 3.4235382080078125,
+      "large_inventory_fraction": 0.175872802734375,
+      "bound_fraction": 0.03558349609375,
+      "bid_fills": 20.0,
+      "ask_fills": 20.201171875,
+      "total_fills": 40.201171875,
+      "both_fill_steps": 2.80078125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "95a6bfa83e30c46d849b89306ee3f1bb915f1774310ef13515805341ba814dff",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060016,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.43330001796858,
+      "absolute_inventory_distribution": [
+        0.2830657958984375,
+        0.4249267578125,
+        0.1224365234375,
+        0.0978240966796875,
+        0.044403076171875,
+        0.02734375
+      ],
+      "mean_abs_inventory": 1.2776031494140625,
+      "mean_squared_inventory": 3.1891326904296875,
+      "large_inventory_fraction": 0.1695709228515625,
+      "bound_fraction": 0.02734375,
+      "bid_fills": 19.736328125,
+      "ask_fills": 19.916015625,
+      "total_fills": 39.65234375,
+      "both_fill_steps": 2.494140625
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "3e52b37bfebb452a28c5f6555789ca51f95cbac31e5117836f50d8155b8fc13a",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060017,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 35.70019455701549,
+      "absolute_inventory_distribution": [
+        0.2725830078125,
+        0.3980712890625,
+        0.132904052734375,
+        0.1033935546875,
+        0.0556640625,
+        0.037384033203125
+      ],
+      "mean_abs_inventory": 1.383636474609375,
+      "mean_squared_inventory": 3.685455322265625,
+      "large_inventory_fraction": 0.196441650390625,
+      "bound_fraction": 0.037384033203125,
+      "bid_fills": 19.60546875,
+      "ask_fills": 19.697265625,
+      "total_fills": 39.302734375,
+      "both_fill_steps": 2.564453125
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "51bff21525e792fedc846fae93beaa14194e25e838eb63341773062271095828",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060018,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 35.97861251280119,
+      "absolute_inventory_distribution": [
+        0.2723541259765625,
+        0.3987884521484375,
+        0.13690185546875,
+        0.1039276123046875,
+        0.052978515625,
+        0.0350494384765625
+      ],
+      "mean_abs_inventory": 1.3715362548828125,
+      "mean_squared_inventory": 3.6056365966796875,
+      "large_inventory_fraction": 0.19195556640625,
+      "bound_fraction": 0.0350494384765625,
+      "bid_fills": 19.6640625,
+      "ask_fills": 19.703125,
+      "total_fills": 39.3671875,
+      "both_fill_steps": 2.556640625
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "00bb3cacc4a56cd03f3ee33ff27b280207fb0a338e6dd862bc56ea563c5f4123",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1060019,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.19619062693528,
+      "absolute_inventory_distribution": [
+        0.2844085693359375,
+        0.4268951416015625,
+        0.124786376953125,
+        0.0985565185546875,
+        0.04144287109375,
+        0.0239105224609375
+      ],
+      "mean_abs_inventory": 1.2574615478515625,
+      "mean_squared_inventory": 3.0738983154296875,
+      "large_inventory_fraction": 0.163909912109375,
+      "bound_fraction": 0.0239105224609375,
+      "bid_fills": 19.861328125,
+      "ask_fills": 19.91015625,
+      "total_fills": 39.771484375,
+      "both_fill_steps": 2.65625
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "24c8d6791d30bedea3e4af95b2be03a3d1d89507b55e2ef4964326755daa4b01",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070000,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.35039019762189,
+      "absolute_inventory_distribution": [
+        0.26690673828125,
+        0.4384613037109375,
+        0.194671630859375,
+        0.0583648681640625,
+        0.026092529296875,
+        0.0155029296875
+      ],
+      "mean_abs_inventory": 1.184783935546875,
+      "mean_squared_inventory": 2.5474853515625,
+      "large_inventory_fraction": 0.0999603271484375,
+      "bound_fraction": 0.0155029296875,
+      "bid_fills": 20.80859375,
+      "ask_fills": 20.662109375,
+      "total_fills": 41.470703125,
+      "both_fill_steps": 2.9296875
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "7f13382ad9a132ccc0fd97d5c7344c254f0d181824efec646734505bc6c0dcf0",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070001,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 47.616698902602366,
+      "absolute_inventory_distribution": [
+        0.2729644775390625,
+        0.4480133056640625,
+        0.1893310546875,
+        0.0551300048828125,
+        0.022430419921875,
+        0.0121307373046875
+      ],
+      "mean_abs_inventory": 1.1424407958984375,
+      "mean_squared_inventory": 2.3636627197265625,
+      "large_inventory_fraction": 0.089691162109375,
+      "bound_fraction": 0.0121307373046875,
+      "bid_fills": 21.07421875,
+      "ask_fills": 20.869140625,
+      "total_fills": 41.943359375,
+      "both_fill_steps": 2.984375
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "748ed82f9c67794c91198b3271af6b03444e506fd076c6f6af2e86254a3ac6eb",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070002,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.559862550326216,
+      "absolute_inventory_distribution": [
+        0.279876708984375,
+        0.41259765625,
+        0.1436004638671875,
+        0.0962371826171875,
+        0.0445556640625,
+        0.02313232421875
+      ],
+      "mean_abs_inventory": 1.2823944091796875,
+      "mean_squared_inventory": 3.1443328857421875,
+      "large_inventory_fraction": 0.1639251708984375,
+      "bound_fraction": 0.02313232421875,
+      "bid_fills": 19.96875,
+      "ask_fills": 20.0625,
+      "total_fills": 40.03125,
+      "both_fill_steps": 2.75390625
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "e62b0e903312e8832f2e719a6c5ebda82103caa824876d9ed3bd175e2a7e3f2b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070003,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.9050773552226,
+      "absolute_inventory_distribution": [
+        0.2886199951171875,
+        0.413726806640625,
+        0.1268157958984375,
+        0.100341796875,
+        0.044403076171875,
+        0.026092529296875
+      ],
+      "mean_abs_inventory": 1.276458740234375,
+      "mean_squared_inventory": 3.18682861328125,
+      "large_inventory_fraction": 0.17083740234375,
+      "bound_fraction": 0.026092529296875,
+      "bid_fills": 19.83203125,
+      "ask_fills": 19.81640625,
+      "total_fills": 39.6484375,
+      "both_fill_steps": 2.47265625
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "ef98389cc1489fcdf5311ae8022388544248de3adff31f85760ae38a60cad25b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070004,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.28915940177103,
+      "absolute_inventory_distribution": [
+        0.289337158203125,
+        0.4141082763671875,
+        0.1289825439453125,
+        0.099853515625,
+        0.043365478515625,
+        0.02435302734375
+      ],
+      "mean_abs_inventory": 1.2668609619140625,
+      "mean_squared_inventory": 3.1313934326171875,
+      "large_inventory_fraction": 0.167572021484375,
+      "bound_fraction": 0.02435302734375,
+      "bid_fills": 19.51953125,
+      "ask_fills": 19.517578125,
+      "total_fills": 39.037109375,
+      "both_fill_steps": 2.41015625
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "d3eeac5d9b1e30d4944111046aafa5e748178aa107d4f6f21343d0e9dc2b9887",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070005,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 40.13662041128555,
+      "absolute_inventory_distribution": [
+        0.279266357421875,
+        0.4290313720703125,
+        0.143157958984375,
+        0.089752197265625,
+        0.0366668701171875,
+        0.022125244140625
+      ],
+      "mean_abs_inventory": 1.2418975830078125,
+      "mean_squared_inventory": 2.9492340087890625,
+      "large_inventory_fraction": 0.1485443115234375,
+      "bound_fraction": 0.022125244140625,
+      "bid_fills": 19.51953125,
+      "ask_fills": 19.61328125,
+      "total_fills": 39.1328125,
+      "both_fill_steps": 2.615234375
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "f2e3daf9924297469af488c469315d3fed01afe06b670fe3dbc4005860207a9b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070006,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 40.10449140212586,
+      "absolute_inventory_distribution": [
+        0.28057861328125,
+        0.42364501953125,
+        0.134979248046875,
+        0.101409912109375,
+        0.04071044921875,
+        0.0186767578125
+      ],
+      "mean_abs_inventory": 1.254058837890625,
+      "mean_squared_inventory": 2.994537353515625,
+      "large_inventory_fraction": 0.160797119140625,
+      "bound_fraction": 0.0186767578125,
+      "bid_fills": 19.921875,
+      "ask_fills": 20.01953125,
+      "total_fills": 39.94140625,
+      "both_fill_steps": 2.626953125
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "5f501c9a5d7e66d9d7e1772edcd713c6104af5f82ec119db773b2a93d0f6bb32",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070007,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 36.36279232067318,
+      "absolute_inventory_distribution": [
+        0.253265380859375,
+        0.3888092041015625,
+        0.1488189697265625,
+        0.1069793701171875,
+        0.06817626953125,
+        0.0339508056640625
+      ],
+      "mean_abs_inventory": 1.4498443603515625,
+      "mean_squared_inventory": 3.8864898681640625,
+      "large_inventory_fraction": 0.2091064453125,
+      "bound_fraction": 0.0339508056640625,
+      "bid_fills": 20.73828125,
+      "ask_fills": 20.595703125,
+      "total_fills": 41.333984375,
+      "both_fill_steps": 2.880859375
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "43894e5913a143c16103cad5ebd43ac15ded1a0476a7b31eedb3b6eadf413d45",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070008,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.56787031026761,
+      "absolute_inventory_distribution": [
+        0.266876220703125,
+        0.4073944091796875,
+        0.1583251953125,
+        0.103851318359375,
+        0.0426177978515625,
+        0.02093505859375
+      ],
+      "mean_abs_inventory": 1.3107452392578125,
+      "mean_squared_inventory": 3.1806182861328125,
+      "large_inventory_fraction": 0.1674041748046875,
+      "bound_fraction": 0.02093505859375,
+      "bid_fills": 20.228515625,
+      "ask_fills": 20.015625,
+      "total_fills": 40.244140625,
+      "both_fill_steps": 2.68359375
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "8c4835d944ea2ecb4ec4f6d3e44ca5090467b7c18ff4e6816eada42dec6f1ce6",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070009,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 40.03310471381701,
+      "absolute_inventory_distribution": [
+        0.2834930419921875,
+        0.4187164306640625,
+        0.1407623291015625,
+        0.0957794189453125,
+        0.0400848388671875,
+        0.0211639404296875
+      ],
+      "mean_abs_inventory": 1.2537384033203125,
+      "mean_squared_inventory": 3.0142364501953125,
+      "large_inventory_fraction": 0.1570281982421875,
+      "bound_fraction": 0.0211639404296875,
+      "bid_fills": 20.2109375,
+      "ask_fills": 20.01953125,
+      "total_fills": 40.23046875,
+      "both_fill_steps": 2.619140625
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "e5f207b383043835218c48d321eccdc20f040c557199f187c572f8569a965c58",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070010,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.00790959900041,
+      "absolute_inventory_distribution": [
+        0.266143798828125,
+        0.4334259033203125,
+        0.17449951171875,
+        0.0746002197265625,
+        0.0320281982421875,
+        0.0193023681640625
+      ],
+      "mean_abs_inventory": 1.2308502197265625,
+      "mean_squared_inventory": 2.7978363037109375,
+      "large_inventory_fraction": 0.1259307861328125,
+      "bound_fraction": 0.0193023681640625,
+      "bid_fills": 20.150390625,
+      "ask_fills": 20.208984375,
+      "total_fills": 40.359375,
+      "both_fill_steps": 2.720703125
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "c7c71c7bb553674c7ed671e801b53672e9dcfe813d80e5c47f21ac0f3437e323",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070011,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 45.424608956469456,
+      "absolute_inventory_distribution": [
+        0.2586517333984375,
+        0.451446533203125,
+        0.186767578125,
+        0.058837890625,
+        0.0274200439453125,
+        0.016876220703125
+      ],
+      "mean_abs_inventory": 1.195556640625,
+      "mean_squared_inventory": 2.58868408203125,
+      "large_inventory_fraction": 0.1031341552734375,
+      "bound_fraction": 0.016876220703125,
+      "bid_fills": 20.435546875,
+      "ask_fills": 20.357421875,
+      "total_fills": 40.79296875,
+      "both_fill_steps": 2.884765625
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "7675243c952c9e609b3b6f524ce323ccce67343ea4044561408767b0caaed60a",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070012,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 38.70732341531402,
+      "absolute_inventory_distribution": [
+        0.269012451171875,
+        0.4070281982421875,
+        0.144927978515625,
+        0.10443115234375,
+        0.0472869873046875,
+        0.027313232421875
+      ],
+      "mean_abs_inventory": 1.3358917236328125,
+      "mean_squared_inventory": 3.3660430908203125,
+      "large_inventory_fraction": 0.1790313720703125,
+      "bound_fraction": 0.027313232421875,
+      "bid_fills": 19.923828125,
+      "ask_fills": 19.978515625,
+      "total_fills": 39.90234375,
+      "both_fill_steps": 2.716796875
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "1469f2f1b051c439cffdeb4098bf76c1cb593a53408769c38abe471fc219750f",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070013,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.42060473391757,
+      "absolute_inventory_distribution": [
+        0.2863922119140625,
+        0.40673828125,
+        0.1455535888671875,
+        0.09710693359375,
+        0.0414276123046875,
+        0.0227813720703125
+      ],
+      "mean_abs_inventory": 1.2687835693359375,
+      "mean_squared_inventory": 3.0952911376953125,
+      "large_inventory_fraction": 0.16131591796875,
+      "bound_fraction": 0.0227813720703125,
+      "bid_fills": 20.00390625,
+      "ask_fills": 19.92578125,
+      "total_fills": 39.9296875,
+      "both_fill_steps": 2.654296875
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "9c620b8398670795ffe05788d3d426d593937feeeb6f6672896eeac410640e70",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070014,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 41.57646422317339,
+      "absolute_inventory_distribution": [
+        0.2972564697265625,
+        0.44244384765625,
+        0.1262359619140625,
+        0.0807647705078125,
+        0.0353546142578125,
+        0.0179443359375
+      ],
+      "mean_abs_inventory": 1.1683502197265625,
+      "mean_squared_inventory": 2.6885528564453125,
+      "large_inventory_fraction": 0.134063720703125,
+      "bound_fraction": 0.0179443359375,
+      "bid_fills": 19.95703125,
+      "ask_fills": 19.708984375,
+      "total_fills": 39.666015625,
+      "both_fill_steps": 2.486328125
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "12d6a96e4a7d87fb9a83fb8827aaf3d9f9d6d9d16ceafb512b43a0f71424e9a8",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070015,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 43.189843275358726,
+      "absolute_inventory_distribution": [
+        0.29083251953125,
+        0.455780029296875,
+        0.1503448486328125,
+        0.0635986328125,
+        0.0260467529296875,
+        0.013397216796875
+      ],
+      "mean_abs_inventory": 1.118438720703125,
+      "mean_squared_inventory": 2.3812255859375,
+      "large_inventory_fraction": 0.1030426025390625,
+      "bound_fraction": 0.013397216796875,
+      "bid_fills": 19.955078125,
+      "ask_fills": 19.755859375,
+      "total_fills": 39.7109375,
+      "both_fill_steps": 2.51953125
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "dc2f3d09f47976be135c21b7c53f4a3275eded350435dad0efcb1153fe563429",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070016,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.433104852018005,
+      "absolute_inventory_distribution": [
+        0.285247802734375,
+        0.432952880859375,
+        0.1445770263671875,
+        0.08123779296875,
+        0.035858154296875,
+        0.0201263427734375
+      ],
+      "mean_abs_inventory": 1.2098846435546875,
+      "mean_squared_inventory": 2.8192901611328125,
+      "large_inventory_fraction": 0.1372222900390625,
+      "bound_fraction": 0.0201263427734375,
+      "bid_fills": 19.681640625,
+      "ask_fills": 19.763671875,
+      "total_fills": 39.4453125,
+      "both_fill_steps": 2.568359375
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "a24ce455ea738372363a5d76507785cdbd5529c26ba0dff4cf0953d63ebe634b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070017,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 39.120116419522674,
+      "absolute_inventory_distribution": [
+        0.2921295166015625,
+        0.4179534912109375,
+        0.123779296875,
+        0.0989532470703125,
+        0.0439605712890625,
+        0.023223876953125
+      ],
+      "mean_abs_inventory": 1.25433349609375,
+      "mean_squared_inventory": 3.087615966796875,
+      "large_inventory_fraction": 0.1661376953125,
+      "bound_fraction": 0.023223876953125,
+      "bid_fills": 19.580078125,
+      "ask_fills": 19.625,
+      "total_fills": 39.205078125,
+      "both_fill_steps": 2.533203125
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "f60cb6f277d87a010c7a6bc06ffb60c6f054c4bfd3d07970cc5c721349ecf8e6",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070018,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.580077661856194,
+      "absolute_inventory_distribution": [
+        0.301361083984375,
+        0.457061767578125,
+        0.140167236328125,
+        0.0565032958984375,
+        0.02838134765625,
+        0.0165252685546875
+      ],
+      "mean_abs_inventory": 1.103057861328125,
+      "mean_squared_inventory": 2.39349365234375,
+      "large_inventory_fraction": 0.101409912109375,
+      "bound_fraction": 0.0165252685546875,
+      "bid_fills": 20.107421875,
+      "ask_fills": 19.974609375,
+      "total_fills": 40.08203125,
+      "both_fill_steps": 2.658203125
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "8bf43ec9462fb032b77ad749b6bf04244eca72445b0c9a243700a360342421fc",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "collector": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
+        "analysis": "60f2629c67681b9414e3a6b8c9c2f5faf9bde082f3334267186574f95933d4e6"
+      },
+      "evaluation_key": 1070019,
+      "episodes": 512,
+      "steps_per_episode": 128,
+      "return": 42.63271414978226,
+      "absolute_inventory_distribution": [
+        0.2866058349609375,
+        0.44189453125,
+        0.128082275390625,
+        0.0884552001953125,
+        0.035736083984375,
+        0.01922607421875
+      ],
+      "mean_abs_inventory": 1.2024993896484375,
+      "mean_squared_inventory": 2.8027496337890625,
+      "large_inventory_fraction": 0.1434173583984375,
+      "bound_fraction": 0.01922607421875,
+      "bid_fills": 19.998046875,
+      "ask_fills": 20.095703125,
+      "total_fills": 40.09375,
+      "both_fill_steps": 2.65625
+    }
+  ],
+  "methods": {
+    "rl2_concat": {
+      "absolute_inventory_distribution": {
+        "mean": [
+          0.27904739379882815,
+          0.4412841796875,
+          0.1571624755859375,
+          0.07045364379882812,
+          0.032495880126953126,
+          0.019556427001953126
+        ],
+        "ci95": [
+          [
+            0.2733695411682129,
+            0.4340610122680664,
+            0.151068172454834,
+            0.06546478271484375,
+            0.02980327606201172,
+            0.017882518768310547
+          ],
+          [
+            0.2852791404724121,
+            0.4489694976806641,
+            0.16348882675170898,
+            0.07497182846069336,
+            0.03488702774047851,
+            0.0210479736328125
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.1947357177734375,
+        "ci95": [
+          1.1623578071594238,
+          1.2240587043762206
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": 2.7128616333007813,
+        "ci95": [
+          2.584116802215576,
+          2.826999473571777
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": 0.12250595092773438,
+        "ci95": [
+          0.11359327316284179,
+          0.13007659912109376
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.019556427001953126,
+        "ci95": [
+          0.017882518768310547,
+          0.0210479736328125
+        ]
+      },
+      "bid_fills": {
+        "mean": 20.51533203125,
+        "ci95": [
+          20.39852783203125,
+          20.626860351562502
+        ]
+      },
+      "ask_fills": {
+        "mean": 20.4890625,
+        "ci95": [
+          20.33652099609375,
+          20.63379150390625
+        ]
+      },
+      "total_fills": {
+        "mean": 41.00439453125,
+        "ci95": [
+          40.74510009765625,
+          41.249807128906255
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 2.889453125,
+        "ci95": [
+          2.8283203125,
+          2.95302734375
+        ]
+      }
+    },
+    "rl2_hypernet": {
+      "absolute_inventory_distribution": {
+        "mean": [
+          0.30269927978515626,
+          0.45643157958984376,
+          0.14191360473632814,
+          0.057970428466796876,
+          0.0263702392578125,
+          0.0146148681640625
+        ],
+        "ci95": [
+          [
+            0.29392610549926756,
+            0.44729051589965824,
+            0.1332801628112793,
+            0.05007776260375977,
+            0.02313381195068359,
+            0.012625102996826171
+          ],
+          [
+            0.310807991027832,
+            0.46479965209960933,
+            0.15054407119750976,
+            0.0667641258239746,
+            0.02988441467285156,
+            0.016843471527099606
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.0927253723144532,
+        "ci95": [
+          1.0504370689392089,
+          1.1385146141052247
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": 2.3331153869628904,
+        "ci95": [
+          2.165694103240967,
+          2.517012405395508
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": 0.09895553588867187,
+        "ci95": [
+          0.08616067886352538,
+          0.11325466156005859
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.0146148681640625,
+        "ci95": [
+          0.012625102996826171,
+          0.016843471527099606
+        ]
+      },
+      "bid_fills": {
+        "mean": 20.63056640625,
+        "ci95": [
+          20.448818359375,
+          20.80673828125
+        ]
+      },
+      "ask_fills": {
+        "mean": 20.61416015625,
+        "ci95": [
+          20.437392578125003,
+          20.78847900390625
+        ]
+      },
+      "total_fills": {
+        "mean": 41.2447265625,
+        "ci95": [
+          40.8841796875,
+          41.59424072265625
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 2.9341796875,
+        "ci95": [
+          2.84843505859375,
+          3.0159204101562502
+        ]
+      }
+    },
+    "varibad_concat": {
+      "absolute_inventory_distribution": {
+        "mean": [
+          0.2806365966796875,
+          0.4170356750488281,
+          0.12726898193359376,
+          0.0982879638671875,
+          0.04683685302734375,
+          0.029933929443359375
+        ],
+        "ci95": [
+          [
+            0.27809141159057615,
+            0.41289133071899414,
+            0.1254859733581543,
+            0.09608839035034179,
+            0.044972991943359374,
+            0.0280548095703125
+          ],
+          [
+            0.2832908821105957,
+            0.4211418151855469,
+            0.129180908203125,
+            0.10024341583251953,
+            0.048712978363037104,
+            0.03186492919921875
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.30345458984375,
+        "ci95": [
+          1.285740623474121,
+          1.3214406394958496
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": 3.308441162109375,
+        "ci95": [
+          3.2260967445373536,
+          3.391887969970703
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": 0.17505874633789062,
+        "ci95": [
+          0.17014612197875978,
+          0.17988664627075193
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.029933929443359375,
+        "ci95": [
+          0.0280548095703125,
+          0.03186492919921875
+        ]
+      },
+      "bid_fills": {
+        "mean": 19.851171875,
+        "ci95": [
+          19.754099121093752,
+          19.955178222656247
+        ]
+      },
+      "ask_fills": {
+        "mean": 19.9197265625,
+        "ci95": [
+          19.80400390625,
+          20.04004638671875
+        ]
+      },
+      "total_fills": {
+        "mean": 39.7708984375,
+        "ci95": [
+          39.5679638671875,
+          39.9882861328125
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 2.625,
+        "ci95": [
+          2.57226318359375,
+          2.6779296875
+        ]
+      }
+    },
+    "varibad_hypernet": {
+      "absolute_inventory_distribution": {
+        "mean": [
+          0.27974090576171873,
+          0.42706146240234377,
+          0.14871902465820314,
+          0.08560943603515625,
+          0.03813018798828125,
+          0.020738983154296876
+        ],
+        "ci95": [
+          [
+            0.2741255187988281,
+            0.41889646530151364,
+            0.14005786895751954,
+            0.07763429641723633,
+            0.033996562957763675,
+            0.01865457534790039
+          ],
+          [
+            0.2851844787597656,
+            0.43509639739990236,
+            0.15825538635253905,
+            0.09313846588134765,
+            0.04271947860717773,
+            0.02294239044189453
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.237543487548828,
+        "ci95": [
+          1.2051924324035646,
+          1.2728427314758302
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": 2.9209800720214845,
+        "ci95": [
+          2.765648422241211,
+          3.086987037658691
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": 0.14447860717773436,
+        "ci95": [
+          0.13086984634399415,
+          0.1581644630432129
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.020738983154296876,
+        "ci95": [
+          0.01865457534790039,
+          0.02294239044189453
+        ]
+      },
+      "bid_fills": {
+        "mean": 20.08076171875,
+        "ci95": [
+          19.91639892578125,
+          20.26797119140625
+        ]
+      },
+      "ask_fills": {
+        "mean": 20.029296875,
+        "ci95": [
+          19.884665527343753,
+          20.191313476562502
+        ]
+      },
+      "total_fills": {
+        "mean": 40.11005859375,
+        "ci95": [
+          39.80566162109375,
+          40.4585107421875
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 2.66875,
+        "ci95": [
+          2.6044921875,
+          2.73779541015625
+        ]
+      }
+    }
+  },
+  "comparisons": {
+    "rl2": {
+      "first": "rl2_hypernet",
+      "second": "rl2_concat",
+      "absolute_inventory_distribution": {
+        "mean": [
+          0.023651885986328124,
+          0.01514739990234375,
+          -0.015248870849609375,
+          -0.01248321533203125,
+          -0.006125640869140625,
+          -0.004941558837890625
+        ],
+        "ci95": [
+          [
+            0.014701690673828125,
+            0.004898376464843751,
+            -0.025755500793457033,
+            -0.02138662338256836,
+            -0.010083866119384766,
+            -0.007494487762451172
+          ],
+          [
+            0.032223815917968746,
+            0.024896335601806638,
+            -0.004862918853759766,
+            -0.0028907203674316414,
+            -0.0016357040405273443,
+            -0.0021903228759765636
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": -0.10201034545898438,
+        "ci95": [
+          -0.14787200927734376,
+          -0.051862049102783206
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": -0.3797462463378906,
+        "ci95": [
+          -0.5675466537475585,
+          -0.17215715408325202
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": -0.0235504150390625,
+        "ci95": [
+          -0.03832859039306641,
+          -0.007595329284667976
+        ]
+      },
+      "bound_fraction": {
+        "mean": -0.004941558837890625,
+        "ci95": [
+          -0.007494487762451172,
+          -0.0021903228759765636
+        ]
+      },
+      "bid_fills": {
+        "mean": 0.115234375,
+        "ci95": [
+          -0.12597900390625,
+          0.34727050781249996
+        ]
+      },
+      "ask_fills": {
+        "mean": 0.12509765625,
+        "ci95": [
+          -0.13427734375,
+          0.3737499999999997
+        ]
+      },
+      "total_fills": {
+        "mean": 0.24033203125,
+        "ci95": [
+          -0.25595703125,
+          0.7111523437499998
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 0.0447265625,
+        "ci95": [
+          -0.0869140625,
+          0.16748535156249994
+        ]
+      }
+    },
+    "varibad": {
+      "first": "varibad_hypernet",
+      "second": "varibad_concat",
+      "absolute_inventory_distribution": {
+        "mean": [
+          -0.00089569091796875,
+          0.010025787353515624,
+          0.021450042724609375,
+          -0.01267852783203125,
+          -0.0087066650390625,
+          -0.0091949462890625
+        ],
+        "ci95": [
+          [
+            -0.007548656463623047,
+            0.0009688377380371095,
+            0.01239154815673828,
+            -0.02074058532714844,
+            -0.013425960540771484,
+            -0.012358303070068358
+          ],
+          [
+            0.005448188781738269,
+            0.019343605041503908,
+            0.031499729156494134,
+            -0.005146675109863283,
+            -0.003729038238525394,
+            -0.00612255096435547
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": -0.06591110229492188,
+        "ci95": [
+          -0.10589300155639648,
+          -0.025472545623779305
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": -0.38746109008789065,
+        "ci95": [
+          -0.5798184967041016,
+          -0.19730360031127936
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": -0.03058013916015625,
+        "ci95": [
+          -0.046047325134277346,
+          -0.01577840805053713
+        ]
+      },
+      "bound_fraction": {
+        "mean": -0.0091949462890625,
+        "ci95": [
+          -0.012358303070068358,
+          -0.00612255096435547
+        ]
+      },
+      "bid_fills": {
+        "mean": 0.22958984375,
+        "ci95": [
+          0.027145996093750003,
+          0.45234619140624993
+        ]
+      },
+      "ask_fills": {
+        "mean": 0.1095703125,
+        "ci95": [
+          -0.0936572265625,
+          0.3267749023437498
+        ]
+      },
+      "total_fills": {
+        "mean": 0.33916015625,
+        "ci95": [
+          -0.05722900390625,
+          0.7715014648437497
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 0.04375,
+        "ci95": [
+          -0.03427734375,
+          0.12578369140624998
+        ]
+      }
+    },
+    "concat_method": {
+      "first": "rl2_concat",
+      "second": "varibad_concat",
+      "absolute_inventory_distribution": {
+        "mean": [
+          -0.001589202880859375,
+          0.024248504638671876,
+          0.02989349365234375,
+          -0.027834320068359376,
+          -0.014340972900390625,
+          -0.01037750244140625
+        ],
+        "ci95": [
+          [
+            -0.006625423431396485,
+            0.01619239807128906,
+            0.024423141479492188,
+            -0.03316425323486328,
+            -0.017529354095458985,
+            -0.012517547607421875
+          ],
+          [
+            0.004020919799804684,
+            0.03269128799438476,
+            0.0356363296508789,
+            -0.02279815673828125,
+            -0.011167049407958986,
+            -0.008196983337402345
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": -0.1087188720703125,
+        "ci95": [
+          -0.14185714721679688,
+          -0.0782012176513672
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": -0.5955795288085938,
+        "ci95": [
+          -0.7324746894836426,
+          -0.46841613769531254
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": -0.05255279541015625,
+        "ci95": [
+          -0.061827373504638676,
+          -0.04407024383544922
+        ]
+      },
+      "bound_fraction": {
+        "mean": -0.01037750244140625,
+        "ci95": [
+          -0.012517547607421875,
+          -0.008196983337402345
+        ]
+      },
+      "bid_fills": {
+        "mean": 0.66416015625,
+        "ci95": [
+          0.5200146484375,
+          0.7961938476562499
+        ]
+      },
+      "ask_fills": {
+        "mean": 0.5693359375,
+        "ci95": [
+          0.41572265625,
+          0.7127978515624999
+        ]
+      },
+      "total_fills": {
+        "mean": 1.23349609375,
+        "ci95": [
+          0.94433349609375,
+          1.4937548828124998
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 0.264453125,
+        "ci95": [
+          0.20224365234375,
+          0.32744384765624995
+        ]
+      }
+    },
+    "hypernet_method": {
+      "first": "rl2_hypernet",
+      "second": "varibad_hypernet",
+      "absolute_inventory_distribution": {
+        "mean": [
+          0.0229583740234375,
+          0.0293701171875,
+          -0.006805419921875,
+          -0.027639007568359374,
+          -0.01175994873046875,
+          -0.006124114990234375
+        ],
+        "ci95": [
+          [
+            0.011441478729248047,
+            0.01797168731689453,
+            -0.019243087768554688,
+            -0.037606830596923824,
+            -0.016452808380126954,
+            -0.008610591888427733
+          ],
+          [
+            0.03435827255249023,
+            0.04143146514892578,
+            0.005476779937744134,
+            -0.01789308547973633,
+            -0.0072302627563476584,
+            -0.003740596771240236
+          ]
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": -0.144818115234375,
+        "ci95": [
+          -0.19830268859863281,
+          -0.09237274169921876
+        ]
+      },
+      "mean_squared_inventory": {
+        "mean": -0.5878646850585938,
+        "ci95": [
+          -0.8066788482666015,
+          -0.380108871459961
+        ]
+      },
+      "large_inventory_fraction": {
+        "mean": -0.0455230712890625,
+        "ci95": [
+          -0.06236671447753906,
+          -0.029234924316406254
+        ]
+      },
+      "bound_fraction": {
+        "mean": -0.006124114990234375,
+        "ci95": [
+          -0.008610591888427733,
+          -0.003740596771240236
+        ]
+      },
+      "bid_fills": {
+        "mean": 0.5498046875,
+        "ci95": [
+          0.30360595703125,
+          0.77705322265625
+        ]
+      },
+      "ask_fills": {
+        "mean": 0.58486328125,
+        "ci95": [
+          0.363759765625,
+          0.79218994140625
+        ]
+      },
+      "total_fills": {
+        "mean": 1.13466796875,
+        "ci95": [
+          0.6698193359375,
+          1.5651416015625
+        ]
+      },
+      "both_fill_steps": {
+        "mean": 0.2654296875,
+        "ci95": [
+          0.16777099609375,
+          0.35888671875
+        ]
+      }
+    }
+  }
+}

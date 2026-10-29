@@ -287,3 +287,17 @@ uv run python -m scripts.thesis_contract --strict --thesis-root "/absolute/path/
 These commands require unpacked results or `THESIS_RESULTS_ROOT` pointing to them. The final
 check also compares generated and manually typeset thesis tables. Compile the thesis from its
 own directory with `latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex`.
+
+## Inventory exposure and accepted fills
+
+`INVENTORY_ACTIVITY.md` documents the additional frozen-checkpoint evaluation. Run
+`python -m scripts.inventory_activity_analysis` after preparing the existing checkpoints.
+It reuses the original evaluation keys and verifies every return and inventory penalty.
+To rebuild the chart and table without checkpoints, run:
+
+```sh
+python -m scripts.plot_inventory_activity --input reproduction/data/inventory_activity_summary.json --figure /tmp/inventory_activity.pdf --table /tmp/inventory_activity.tex
+```
+
+The packaged summary retains each trained run's absolute post-fill inventory histogram
+and separate accepted bid and ask fill counts. Its manifest records source and data hashes.

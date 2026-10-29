@@ -1,0 +1,191 @@
+{
+  "description": "Positive reduction favours the first named configuration; unadjusted paired seed bootstrap.",
+  "comparisons": [
+    {
+      "first": "rl2_hypernet",
+      "second": "rl2_concat",
+      "label": "RL\u00b2: hypernet vs concat.",
+      "all_decisions": {
+        "mean": 0.01743891229982707,
+        "ci95": [
+          0.0046681633446663574,
+          0.029215251227847853
+        ]
+      },
+      "comparable_situations": {
+        "mean": 0.011868277612271574,
+        "ci95": [
+          0.00028867037793713296,
+          0.022478181397405837
+        ]
+      },
+      "overlap": {
+        "mean": 0.8197761535644531,
+        "ci95": [
+          0.810422248840332,
+          0.8298334121704101
+        ]
+      }
+    },
+    {
+      "first": "varibad_hypernet",
+      "second": "varibad_concat",
+      "label": "VariBAD: hypernet vs concat.",
+      "all_decisions": {
+        "mean": 0.028110062803076902,
+        "ci95": [
+          0.017284896083851434,
+          0.03943064121253502
+        ]
+      },
+      "comparable_situations": {
+        "mean": 0.022091309815655387,
+        "ci95": [
+          0.009613214389461172,
+          0.03484654470582282
+        ]
+      },
+      "overlap": {
+        "mean": 0.8522720336914062,
+        "ci95": [
+          0.8356200790405273,
+          0.8673699569702148
+        ]
+      }
+    },
+    {
+      "first": "rl2_concat",
+      "second": "varibad_concat",
+      "label": "Concatenation: RL\u00b2 vs VariBAD",
+      "all_decisions": {
+        "mean": 0.04860533035110355,
+        "ci95": [
+          0.042340002830207134,
+          0.055298549743687635
+        ]
+      },
+      "comparable_situations": {
+        "mean": 0.043477978107341705,
+        "ci95": [
+          0.03707364666930616,
+          0.0501734605789968
+        ]
+      },
+      "overlap": {
+        "mean": 0.8212684631347656,
+        "ci95": [
+          0.8126182174682617,
+          0.8300057411193847
+        ]
+      }
+    },
+    {
+      "first": "rl2_hypernet",
+      "second": "varibad_hypernet",
+      "label": "Hypernetwork: RL\u00b2 vs VariBAD",
+      "all_decisions": {
+        "mean": 0.03793417984785372,
+        "ci95": [
+          0.025578628435816573,
+          0.05035319667999078
+        ]
+      },
+      "comparable_situations": {
+        "mean": 0.03350422032108131,
+        "ci95": [
+          0.022231597736335516,
+          0.04437294785965884
+        ]
+      },
+      "overlap": {
+        "mean": 0.8235382080078125,
+        "ci95": [
+          0.8050311088562012,
+          0.841932315826416
+        ]
+      }
+    }
+  ],
+  "cache_sha256": {
+    "rl2_hypernet_0.npz": "721f756a7fdbd599a98abe9f6b019fb78586b348f7cd29d2dc2b7e2fe45eb460",
+    "rl2_concat_0.npz": "eb65e1882fd4219deb030ef76954630ada1eb9d317db09610f6218831ca718c9",
+    "rl2_hypernet_1.npz": "3e3b359fbb09d9df559087a39a5a8e2562c3a323418c3ee233e4adf71c89d8f9",
+    "rl2_concat_1.npz": "165d698ee322497bcb243215ff328f494de7fb905e2a7c6df3d25562f6bda6a9",
+    "rl2_hypernet_2.npz": "663fb5008a81492679d5859f370f94056f1f545c2cca446e616ecd520edccdd0",
+    "rl2_concat_2.npz": "e1cf7982d09ec3039a5850abc615be49ac17b273dcad8f04aa169611163f5053",
+    "rl2_hypernet_3.npz": "81b78b670c3d4baf43a9e1d6733c04ff3c14239923298a34a10a1c2979b0e585",
+    "rl2_concat_3.npz": "24509bccc8d9054e35950f15e5f03da42eed7bc5e101b09c534350d5d3362875",
+    "rl2_hypernet_4.npz": "0bfdeac54ffb9ac09bf67c246ee75d9718ab062ffef4d7563e7c693a82ff985c",
+    "rl2_concat_4.npz": "110c9814559fc1166ef31d4cc8de78e7a950365d30f123199d3d894c70b70184",
+    "rl2_hypernet_5.npz": "609e46ddf0f1efa746a65474b1c563dbe07281cebecc08ccc6bb542ad4855982",
+    "rl2_concat_5.npz": "295590be990ced2725835e84d70ba0f393f88cd2968151818e08dd7d885a62a9",
+    "rl2_hypernet_6.npz": "db5a4a52025ca8ad9462555087138db7328d8f769aac8c23f28fd41505407386",
+    "rl2_concat_6.npz": "821448e0381b16e0d45c43da6915a4f28c345377200d61cb277bd47f3b9fe7a8",
+    "rl2_hypernet_7.npz": "190661e380b4a1c611cc22953647aececc504d736ff9539d374f0c1f5819b612",
+    "rl2_concat_7.npz": "fb2e7b1d69d8d07319321b8e48f2925b2c83e3c6505f530ab0f5715437a348b1",
+    "rl2_hypernet_8.npz": "fcba015d68ee16bd38a99c9891562a77b0947356501edc173c47e6e5091814d8",
+    "rl2_concat_8.npz": "ad17a3dde540111545833641f8d29a54bdc54b1c5737414e94688b90b857d008",
+    "rl2_hypernet_9.npz": "dc9ba5288a542ac4a18000da00cb537f8758b5d4cc2a5676dcf57ec9d6343b1d",
+    "rl2_concat_9.npz": "3b4c3177bc7f57ed701e67d83f88f4dbb8646296620554e02b3c2b6d0d0b9f52",
+    "rl2_hypernet_10.npz": "6f79cea3e4ca52d54118569175eb3b8882b3a2e5483cb84eadd515a771b406a7",
+    "rl2_concat_10.npz": "d67b96c0975a8ee0213798ba05e840e4a19c2dd465b08f3a50377b6f7abb89b7",
+    "rl2_hypernet_11.npz": "422323b9d5e69f4f1e3aef66f4475dfae7012cd6bdcbb47f95a846e1f6bd57f0",
+    "rl2_concat_11.npz": "5b7498ab3d241e3b48e114b8337de32b5361cdd719b2a5497ec30a6a0bcb4aa7",
+    "rl2_hypernet_12.npz": "21ae550d3a98e5318eff263e943b468c0d8b72a0b52947e9047768370b412a07",
+    "rl2_concat_12.npz": "b1b780c457e5d723296aed165fff4344d4ee5d4662ec2aaaa6a6573b53294d91",
+    "rl2_hypernet_13.npz": "31d0ef49a80a75f217cfc0dad2ee0d05429ccad7d466bf61cea3c558dc4580ae",
+    "rl2_concat_13.npz": "dda89ca2c507ffa6e153a2e9f7565409448f9d2125833f0aac4e421d2587d710",
+    "rl2_hypernet_14.npz": "1e599b1d9859c73cd596f3e27682a2a32de97e890c71db3f56df412171b97b0b",
+    "rl2_concat_14.npz": "6d49a967ac8899505af5275650de0fdd9977a2c54b6f4a777129d4323e17ce3f",
+    "rl2_hypernet_15.npz": "0afa1bd0ccd428fa1b7deeebc7940bedebf2f7817dbd83aef87d2211eb8bf217",
+    "rl2_concat_15.npz": "19830ba722069b7ef7b3156769ec8c8ffe28c53a0572edc5f73f289b66c7bdc3",
+    "rl2_hypernet_16.npz": "20ca13f9b26d02e35466eeacd692110781abe96987581cc49dbe07fb2415818e",
+    "rl2_concat_16.npz": "9c17331bdc004bae6da2921ff9caa478943a75df794c713cc2046295ce123986",
+    "rl2_hypernet_17.npz": "64482b85d8d7d5c9040eb4e0e1fbd8edf502644cc8ee838cf80609a7a3de0a0d",
+    "rl2_concat_17.npz": "1a8754b3952d7e5fd92224a51ea98ec30d45e983831be5c53dc91aef43755919",
+    "rl2_hypernet_18.npz": "a4ec75132643fe334df1f8ca3443b0a2c9dddf91d663a9a987531d59193ec52b",
+    "rl2_concat_18.npz": "badade97171a0b13f4c449b19a463494ac2fbd06cf6364409967048978105227",
+    "rl2_hypernet_19.npz": "9919ba6b182ac9a836d4e6efe0a7b65d61f4f93072a9c68ee5e1dc1c6ea90ba9",
+    "rl2_concat_19.npz": "6cfe015b7e106d8de42efefe755f53715d227a279254ae789a9f1cf5e15879b6",
+    "varibad_hypernet_0.npz": "21505c9c96011c32fbcc2674c9ae002b343dc87b25a5988ec41b54d82d0acf5b",
+    "varibad_concat_0.npz": "1fc8d7bc80e3fddb21e0314862d3682ecfc15ddf710b85852d4b3f07b8ad7f6f",
+    "varibad_hypernet_1.npz": "55d2f0327b7ee32d1aa4cd1f8f01c4d7283db7c21c36bb195c50b88579b50a6a",
+    "varibad_concat_1.npz": "dc54116666a0e22c3fac65af261e6b9d7e63fab227f010abf9a033c938c29bbb",
+    "varibad_hypernet_2.npz": "c0ce9388619b7737988775366a691535279d9bac1f296b02c0fe7f21c006e41b",
+    "varibad_concat_2.npz": "999176732cb484aafecb90af304849283eedd40c362cc026807063fc14036936",
+    "varibad_hypernet_3.npz": "59b54c553808a810a495f3e441bf353ff0da37ccbd9c0fd9e3e41671c257ed2b",
+    "varibad_concat_3.npz": "7845da4ee0f112c068ce75cc89aee69e7d747aa9f704e1c759f2a035882b9b2d",
+    "varibad_hypernet_4.npz": "6e28a587b4659bb8aed0f821e396e819e4093c1ab5bd9bd18ea6e45a2ce7d54c",
+    "varibad_concat_4.npz": "216e44e9da78eebfb0f795dff60b1c602cc0b57cfd8fcc7547ae4ebcef6db486",
+    "varibad_hypernet_5.npz": "c716a8e5a2ec43fb109689a92f1f44ce6eb1b2ee718080d084a4877dbd2a19c3",
+    "varibad_concat_5.npz": "73c330299f264ff2cdad765a6ef789071d61dc6c6c0e203d9bd1f1da17551222",
+    "varibad_hypernet_6.npz": "8f0e92fec83641ea43ba7ace6cd1b1804635ef3515ef1767ebfdaddb297d83b4",
+    "varibad_concat_6.npz": "095d44cc03e0795ad40ccf3e143bde039ab2045accadc7b896f48c4ec33f070a",
+    "varibad_hypernet_7.npz": "c68efebc62bcea24ae6d60ec99dc9e5200423a2be90a8a861a29aacc9b4d5f84",
+    "varibad_concat_7.npz": "68b1b47f488b8a0c00e7ad7438f10ae69162ae8df8ddbc2df9a1082c7271a50f",
+    "varibad_hypernet_8.npz": "52cab225ed5ce9d83f8f1cdcf5452cd800027fb08fb02965a06aa727c9ae2ac6",
+    "varibad_concat_8.npz": "443f5ab5fc04d14b72f010cf6a924317e944c59d1c910c02eb031e5dd9fd25a4",
+    "varibad_hypernet_9.npz": "65e7e56049182bbb1dad53168821715fe8ec81c5b169d34258caf6122d7e4cc2",
+    "varibad_concat_9.npz": "aebed21df9d95d9c11a334e6e38a4069436193257c5398b4558863fa1ebba71e",
+    "varibad_hypernet_10.npz": "d96de17d1b3fc33e5aef23903d64a452f27d77f2c13a698b7944c26ef3c67393",
+    "varibad_concat_10.npz": "754c3931e640843a8c78304b817d865cc53f131159d7bbaccada15a71a142519",
+    "varibad_hypernet_11.npz": "29bfa6c726793c1ef2b4a635cc20b72e4d2882525bc05c9afcf78f66267bdc92",
+    "varibad_concat_11.npz": "cde1a66662928dd5ff202e7d390c776f5f494b214292c3cff63032bc3d113c4c",
+    "varibad_hypernet_12.npz": "b4c059324d1341bbea76785a94c5fdfa1dfe6bdf627ba75b6b3ce11cea01d322",
+    "varibad_concat_12.npz": "8b9c70ce78ecc2a492c97c252eb9d5d33637c19343563a82de2b57284896d227",
+    "varibad_hypernet_13.npz": "b2e8951a05f3563e7f53ed372ff01a7eb345eb079e534337e45431f1a597c97e",
+    "varibad_concat_13.npz": "f6ec50afd0db0892ed34f5d55db00594b6c530e4a2fbc5fc4c5b6b43de94a98c",
+    "varibad_hypernet_14.npz": "2f9905f2873b6d5ff4d143279e5ff7dd4e89335164ad2b92e1b3aac12e1fee29",
+    "varibad_concat_14.npz": "ab6f7c80db0d6cb473bde9370d60d5b2f43e6f45635e480d5d98ef6fa8fdb9f6",
+    "varibad_hypernet_15.npz": "75605881b20de75b1b8ddbbc23d211c867b896396e5da9dbac9a0c2ba1c1c206",
+    "varibad_concat_15.npz": "60a6087d15af9e7bc2c943160ecf879c92325057d28101284e1e40e1a55a649b",
+    "varibad_hypernet_16.npz": "4cde7432c0251f54643a4cb90684b33f2fea8caae32f89da85a73ccb38ec9d4d",
+    "varibad_concat_16.npz": "cd302f6b4f7e5b82d7e22fd088a283148808b18544d017434c5feb21e21500d7",
+    "varibad_hypernet_17.npz": "eae3359f003296525e8150ea1f673a327d33d6a28a5c51c0dc93be3bfd3d83ea",
+    "varibad_concat_17.npz": "64457dda1d8d3d3760ed7ca1b174db6c21a2edafb71860fe590e0876371a0b14",
+    "varibad_hypernet_18.npz": "44afadb51585c6b80a15add668aae2f71efe3c46b34dffd7306a5be414b7b61c",
+    "varibad_concat_18.npz": "c11bad5b834461b69ffe30312ff7b3eb9a0b461d1a70b3fd1cb0c7c827f46a6c",
+    "varibad_hypernet_19.npz": "bedddf6525f9409ccfc4dbe005f9d6c10b1ab32759e587683900a586a6500923",
+    "varibad_concat_19.npz": "9a8709d18fcf787b830f1070738727da5b9f71a46c082c9bbdac751eeea19dfa"
+  }
+}

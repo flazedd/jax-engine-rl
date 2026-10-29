@@ -49,3 +49,11 @@ The joint switch overview reads the original saved-results archive and verifies 
 ```sh
 python -m scripts.plot_switch_overview --archive reproduction/data/saved-results.tar.gz --decision-loss reproduction/data/decision_loss_summary.json --output /tmp/switch_overview.pdf
 ```
+
+Four decision-quality comparisons use the cached state-action counts (no checkpoint replay):
+
+```sh
+python -m scripts.compare_decision_quality --cache results/analysis/decision_loss --output reproduction/data/decision_quality_comparisons.json --table /tmp/decision_quality_comparisons.tex
+```
+
+The main chart reads this saved comparison JSON alongside decision_loss_summary.json. Positive reductions favour the first named agent.

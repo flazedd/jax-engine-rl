@@ -24,11 +24,12 @@ def main():
  for ax in axes[-1]:ax.set_xlabel('Difference in mean episode totals')
  fig.tight_layout();fig.savefig(a.output/'return_components.pdf');plt.close(fig)
  (a.output/'return_component_comparisons.json').write_text(json.dumps(estimates,indent=2)+'\n')
- fig,ax=plt.subplots(figsize=(8,3.2))
- for i,(key,label) in enumerate([('rl2','RL²'),('varibad','VariBAD')]):
-  c=d['comparisons'][key]
-  for metric,offset,marker,scale in [('loss',-.12,'o',128),('matched_loss_per_step',.12,'s',1)]:
-   e=c[metric];v=e['mean']/scale;lo,hi=np.array(e['ci95'])/scale
-   ax.errorbar(v,i+offset,xerr=[[v-lo],[hi-v]],fmt=marker,color='black',mfc='white' if marker=='s' else 'black',capsize=4,label=('Own trajectories' if marker=='o' else 'Matched states') if i==0 else None)
- ax.axvline(0,color='grey',lw=1);ax.set(yticks=[0,1],yticklabels=['RL²','VariBAD'],xlabel='Decision loss difference per decision\n(hypernetwork minus concatenation)');ax.invert_yaxis();ax.spines[['top','right']].set_visible(False);ax.legend(frameon=False,loc='lower left',bbox_to_anchor=(0,1.01),ncol=2);fig.tight_layout();fig.savefig(a.output/'decision_quality.pdf');plt.close(fig)
+ quality=json.loads((a.input.parent/'decision_quality_comparisons.json').read_text())
+ fig,axes=plt.subplots(2,2,figsize=(11,6),sharex=True)
+ for ax,c in zip(axes.flat,quality['comparisons']):
+  for y,key,marker in [(0,'all_decisions','o'),(1,'comparable_situations','s')]:
+   e=c[key];v=e['mean'];lo,hi=e['ci95'];ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt=marker,color='black',mfc='white' if marker=='s' else 'black',capsize=4,ms=6)
+  ax.axvline(0,color='grey',lw=1);ax.set(yticks=[0,1],yticklabels=['All recorded decisions','Comparable situations'],title=c['label'],ylim=(1.6,-.6));ax.spines[['top','right']].set_visible(False)
+ for ax in axes[-1]:ax.set_xlabel('Reduction in decision loss per decision\n(positive favours the first named agent)')
+ fig.tight_layout();fig.savefig(a.output/'decision_quality.pdf');plt.close(fig)
 if __name__=='__main__':main()

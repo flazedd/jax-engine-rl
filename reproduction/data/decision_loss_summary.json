@@ -1,0 +1,4356 @@
+{
+  "description": "Observed return accounting; full-information finite-horizon action loss. No retraining.",
+  "intervals": "10000 paired seed bootstrap, unadjusted exploratory intervals",
+  "rows": [
+    {
+      "method": "rl2_concat",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "90961873ddcae670c45cc51ed2a1fc93eed89aaf4cc5dc807d2c1f66f6948b79",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.61191355583287,
+      "gain": 60.753905743332865,
+      "penalty": 17.141992187499994,
+      "loss": 10.465608476348477,
+      "mean_abs_inventory": 1.172393798828125,
+      "bound_fraction": 0.0208282470703125,
+      "bins": [
+        {
+          "steps": 333,
+          "mean_loss": 0.34237778894099063
+        },
+        {
+          "steps": 1268,
+          "mean_loss": 0.35090772392794295
+        },
+        {
+          "steps": 1469,
+          "mean_loss": 0.325970511292717
+        },
+        {
+          "steps": 2616,
+          "mean_loss": 0.17831179486819232
+        },
+        {
+          "steps": 4222,
+          "mean_loss": 0.11391595142038191
+        },
+        {
+          "steps": 4831,
+          "mean_loss": 0.08982276376598708
+        },
+        {
+          "steps": 1626,
+          "mean_loss": 0.0650005076833535
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.185913189266019
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "924f42aafaef071f962a079b2ba320c9014bd02089a1aecaa8ee0995b953d7f9",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 44.444140069783316,
+      "gain": 62.92578069478332,
+      "penalty": 18.481640624999997,
+      "loss": 12.90162156855891,
+      "mean_abs_inventory": 1.238555908203125,
+      "bound_fraction": 0.0217437744140625,
+      "bins": [
+        {
+          "steps": 320,
+          "mean_loss": 0.3248348090771784
+        },
+        {
+          "steps": 1236,
+          "mean_loss": 0.34525330156119005
+        },
+        {
+          "steps": 1442,
+          "mean_loss": 0.33641587066105255
+        },
+        {
+          "steps": 2587,
+          "mean_loss": 0.22740952089063932
+        },
+        {
+          "steps": 4333,
+          "mean_loss": 0.13850205089786427
+        },
+        {
+          "steps": 5530,
+          "mean_loss": 0.11784037857548596
+        },
+        {
+          "steps": 1838,
+          "mean_loss": 0.07891331971941859
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -2.08232641689486
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "aa57ed0488d95f0d71cff6e414bca36bf10b3ce5be493f3db8347b540196a703",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 46.79697242361726,
+      "gain": 60.26562476736724,
+      "penalty": 13.468652343749998,
+      "loss": 7.809251319375154,
+      "mean_abs_inventory": 1.0375518798828125,
+      "bound_fraction": 0.012939453125,
+      "bins": [
+        {
+          "steps": 362,
+          "mean_loss": 0.33791157474193345
+        },
+        {
+          "steps": 1402,
+          "mean_loss": 0.350247715763772
+        },
+        {
+          "steps": 1675,
+          "mean_loss": 0.3090784726433516
+        },
+        {
+          "steps": 2992,
+          "mean_loss": 0.17533303530433192
+        },
+        {
+          "steps": 4662,
+          "mean_loss": 0.07808089827263842
+        },
+        {
+          "steps": 5852,
+          "mean_loss": 0.040363603341529525
+        },
+        {
+          "steps": 2340,
+          "mean_loss": 0.037066671547394445
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.6572114784549505
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "7c860027855a83714a36027cfa88369e57c7ac435808525fb6203a1e3c48648a",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.84521434164344,
+      "gain": 60.14843699789344,
+      "penalty": 17.30322265625,
+      "loss": 12.0319324842175,
+      "mean_abs_inventory": 1.1909942626953125,
+      "bound_fraction": 0.0197906494140625,
+      "bins": [
+        {
+          "steps": 325,
+          "mean_loss": 0.31728277640813585
+        },
+        {
+          "steps": 1273,
+          "mean_loss": 0.3467339761628183
+        },
+        {
+          "steps": 1506,
+          "mean_loss": 0.33452390059958587
+        },
+        {
+          "steps": 2669,
+          "mean_loss": 0.24264971694562845
+        },
+        {
+          "steps": 4166,
+          "mean_loss": 0.13632783564705186
+        },
+        {
+          "steps": 4853,
+          "mean_loss": 0.06771703179521647
+        },
+        {
+          "steps": 1758,
+          "mean_loss": 0.060511292254761706
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.38628839558642625
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "fa95a245bfa7c1632cd1ffdbf66663e83e01ebe6648a2023798b87865b3d0c02",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.12578069180745,
+      "gain": 60.43164006680745,
+      "penalty": 18.305859375,
+      "loss": 12.0603046689521,
+      "mean_abs_inventory": 1.225311279296875,
+      "bound_fraction": 0.023590087890625,
+      "bins": [
+        {
+          "steps": 335,
+          "mean_loss": 0.33027874889628195
+        },
+        {
+          "steps": 1292,
+          "mean_loss": 0.3780032781332981
+        },
+        {
+          "steps": 1539,
+          "mean_loss": 0.34238474043129974
+        },
+        {
+          "steps": 2755,
+          "mean_loss": 0.2209221366411027
+        },
+        {
+          "steps": 4343,
+          "mean_loss": 0.11901663929669774
+        },
+        {
+          "steps": 5207,
+          "mean_loss": 0.07611795110400357
+        },
+        {
+          "steps": 1910,
+          "mean_loss": 0.052712018152853826
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.0773498606878178
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "f04aac4aac8487149c9fadd922f71eda4a9bbcbb1dad93c3cc869934650e5c21",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.402929127296375,
+      "gain": 62.162108814796376,
+      "penalty": 19.759179687499998,
+      "loss": 13.26195164425971,
+      "mean_abs_inventory": 1.297576904296875,
+      "bound_fraction": 0.0236663818359375,
+      "bins": [
+        {
+          "steps": 328,
+          "mean_loss": 0.37128260906087523
+        },
+        {
+          "steps": 1272,
+          "mean_loss": 0.40634034977673567
+        },
+        {
+          "steps": 1472,
+          "mean_loss": 0.40069945725097944
+        },
+        {
+          "steps": 2617,
+          "mean_loss": 0.2665329331080177
+        },
+        {
+          "steps": 4248,
+          "mean_loss": 0.13707289474363943
+        },
+        {
+          "steps": 5146,
+          "mean_loss": 0.0763440814508979
+        },
+        {
+          "steps": 2022,
+          "mean_loss": 0.06158301889052591
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.4014455501087184
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "da8072b412b05b9a1581d9ec47a43e32a166743b610718efb7c8aea4494dd270",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.320897946789046,
+      "gain": 60.66406200928904,
+      "penalty": 17.343164062499998,
+      "loss": 11.179137341297405,
+      "mean_abs_inventory": 1.179779052734375,
+      "bound_fraction": 0.0213623046875,
+      "bins": [
+        {
+          "steps": 309,
+          "mean_loss": 0.2766469385340989
+        },
+        {
+          "steps": 1185,
+          "mean_loss": 0.31140770412512775
+        },
+        {
+          "steps": 1420,
+          "mean_loss": 0.3119626111608913
+        },
+        {
+          "steps": 2571,
+          "mean_loss": 0.19274010646653694
+        },
+        {
+          "steps": 3920,
+          "mean_loss": 0.10517510175412281
+        },
+        {
+          "steps": 4454,
+          "mean_loss": 0.10088687072159974
+        },
+        {
+          "steps": 1705,
+          "mean_loss": 0.08472183010649804
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.7633999333609154
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "56d038dae60b0bb272710b4080fb4c97b1e8cc4971df84daa5a81eec7d7e0ef6",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 46.456737946668,
+      "gain": 59.76757779041799,
+      "penalty": 13.310839843749998,
+      "loss": 7.603824358208618,
+      "mean_abs_inventory": 1.0474700927734375,
+      "bound_fraction": 0.010955810546875,
+      "bins": [
+        {
+          "steps": 339,
+          "mean_loss": 0.29527898148526566
+        },
+        {
+          "steps": 1309,
+          "mean_loss": 0.3307843960075909
+        },
+        {
+          "steps": 1528,
+          "mean_loss": 0.31326778724555676
+        },
+        {
+          "steps": 2653,
+          "mean_loss": 0.18113921530983323
+        },
+        {
+          "steps": 4410,
+          "mean_loss": 0.05718074090029322
+        },
+        {
+          "steps": 5619,
+          "mean_loss": 0.041381555990640216
+        },
+        {
+          "steps": 2057,
+          "mean_loss": 0.04004122268735741
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.2028729165707492
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "3625272154affd085688f8292d0d7396310ef36d7e12271821f089fb1665fe51",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.592089305384434,
+      "gain": 60.09765571163443,
+      "penalty": 17.505566406249997,
+      "loss": 11.947321306633235,
+      "mean_abs_inventory": 1.1982574462890625,
+      "bound_fraction": 0.0178375244140625,
+      "bins": [
+        {
+          "steps": 340,
+          "mean_loss": 0.33262588803786486
+        },
+        {
+          "steps": 1331,
+          "mean_loss": 0.36688230382726866
+        },
+        {
+          "steps": 1559,
+          "mean_loss": 0.3315690336586804
+        },
+        {
+          "steps": 2743,
+          "mean_loss": 0.18135137064224313
+        },
+        {
+          "steps": 4433,
+          "mean_loss": 0.10610256359344553
+        },
+        {
+          "steps": 5336,
+          "mean_loss": 0.08053111935727035
+        },
+        {
+          "steps": 1950,
+          "mean_loss": 0.0816184864674401
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.7240246094296978
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "49b3c205b4f37e4930b1411d32e6d4989a806b4011a7db2e19ca2201dc28737f",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.51884713732579,
+      "gain": 61.82421823107579,
+      "penalty": 19.30537109375,
+      "loss": 12.017064782313817,
+      "mean_abs_inventory": 1.2777862548828125,
+      "bound_fraction": 0.02264404296875,
+      "bins": [
+        {
+          "steps": 343,
+          "mean_loss": 0.33855989023964134
+        },
+        {
+          "steps": 1336,
+          "mean_loss": 0.3654372033263729
+        },
+        {
+          "steps": 1578,
+          "mean_loss": 0.3290185191553448
+        },
+        {
+          "steps": 2815,
+          "mean_loss": 0.2171996707771054
+        },
+        {
+          "steps": 4502,
+          "mean_loss": 0.13730737512114413
+        },
+        {
+          "steps": 5231,
+          "mean_loss": 0.09950729970125695
+        },
+        {
+          "steps": 1884,
+          "mean_loss": 0.07270781293435204
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.7275233018077572
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "235da5efa5178b421fe77ba1c9c0f5013e7790ab17e41ca44a4008c4ea2cfbbc",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.92099559801136,
+      "gain": 61.21874950426135,
+      "penalty": 17.297753906249994,
+      "loss": 11.242739317936085,
+      "mean_abs_inventory": 1.1899566650390625,
+      "bound_fraction": 0.0185546875,
+      "bins": [
+        {
+          "steps": 280,
+          "mean_loss": 0.2891287974907694
+        },
+        {
+          "steps": 1080,
+          "mean_loss": 0.3066100984796982
+        },
+        {
+          "steps": 1278,
+          "mean_loss": 0.27124536612781575
+        },
+        {
+          "steps": 2268,
+          "mean_loss": 0.1980345287316973
+        },
+        {
+          "steps": 3558,
+          "mean_loss": 0.1152786183867591
+        },
+        {
+          "steps": 4071,
+          "mean_loss": 0.07310630012471804
+        },
+        {
+          "steps": 1488,
+          "mean_loss": 0.058044319934478554
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.09970030549992259
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "a1bf7bae0b7ba10526d052e907b44703837a45e1d2d32a21f8a72ba220ee0b63",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.00761663739104,
+      "gain": 59.88085882489104,
+      "penalty": 17.873242187499997,
+      "loss": 12.912176601921564,
+      "mean_abs_inventory": 1.19866943359375,
+      "bound_fraction": 0.02325439453125,
+      "bins": [
+        {
+          "steps": 384,
+          "mean_loss": 0.27908626510274565
+        },
+        {
+          "steps": 1479,
+          "mean_loss": 0.2944678215732254
+        },
+        {
+          "steps": 1706,
+          "mean_loss": 0.2724221443706947
+        },
+        {
+          "steps": 3033,
+          "mean_loss": 0.2015680259650884
+        },
+        {
+          "steps": 4907,
+          "mean_loss": 0.12463697645703604
+        },
+        {
+          "steps": 5660,
+          "mean_loss": 0.10619176949333453
+        },
+        {
+          "steps": 1954,
+          "mean_loss": 0.06415809044415785
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.3436419821347645
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "8c275778e764a84573bacfcf6aac7c995851f1e6ac1ee5f02f05fa5b4898875f",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.832323615839414,
+      "gain": 61.50781189708941,
+      "penalty": 17.675488281249997,
+      "loss": 12.337218427394292,
+      "mean_abs_inventory": 1.2138214111328125,
+      "bound_fraction": 0.0166473388671875,
+      "bins": [
+        {
+          "steps": 339,
+          "mean_loss": 0.296517853587892
+        },
+        {
+          "steps": 1309,
+          "mean_loss": 0.33353757672491463
+        },
+        {
+          "steps": 1525,
+          "mean_loss": 0.2945250467750505
+        },
+        {
+          "steps": 2757,
+          "mean_loss": 0.21326344592847163
+        },
+        {
+          "steps": 4333,
+          "mean_loss": 0.11409630842914388
+        },
+        {
+          "steps": 5257,
+          "mean_loss": 0.08351590437367494
+        },
+        {
+          "steps": 1782,
+          "mean_loss": 0.05812629343239201
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.9061068217863397
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "1a49ee6c0ecb988860d500fb3f2b12ec7874604a466bce443b6b95afbcbcb933",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.39150331334531,
+      "gain": 60.613280657095316,
+      "penalty": 18.221777343749995,
+      "loss": 12.017529884272973,
+      "mean_abs_inventory": 1.2339935302734375,
+      "bound_fraction": 0.0198516845703125,
+      "bins": [
+        {
+          "steps": 323,
+          "mean_loss": 0.31190984777191466
+        },
+        {
+          "steps": 1242,
+          "mean_loss": 0.3461316257747887
+        },
+        {
+          "steps": 1456,
+          "mean_loss": 0.32611262774760014
+        },
+        {
+          "steps": 2584,
+          "mean_loss": 0.20330316397069242
+        },
+        {
+          "steps": 4138,
+          "mean_loss": 0.12134685567552171
+        },
+        {
+          "steps": 5189,
+          "mean_loss": 0.08468940231278066
+        },
+        {
+          "steps": 1844,
+          "mean_loss": 0.06306457788364352
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.854402023829083
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "b52da136e03d531dc1644eb317eb3883d35c3fd428fadb4c108f0697ae5f1ab1",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.624999430423486,
+      "gain": 60.097655680423486,
+      "penalty": 17.47265625,
+      "loss": 12.662169441028556,
+      "mean_abs_inventory": 1.1903076171875,
+      "bound_fraction": 0.019317626953125,
+      "bins": [
+        {
+          "steps": 318,
+          "mean_loss": 0.34373860632069175
+        },
+        {
+          "steps": 1227,
+          "mean_loss": 0.3661528625331613
+        },
+        {
+          "steps": 1441,
+          "mean_loss": 0.33669125734164523
+        },
+        {
+          "steps": 2559,
+          "mean_loss": 0.2140107220846284
+        },
+        {
+          "steps": 4124,
+          "mean_loss": 0.12070379219166197
+        },
+        {
+          "steps": 4711,
+          "mean_loss": 0.0764786643582356
+        },
+        {
+          "steps": 1673,
+          "mean_loss": 0.06159535658397102
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.023733650004675866
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "482b54ca49d50aef4fdc82b6dd359d6346011e59310f4b63155012a84e773ef1",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.770409608550835,
+      "gain": 62.027343202300834,
+      "penalty": 18.25693359375,
+      "loss": 12.418162913477989,
+      "mean_abs_inventory": 1.2371978759765625,
+      "bound_fraction": 0.0212860107421875,
+      "bins": [
+        {
+          "steps": 343,
+          "mean_loss": 0.336242853377939
+        },
+        {
+          "steps": 1335,
+          "mean_loss": 0.3514154720347014
+        },
+        {
+          "steps": 1571,
+          "mean_loss": 0.30653490324698235
+        },
+        {
+          "steps": 2838,
+          "mean_loss": 0.1884782439977322
+        },
+        {
+          "steps": 4518,
+          "mean_loss": 0.10826362687748717
+        },
+        {
+          "steps": 5207,
+          "mean_loss": 0.07426447957891556
+        },
+        {
+          "steps": 1663,
+          "mean_loss": 0.0518132768463477
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.9251373005814578
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "12169bbcdfdbfc64a5b939915ca44eb096256c1a043407f4ed733277a954d01e",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 46.99482394594088,
+      "gain": 60.835937227190854,
+      "penalty": 13.841113281249998,
+      "loss": 7.294282335729812,
+      "mean_abs_inventory": 1.0554962158203125,
+      "bound_fraction": 0.0130462646484375,
+      "bins": [
+        {
+          "steps": 326,
+          "mean_loss": 0.34044016891605383
+        },
+        {
+          "steps": 1270,
+          "mean_loss": 0.34158484357682656
+        },
+        {
+          "steps": 1491,
+          "mean_loss": 0.2923919057507907
+        },
+        {
+          "steps": 2653,
+          "mean_loss": 0.15847549093218774
+        },
+        {
+          "steps": 4150,
+          "mean_loss": 0.06251019014060921
+        },
+        {
+          "steps": 5003,
+          "mean_loss": 0.04104967687344063
+        },
+        {
+          "steps": 1792,
+          "mean_loss": 0.031803131365997404
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.974328939776675
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "282fab4ff182b5ae78031d230944aea896eaf2c2bd568f747a2a3992d060e156",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.96865181834437,
+      "gain": 63.103515099594375,
+      "penalty": 19.134863281249995,
+      "loss": 12.390956971094177,
+      "mean_abs_inventory": 1.2694854736328125,
+      "bound_fraction": 0.0231475830078125,
+      "bins": [
+        {
+          "steps": 342,
+          "mean_loss": 0.39502170984604446
+        },
+        {
+          "steps": 1321,
+          "mean_loss": 0.40175704500009135
+        },
+        {
+          "steps": 1539,
+          "mean_loss": 0.3348321991062897
+        },
+        {
+          "steps": 2744,
+          "mean_loss": 0.22003344079144602
+        },
+        {
+          "steps": 4375,
+          "mean_loss": 0.11829684309035723
+        },
+        {
+          "steps": 5438,
+          "mean_loss": 0.09012731929826535
+        },
+        {
+          "steps": 1926,
+          "mean_loss": 0.08376448056245395
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.0961735679911797
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "c17890aed2100b2a364c09def75f121811f71a22d17b66d106744ea12c560af3",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 46.08076127350796,
+      "gain": 62.749999554757956,
+      "penalty": 16.669238281249996,
+      "loss": 10.23115197206717,
+      "mean_abs_inventory": 1.1826934814453125,
+      "bound_fraction": 0.018524169921875,
+      "bins": [
+        {
+          "steps": 337,
+          "mean_loss": 0.33917673384475666
+        },
+        {
+          "steps": 1305,
+          "mean_loss": 0.36347477287176205
+        },
+        {
+          "steps": 1554,
+          "mean_loss": 0.3064085183724362
+        },
+        {
+          "steps": 2767,
+          "mean_loss": 0.16706650063169495
+        },
+        {
+          "steps": 4485,
+          "mean_loss": 0.08412718299381972
+        },
+        {
+          "steps": 5615,
+          "mean_loss": 0.06079410773889148
+        },
+        {
+          "steps": 2080,
+          "mean_loss": 0.07839852984058336
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.048478024127764
+    },
+    {
+      "method": "rl2_concat",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "488c5af5ee044d78b1dc9ee9f658147be02b9257374bfbf10ce215fea58a7ad3",
+        "config": "d899080bc78fdf479dd3fd5768ec34eb4f2c2ba3736bce5b16cd058f98047f19",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 41.4464839794382,
+      "gain": 60.324218354438194,
+      "penalty": 18.877734375,
+      "loss": 12.84612238427447,
+      "mean_abs_inventory": 1.257415771484375,
+      "bound_fraction": 0.0221405029296875,
+      "bins": [
+        {
+          "steps": 318,
+          "mean_loss": 0.31420796419229735
+        },
+        {
+          "steps": 1219,
+          "mean_loss": 0.34065072816594844
+        },
+        {
+          "steps": 1411,
+          "mean_loss": 0.31393427962714604
+        },
+        {
+          "steps": 2491,
+          "mean_loss": 0.21714238740618783
+        },
+        {
+          "steps": 3979,
+          "mean_loss": 0.13123352473296188
+        },
+        {
+          "steps": 4568,
+          "mean_loss": 0.10821961860613313
+        },
+        {
+          "steps": 1456,
+          "mean_loss": 0.1254878170974826
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.9708288577346984
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "1f0e4f097b3b3ee62d5e17ba2f65fdc7926630108fd150ab80227a5f5ef6a2ef",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 41.591210393169604,
+      "gain": 57.4472650806696,
+      "penalty": 15.856054687499999,
+      "loss": 11.540505435377025,
+      "mean_abs_inventory": 1.135650634765625,
+      "bound_fraction": 0.015350341796875,
+      "bins": [
+        {
+          "steps": 370,
+          "mean_loss": 0.33046134015321377
+        },
+        {
+          "steps": 1437,
+          "mean_loss": 0.3346846707022651
+        },
+        {
+          "steps": 1703,
+          "mean_loss": 0.29559533201800653
+        },
+        {
+          "steps": 3111,
+          "mean_loss": 0.19196832498128497
+        },
+        {
+          "steps": 4811,
+          "mean_loss": 0.11369364576478184
+        },
+        {
+          "steps": 5496,
+          "mean_loss": 0.08135210231103768
+        },
+        {
+          "steps": 1713,
+          "mean_loss": 0.07489879735872132
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 2.131719392900738
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "6eec4242c9c97e2989c66020f5ab27e6de93d5b2fd56640cbefcfce9761d355d",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 47.18828107007721,
+      "gain": 60.802734195077186,
+      "penalty": 13.614453124999999,
+      "loss": 7.049896415953759,
+      "mean_abs_inventory": 1.05859375,
+      "bound_fraction": 0.01031494140625,
+      "bins": [
+        {
+          "steps": 325,
+          "mean_loss": 0.317127240264668
+        },
+        {
+          "steps": 1270,
+          "mean_loss": 0.34237329059657456
+        },
+        {
+          "steps": 1509,
+          "mean_loss": 0.30126073174486306
+        },
+        {
+          "steps": 2756,
+          "mean_loss": 0.13371826990905075
+        },
+        {
+          "steps": 4527,
+          "mean_loss": 0.04012788050749556
+        },
+        {
+          "steps": 5303,
+          "mean_loss": 0.04159453333280469
+        },
+        {
+          "steps": 2023,
+          "mean_loss": 0.04400753466502432
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.0252577354163979
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "8ac1d64da5fb4978eee15f7afdfcb91fcc7cba7029688a1c7de078fcb7c39bc3",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 48.98818344783649,
+      "gain": 61.25585922908647,
+      "penalty": 12.267675781249999,
+      "loss": 5.954854075773575,
+      "mean_abs_inventory": 0.9805755615234375,
+      "bound_fraction": 0.011627197265625,
+      "bins": [
+        {
+          "steps": 321,
+          "mean_loss": 0.26899779600456375
+        },
+        {
+          "steps": 1232,
+          "mean_loss": 0.29847229719812474
+        },
+        {
+          "steps": 1448,
+          "mean_loss": 0.25543319056549185
+        },
+        {
+          "steps": 2623,
+          "mean_loss": 0.11070778022136091
+        },
+        {
+          "steps": 4190,
+          "mean_loss": 0.04605887524154502
+        },
+        {
+          "steps": 4635,
+          "mean_loss": 0.029947503293631557
+        },
+        {
+          "steps": 1398,
+          "mean_loss": 0.031472781524797454
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.32039769783730065
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "78b083470a63a8d6f19b9e1bc53cd2ed2493cc3d614c7701979e871c4a5e82ed",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.255760964690126,
+      "gain": 58.88085862094013,
+      "penalty": 19.625097656249995,
+      "loss": 15.389881737928583,
+      "mean_abs_inventory": 1.2490081787109375,
+      "bound_fraction": 0.0256195068359375,
+      "bins": [
+        {
+          "steps": 320,
+          "mean_loss": 0.36974354679470967
+        },
+        {
+          "steps": 1242,
+          "mean_loss": 0.39346328262156627
+        },
+        {
+          "steps": 1483,
+          "mean_loss": 0.35849083481958527
+        },
+        {
+          "steps": 2673,
+          "mean_loss": 0.20520814442163593
+        },
+        {
+          "steps": 4188,
+          "mean_loss": 0.13371274539730213
+        },
+        {
+          "steps": 5473,
+          "mean_loss": 0.0951033845324262
+        },
+        {
+          "steps": 1910,
+          "mean_loss": 0.0635194643420436
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.6177925188286579
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "24faabdbda66b10ba1b2d8304af2f424fef6b1dcbaf726b44bb99721e92d7042",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 49.023437347554136,
+      "gain": 61.25195297255412,
+      "penalty": 12.228515624999998,
+      "loss": 6.277124797615878,
+      "mean_abs_inventory": 0.984619140625,
+      "bound_fraction": 0.0092010498046875,
+      "bins": [
+        {
+          "steps": 305,
+          "mean_loss": 0.3274306313856627
+        },
+        {
+          "steps": 1188,
+          "mean_loss": 0.3415047464870561
+        },
+        {
+          "steps": 1412,
+          "mean_loss": 0.2897158688348855
+        },
+        {
+          "steps": 2531,
+          "mean_loss": 0.15773041949790775
+        },
+        {
+          "steps": 4210,
+          "mean_loss": 0.044610664236623285
+        },
+        {
+          "steps": 5257,
+          "mean_loss": 0.017023217068114233
+        },
+        {
+          "steps": 1475,
+          "mean_loss": 0.016367596263347908
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.037126923722647476
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "34d858b261a1a6cd47c5a4857b66ffdf74d3013f374e0ff347cddacee7ec5776",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.91425704645371,
+      "gain": 59.79492110895373,
+      "penalty": 19.880664062500003,
+      "loss": 15.40429811089242,
+      "mean_abs_inventory": 1.271331787109375,
+      "bound_fraction": 0.02325439453125,
+      "bins": [
+        {
+          "steps": 304,
+          "mean_loss": 0.33374182191540075
+        },
+        {
+          "steps": 1157,
+          "mean_loss": 0.3580732482670463
+        },
+        {
+          "steps": 1335,
+          "mean_loss": 0.322145004058253
+        },
+        {
+          "steps": 2410,
+          "mean_loss": 0.20525393374568837
+        },
+        {
+          "steps": 4014,
+          "mean_loss": 0.13527090306006384
+        },
+        {
+          "steps": 4518,
+          "mean_loss": 0.0998862798873417
+        },
+        {
+          "steps": 1327,
+          "mean_loss": 0.09793894909826724
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.05511993589876596
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "3f7a9d973629eb0d9b2a4a20bca57cf2d8e7f13e69e0f77e6a0411aa87a5a8b4",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 49.25703111795883,
+      "gain": 62.912109242958806,
+      "penalty": 13.655078125,
+      "loss": 6.622110438800673,
+      "mean_abs_inventory": 1.050750732421875,
+      "bound_fraction": 0.012420654296875,
+      "bins": [
+        {
+          "steps": 315,
+          "mean_loss": 0.28723235861020247
+        },
+        {
+          "steps": 1226,
+          "mean_loss": 0.33802901363646237
+        },
+        {
+          "steps": 1447,
+          "mean_loss": 0.3334861514853538
+        },
+        {
+          "steps": 2612,
+          "mean_loss": 0.16938408327637075
+        },
+        {
+          "steps": 4288,
+          "mean_loss": 0.03844846755323034
+        },
+        {
+          "steps": 5027,
+          "mean_loss": 0.02542984673518206
+        },
+        {
+          "steps": 1619,
+          "mean_loss": 0.02829442379095276
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.6157063353121384
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "9ab3152fe38da39ad7074eae83c42b6669efc97e5c3d82f28156cadade9b7131",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 45.468554346924066,
+      "gain": 61.25976528442405,
+      "penalty": 15.791210937499997,
+      "loss": 10.208294333146158,
+      "mean_abs_inventory": 1.09417724609375,
+      "bound_fraction": 0.0179443359375,
+      "bins": [
+        {
+          "steps": 320,
+          "mean_loss": 0.28521197509713125
+        },
+        {
+          "steps": 1235,
+          "mean_loss": 0.30617206650762824
+        },
+        {
+          "steps": 1441,
+          "mean_loss": 0.2698222298923178
+        },
+        {
+          "steps": 2611,
+          "mean_loss": 0.1909391637672947
+        },
+        {
+          "steps": 4382,
+          "mean_loss": 0.10683548078720764
+        },
+        {
+          "steps": 5516,
+          "mean_loss": 0.07165229644419432
+        },
+        {
+          "steps": 2181,
+          "mean_loss": 0.04615400268178631
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.4134134586228573
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "ea89413ba7fed93e81dbc85430f0c6b6a75c0ebcda3d424ceec3dca2f8a83591",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 48.25986294505856,
+      "gain": 61.560546538808545,
+      "penalty": 13.300683593749998,
+      "loss": 7.8339601908821574,
+      "mean_abs_inventory": 1.0217742919921875,
+      "bound_fraction": 0.0133819580078125,
+      "bins": [
+        {
+          "steps": 309,
+          "mean_loss": 0.3230327334500085
+        },
+        {
+          "steps": 1204,
+          "mean_loss": 0.3575872389075198
+        },
+        {
+          "steps": 1388,
+          "mean_loss": 0.30084005694971655
+        },
+        {
+          "steps": 2528,
+          "mean_loss": 0.17314180307950053
+        },
+        {
+          "steps": 4039,
+          "mean_loss": 0.07767199561322265
+        },
+        {
+          "steps": 4783,
+          "mean_loss": 0.03750429505874202
+        },
+        {
+          "steps": 1643,
+          "mean_loss": 0.039980246116164526
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.8303879144933486
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "9ef3218627353f7cb53ceb0a8db8fba70fbcef0539456b61249b5523bdf3c7ec",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 44.02773385096225,
+      "gain": 59.66406197596225,
+      "penalty": 15.636328124999999,
+      "loss": 11.23043725151425,
+      "mean_abs_inventory": 1.12152099609375,
+      "bound_fraction": 0.016571044921875,
+      "bins": [
+        {
+          "steps": 325,
+          "mean_loss": 0.3234674936029694
+        },
+        {
+          "steps": 1252,
+          "mean_loss": 0.36661594300520883
+        },
+        {
+          "steps": 1486,
+          "mean_loss": 0.34054539100522846
+        },
+        {
+          "steps": 2698,
+          "mean_loss": 0.22114251785536282
+        },
+        {
+          "steps": 4275,
+          "mean_loss": 0.08768489800947914
+        },
+        {
+          "steps": 5124,
+          "mean_loss": 0.07211107110301417
+        },
+        {
+          "steps": 1981,
+          "mean_loss": 0.06645949140498725
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.005264118970867315
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "3ada6774701ddfbde6090dd0d584c60a657a65a3c7d4ef68a597f21c0ecb8baa",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 48.14013653251459,
+      "gain": 60.02343731376456,
+      "penalty": 11.88330078125,
+      "loss": 5.604507070694726,
+      "mean_abs_inventory": 0.9763946533203125,
+      "bound_fraction": 0.0088043212890625,
+      "bins": [
+        {
+          "steps": 280,
+          "mean_loss": 0.2778696068405116
+        },
+        {
+          "steps": 1108,
+          "mean_loss": 0.2933347027367699
+        },
+        {
+          "steps": 1339,
+          "mean_loss": 0.2962441885840885
+        },
+        {
+          "steps": 2517,
+          "mean_loss": 0.16285164491172002
+        },
+        {
+          "steps": 4137,
+          "mean_loss": 0.0517068922856612
+        },
+        {
+          "steps": 5219,
+          "mean_loss": 0.027603442828882854
+        },
+        {
+          "steps": 1635,
+          "mean_loss": 0.020798400207529374
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.5187916182380512
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "1c125695f812918765df7c44df9d3fb39016af6b2182ab0b6e50946f34d7480b",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 50.28212871134019,
+      "gain": 62.73828105509017,
+      "penalty": 12.456152343749999,
+      "loss": 6.331695211312191,
+      "mean_abs_inventory": 0.9971160888671875,
+      "bound_fraction": 0.0087127685546875,
+      "bins": [
+        {
+          "steps": 319,
+          "mean_loss": 0.2990035207348634
+        },
+        {
+          "steps": 1241,
+          "mean_loss": 0.3183741320077872
+        },
+        {
+          "steps": 1443,
+          "mean_loss": 0.2625723312905283
+        },
+        {
+          "steps": 2564,
+          "mean_loss": 0.1416082379098165
+        },
+        {
+          "steps": 4155,
+          "mean_loss": 0.052686735177941174
+        },
+        {
+          "steps": 5136,
+          "mean_loss": 0.03307363140089891
+        },
+        {
+          "steps": 1600,
+          "mean_loss": 0.031113063032935043
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.3503887012050164
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "8ac21193897179c60b6e30a410427f08c69b18d683a960eb2352ce7987413424",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 49.46142560449516,
+      "gain": 62.00976544824514,
+      "penalty": 12.548339843749998,
+      "loss": 6.048531548203901,
+      "mean_abs_inventory": 1.0048065185546875,
+      "bound_fraction": 0.0098724365234375,
+      "bins": [
+        {
+          "steps": 329,
+          "mean_loss": 0.2797230842225335
+        },
+        {
+          "steps": 1298,
+          "mean_loss": 0.309507511545527
+        },
+        {
+          "steps": 1546,
+          "mean_loss": 0.2622130974295389
+        },
+        {
+          "steps": 2779,
+          "mean_loss": 0.14983840139113852
+        },
+        {
+          "steps": 4229,
+          "mean_loss": 0.048742527152042
+        },
+        {
+          "steps": 5081,
+          "mean_loss": 0.01949626314092201
+        },
+        {
+          "steps": 1902,
+          "mean_loss": 0.029968663269931143
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.24652193125169575
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "2783656f4bd03b18383a9cd187632434767459456b19a2851177fc4d08711596",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.75380802270956,
+      "gain": 63.11718692895957,
+      "penalty": 19.36337890625,
+      "loss": 12.579131840851112,
+      "mean_abs_inventory": 1.2762603759765625,
+      "bound_fraction": 0.0237884521484375,
+      "bins": [
+        {
+          "steps": 370,
+          "mean_loss": 0.3562548758155109
+        },
+        {
+          "steps": 1427,
+          "mean_loss": 0.38660118693088064
+        },
+        {
+          "steps": 1672,
+          "mean_loss": 0.36387093193716186
+        },
+        {
+          "steps": 3023,
+          "mean_loss": 0.24930342640064046
+        },
+        {
+          "steps": 4879,
+          "mean_loss": 0.11939119582440949
+        },
+        {
+          "steps": 6102,
+          "mean_loss": 0.07541618071037604
+        },
+        {
+          "steps": 2114,
+          "mean_loss": 0.0658248017040703
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.0695046421133085
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "9eab438bdb26aacb17ca5996d7e53d6aaa36f282b177c54126e443ab702f178f",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 48.35810526419664,
+      "gain": 61.29882792044661,
+      "penalty": 12.940722656250001,
+      "loss": 7.128422285480424,
+      "mean_abs_inventory": 1.0134735107421875,
+      "bound_fraction": 0.011993408203125,
+      "bins": [
+        {
+          "steps": 357,
+          "mean_loss": 0.3027875077392352
+        },
+        {
+          "steps": 1403,
+          "mean_loss": 0.33468558522433184
+        },
+        {
+          "steps": 1684,
+          "mean_loss": 0.28999010710723594
+        },
+        {
+          "steps": 3073,
+          "mean_loss": 0.15909833942277543
+        },
+        {
+          "steps": 4680,
+          "mean_loss": 0.061756580419853484
+        },
+        {
+          "steps": 5141,
+          "mean_loss": 0.028121779276957366
+        },
+        {
+          "steps": 1661,
+          "mean_loss": 0.0331106431090947
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.22309232822969527
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "857fbd84fe5b9b1990016f17f29174751a2d411b0fbd1abee2d3e608f864e554",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 48.602636453280866,
+      "gain": 61.847655984530846,
+      "penalty": 13.245019531249998,
+      "loss": 6.611799130562876,
+      "mean_abs_inventory": 1.0012969970703125,
+      "bound_fraction": 0.013885498046875,
+      "bins": [
+        {
+          "steps": 340,
+          "mean_loss": 0.3075979023883546
+        },
+        {
+          "steps": 1306,
+          "mean_loss": 0.31853564943623386
+        },
+        {
+          "steps": 1539,
+          "mean_loss": 0.28346987409644625
+        },
+        {
+          "steps": 2781,
+          "mean_loss": 0.1363128649441063
+        },
+        {
+          "steps": 4663,
+          "mean_loss": 0.05228987747364685
+        },
+        {
+          "steps": 5714,
+          "mean_loss": 0.029318415657474492
+        },
+        {
+          "steps": 1883,
+          "mean_loss": 0.031285665632494325
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.048999637603625246
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "bcb6a045e950005d1b817ee7570903a20c07972a25bf50d9863ac7f764dc12cf",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.00253848207649,
+      "gain": 58.8554681695765,
+      "penalty": 16.852929687499998,
+      "loss": 11.834468181488788,
+      "mean_abs_inventory": 1.183258056640625,
+      "bound_fraction": 0.01678466796875,
+      "bins": [
+        {
+          "steps": 338,
+          "mean_loss": 0.28845793829246896
+        },
+        {
+          "steps": 1313,
+          "mean_loss": 0.31655944348286247
+        },
+        {
+          "steps": 1574,
+          "mean_loss": 0.3281759546045232
+        },
+        {
+          "steps": 2824,
+          "mean_loss": 0.21606745149855833
+        },
+        {
+          "steps": 4711,
+          "mean_loss": 0.10393171677169398
+        },
+        {
+          "steps": 5812,
+          "mean_loss": 0.07463372572385821
+        },
+        {
+          "steps": 2195,
+          "mean_loss": 0.0597631211717312
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.4264285578820903
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "a33995563fb3b100b49c12b7ea9cfdc21221972c347b14e206b5423e30789d12",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 44.59023380000144,
+      "gain": 60.70312442500144,
+      "penalty": 16.112890625,
+      "loss": 10.867694021890637,
+      "mean_abs_inventory": 1.146240234375,
+      "bound_fraction": 0.015472412109375,
+      "bins": [
+        {
+          "steps": 316,
+          "mean_loss": 0.3011436394604104
+        },
+        {
+          "steps": 1237,
+          "mean_loss": 0.336165163803759
+        },
+        {
+          "steps": 1454,
+          "mean_loss": 0.28752602792061205
+        },
+        {
+          "steps": 2695,
+          "mean_loss": 0.15291126736423302
+        },
+        {
+          "steps": 4491,
+          "mean_loss": 0.08422255964919446
+        },
+        {
+          "steps": 5561,
+          "mean_loss": 0.06562020294632288
+        },
+        {
+          "steps": 1548,
+          "mean_loss": 0.04694370519819972
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.19449260044471295
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "a1c5bd7258e1f60bd4a3b445f3f14f92d9777f318636e734b47fafc008fe8732",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 46.998925585074176,
+      "gain": 60.99218730382416,
+      "penalty": 13.993261718749999,
+      "loss": 7.031609815520418,
+      "mean_abs_inventory": 1.0674591064453125,
+      "bound_fraction": 0.0125274658203125,
+      "bins": [
+        {
+          "steps": 336,
+          "mean_loss": 0.339640103355611
+        },
+        {
+          "steps": 1310,
+          "mean_loss": 0.35529779310839754
+        },
+        {
+          "steps": 1519,
+          "mean_loss": 0.3234984144876588
+        },
+        {
+          "steps": 2801,
+          "mean_loss": 0.1899271899153593
+        },
+        {
+          "steps": 4649,
+          "mean_loss": 0.06417178224311855
+        },
+        {
+          "steps": 5455,
+          "mean_loss": 0.021974647402816017
+        },
+        {
+          "steps": 1800,
+          "mean_loss": 0.03923065568413206
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.232899820852773
+    },
+    {
+      "method": "rl2_hypernet",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "7e88dfd562e3445c1fc1b3d4a18b14738480cd1a745b92d29c4c1b9a0a8e0ea6",
+        "config": "6dfe820ea297df939d952c732dc51729b76fce3d15a0b83376eab93f0a17ccef",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 45.15009709217702,
+      "gain": 62.53710881092702,
+      "penalty": 17.387011718749996,
+      "loss": 11.437690817915172,
+      "mean_abs_inventory": 1.2201995849609375,
+      "bound_fraction": 0.0147705078125,
+      "bins": [
+        {
+          "steps": 305,
+          "mean_loss": 0.327772411417122
+        },
+        {
+          "steps": 1192,
+          "mean_loss": 0.34420540457780474
+        },
+        {
+          "steps": 1414,
+          "mean_loss": 0.29972249972351456
+        },
+        {
+          "steps": 2511,
+          "mean_loss": 0.20219844346150204
+        },
+        {
+          "steps": 4019,
+          "mean_loss": 0.10066640177932176
+        },
+        {
+          "steps": 5230,
+          "mean_loss": 0.07288720262319529
+        },
+        {
+          "steps": 1710,
+          "mean_loss": 0.05972649960037162
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.3243526886448258
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "7d930cca0d182633785a79da991bd59bd414bb54b8ab2b938b5d009c057a2be7",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 35.99599531856802,
+      "gain": 58.87890547481803,
+      "penalty": 22.882910156249995,
+      "loss": 19.505132159314165,
+      "mean_abs_inventory": 1.3555755615234375,
+      "bound_fraction": 0.0374298095703125,
+      "bins": [
+        {
+          "steps": 331,
+          "mean_loss": 0.44045993098412767
+        },
+        {
+          "steps": 1293,
+          "mean_loss": 0.4614864319628004
+        },
+        {
+          "steps": 1519,
+          "mean_loss": 0.4327421377641238
+        },
+        {
+          "steps": 2693,
+          "mean_loss": 0.35492618551716704
+        },
+        {
+          "steps": 4186,
+          "mean_loss": 0.2565994252355619
+        },
+        {
+          "steps": 4865,
+          "mean_loss": 0.18936794471302593
+        },
+        {
+          "steps": 1597,
+          "mean_loss": 0.09927370527608943
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.23769225643481917
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "0c8385313906fb154c94d5e8b9ac7265c42329eadaa6a28e08de3910feb5413c",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 37.35302659445006,
+      "gain": 58.93945237570007,
+      "penalty": 21.58642578125,
+      "loss": 16.939219727968577,
+      "mean_abs_inventory": 1.3131561279296875,
+      "bound_fraction": 0.0314483642578125,
+      "bins": [
+        {
+          "steps": 325,
+          "mean_loss": 0.3145108488776767
+        },
+        {
+          "steps": 1247,
+          "mean_loss": 0.34340367806747
+        },
+        {
+          "steps": 1473,
+          "mean_loss": 0.3125627034231567
+        },
+        {
+          "steps": 2569,
+          "mean_loss": 0.26716048324988007
+        },
+        {
+          "steps": 4071,
+          "mean_loss": 0.21204479844069324
+        },
+        {
+          "steps": 5276,
+          "mean_loss": 0.15319776558788445
+        },
+        {
+          "steps": 1830,
+          "mean_loss": 0.11304549756362556
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.9711888990287321
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "defaf78a9d7392341f454d0daaebd15cd2c57ad99e346383499413d98da20c69",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.69169845345459,
+      "gain": 59.6308586097046,
+      "penalty": 19.939160156249997,
+      "loss": 16.203739621830188,
+      "mean_abs_inventory": 1.2655487060546875,
+      "bound_fraction": 0.0254974365234375,
+      "bins": [
+        {
+          "steps": 316,
+          "mean_loss": 0.3029422800544109
+        },
+        {
+          "steps": 1234,
+          "mean_loss": 0.32443705090494895
+        },
+        {
+          "steps": 1477,
+          "mean_loss": 0.2925434729196634
+        },
+        {
+          "steps": 2648,
+          "mean_loss": 0.23660651238369973
+        },
+        {
+          "steps": 4199,
+          "mean_loss": 0.16694114599100868
+        },
+        {
+          "steps": 5416,
+          "mean_loss": 0.09567256226415655
+        },
+        {
+          "steps": 1952,
+          "mean_loss": 0.08856833383858212
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.6320028538374132
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "dfd815320faaa6da54033028af804bdf1c3cb488d3b61879c9cce74a3fa468c9",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.76074141258141,
+      "gain": 59.929686725081424,
+      "penalty": 21.168945312499996,
+      "loss": 17.949993681295222,
+      "mean_abs_inventory": 1.3060302734375,
+      "bound_fraction": 0.027587890625,
+      "bins": [
+        {
+          "steps": 339,
+          "mean_loss": 0.31072856975558844
+        },
+        {
+          "steps": 1300,
+          "mean_loss": 0.33059164194443297
+        },
+        {
+          "steps": 1520,
+          "mean_loss": 0.3244489942483499
+        },
+        {
+          "steps": 2765,
+          "mean_loss": 0.26991935584584925
+        },
+        {
+          "steps": 4274,
+          "mean_loss": 0.20053279711187744
+        },
+        {
+          "steps": 4659,
+          "mean_loss": 0.14229707537313888
+        },
+        {
+          "steps": 1376,
+          "mean_loss": 0.08405446343542039
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.4472998724292658
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "8071d2a09bdff7b47e8ca386711b35f83acee7342da65044a846b64a72f3c097",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 37.59794841850089,
+      "gain": 59.5097648247509,
+      "penalty": 21.911816406249997,
+      "loss": 18.716402993877708,
+      "mean_abs_inventory": 1.3291168212890625,
+      "bound_fraction": 0.0320587158203125,
+      "bins": [
+        {
+          "steps": 324,
+          "mean_loss": 0.3930421310240979
+        },
+        {
+          "steps": 1247,
+          "mean_loss": 0.4136307509000615
+        },
+        {
+          "steps": 1471,
+          "mean_loss": 0.37067068143855814
+        },
+        {
+          "steps": 2672,
+          "mean_loss": 0.3042285361798895
+        },
+        {
+          "steps": 4308,
+          "mean_loss": 0.23957324869804356
+        },
+        {
+          "steps": 4777,
+          "mean_loss": 0.1794190150414346
+        },
+        {
+          "steps": 1596,
+          "mean_loss": 0.12574772067696396
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.0509161909312326
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "7535149cbce0f5e8df2d11d31596867fb29450464d72f70b25e02b9774ea7f6e",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 37.09413984569983,
+      "gain": 58.628905470699834,
+      "penalty": 21.534765625,
+      "loss": 17.913750337051525,
+      "mean_abs_inventory": 1.31573486328125,
+      "bound_fraction": 0.03387451171875,
+      "bins": [
+        {
+          "steps": 311,
+          "mean_loss": 0.36079270461579666
+        },
+        {
+          "steps": 1212,
+          "mean_loss": 0.39902114555482293
+        },
+        {
+          "steps": 1435,
+          "mean_loss": 0.3678298496299701
+        },
+        {
+          "steps": 2637,
+          "mean_loss": 0.31376633915613694
+        },
+        {
+          "steps": 4131,
+          "mean_loss": 0.22465893722793187
+        },
+        {
+          "steps": 5104,
+          "mean_loss": 0.15444054460500872
+        },
+        {
+          "steps": 1832,
+          "mean_loss": 0.11948680320222746
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.2555450386960132
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "e861718bcdd3cb53f8efdd8456cf3c70a601ff811f5579a31898ea9ec7635a54",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.74423749356356,
+      "gain": 58.437499212313575,
+      "penalty": 19.693261718749994,
+      "loss": 17.385189861640185,
+      "mean_abs_inventory": 1.2577056884765625,
+      "bound_fraction": 0.0232391357421875,
+      "bins": [
+        {
+          "steps": 332,
+          "mean_loss": 0.3713882445712116
+        },
+        {
+          "steps": 1289,
+          "mean_loss": 0.392565756688829
+        },
+        {
+          "steps": 1524,
+          "mean_loss": 0.3747662595914094
+        },
+        {
+          "steps": 2784,
+          "mean_loss": 0.29444528026132377
+        },
+        {
+          "steps": 4405,
+          "mean_loss": 0.22711583986660733
+        },
+        {
+          "steps": 4971,
+          "mean_loss": 0.15757187505671813
+        },
+        {
+          "steps": 1707,
+          "mean_loss": 0.11564984682940554
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.8659921337563787
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "e36bffb538ed8f5963fad0bce1e53f709767c343c31f52674443e7f5a93cba6e",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 36.93915941278101,
+      "gain": 58.08984300653103,
+      "penalty": 21.150683593749996,
+      "loss": 17.2810768457509,
+      "mean_abs_inventory": 1.3075408935546875,
+      "bound_fraction": 0.0286712646484375,
+      "bins": [
+        {
+          "steps": 332,
+          "mean_loss": 0.31719421562373257
+        },
+        {
+          "steps": 1289,
+          "mean_loss": 0.3629468110999776
+        },
+        {
+          "steps": 1503,
+          "mean_loss": 0.31575878321292805
+        },
+        {
+          "steps": 2682,
+          "mean_loss": 0.24871185924389952
+        },
+        {
+          "steps": 4383,
+          "mean_loss": 0.16662619259920233
+        },
+        {
+          "steps": 5536,
+          "mean_loss": 0.13894915956671555
+        },
+        {
+          "steps": 1783,
+          "mean_loss": 0.10387414362017518
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.0431989629154579
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "c607142a18583ba14243bf6b02fd79498ad9c4c33abd9c007c52f5272bbfbff7",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.36044852650957,
+      "gain": 57.93749930775958,
+      "penalty": 19.577050781249998,
+      "loss": 16.198235797559754,
+      "mean_abs_inventory": 1.2476654052734375,
+      "bound_fraction": 0.0269622802734375,
+      "bins": [
+        {
+          "steps": 305,
+          "mean_loss": 0.28226875503530224
+        },
+        {
+          "steps": 1167,
+          "mean_loss": 0.2904663239461085
+        },
+        {
+          "steps": 1364,
+          "mean_loss": 0.24899556507868567
+        },
+        {
+          "steps": 2496,
+          "mean_loss": 0.20429084577061316
+        },
+        {
+          "steps": 3991,
+          "mean_loss": 0.14875119868385636
+        },
+        {
+          "steps": 4466,
+          "mean_loss": 0.13177319802923523
+        },
+        {
+          "steps": 1473,
+          "mean_loss": 0.1138970342056492
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.704750897378041
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "8be94a7bfcff9f6f9f17e6774f20285c2b9cd7fa2de9286eec40e0e0b5877f4a",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.51669841474359,
+      "gain": 60.207030445993595,
+      "penalty": 20.690332031249994,
+      "loss": 16.61413249295346,
+      "mean_abs_inventory": 1.2998504638671875,
+      "bound_fraction": 0.025360107421875,
+      "bins": [
+        {
+          "steps": 307,
+          "mean_loss": 0.2791433175921442
+        },
+        {
+          "steps": 1168,
+          "mean_loss": 0.29529748285162544
+        },
+        {
+          "steps": 1379,
+          "mean_loss": 0.2596963427601853
+        },
+        {
+          "steps": 2434,
+          "mean_loss": 0.20113292484437384
+        },
+        {
+          "steps": 3696,
+          "mean_loss": 0.15915896591694084
+        },
+        {
+          "steps": 4587,
+          "mean_loss": 0.11762155264386492
+        },
+        {
+          "steps": 2110,
+          "mean_loss": 0.07264673214442323
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.8673956862496794
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "7d8300af398f1cb6f79f5db03abefbc6b662b288bb0f3a1aeb03d90ec6cde91d",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 36.87812425847369,
+      "gain": 58.87499925847371,
+      "penalty": 21.996874999999996,
+      "loss": 18.05326390786775,
+      "mean_abs_inventory": 1.331329345703125,
+      "bound_fraction": 0.0315093994140625,
+      "bins": [
+        {
+          "steps": 310,
+          "mean_loss": 0.36482200655876046
+        },
+        {
+          "steps": 1185,
+          "mean_loss": 0.39252670809845036
+        },
+        {
+          "steps": 1369,
+          "mean_loss": 0.3679516701505939
+        },
+        {
+          "steps": 2467,
+          "mean_loss": 0.28372463415668575
+        },
+        {
+          "steps": 3929,
+          "mean_loss": 0.2089765509618917
+        },
+        {
+          "steps": 4920,
+          "mean_loss": 0.16304006894773734
+        },
+        {
+          "steps": 1780,
+          "mean_loss": 0.14287285769288388
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.332047055105928
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "3d0ae3ef4940de23a3be161a1529e8aa7ec5b4c6b3bb6249d15470e7742ccc27",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 36.61464772064937,
+      "gain": 57.283202408149386,
+      "penalty": 20.6685546875,
+      "loss": 17.88006345799875,
+      "mean_abs_inventory": 1.274261474609375,
+      "bound_fraction": 0.0294647216796875,
+      "bins": [
+        {
+          "steps": 310,
+          "mean_loss": 0.34836718281507484
+        },
+        {
+          "steps": 1195,
+          "mean_loss": 0.40709182569180025
+        },
+        {
+          "steps": 1414,
+          "mean_loss": 0.37236392838194904
+        },
+        {
+          "steps": 2561,
+          "mean_loss": 0.2840944783949819
+        },
+        {
+          "steps": 4291,
+          "mean_loss": 0.20524477836764868
+        },
+        {
+          "steps": 4867,
+          "mean_loss": 0.13809467589435948
+        },
+        {
+          "steps": 1572,
+          "mean_loss": 0.08310917527982213
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.7687240427992421
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "ba324d9de1b90ee11c703c37c9d4708ecbb7a7ee8fb2f805570e387727e90aa7",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 37.37353439938306,
+      "gain": 59.558592993133075,
+      "penalty": 22.185058593749996,
+      "loss": 18.27662105056349,
+      "mean_abs_inventory": 1.3330841064453125,
+      "bound_fraction": 0.0330963134765625,
+      "bins": [
+        {
+          "steps": 346,
+          "mean_loss": 0.3187468573126839
+        },
+        {
+          "steps": 1333,
+          "mean_loss": 0.3329636368111284
+        },
+        {
+          "steps": 1539,
+          "mean_loss": 0.32367990401477836
+        },
+        {
+          "steps": 2740,
+          "mean_loss": 0.2683186622026877
+        },
+        {
+          "steps": 4206,
+          "mean_loss": 0.20233916018366488
+        },
+        {
+          "steps": 5006,
+          "mean_loss": 0.14121439947475858
+        },
+        {
+          "steps": 1547,
+          "mean_loss": 0.11303006751058257
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.3867202284991862
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "6455b58e7e2c280bd634063eaebfc7939015fa230794433b438c104b8897a0fb",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 37.73691331229929,
+      "gain": 58.1152336247993,
+      "penalty": 20.378320312499998,
+      "loss": 17.04382115048552,
+      "mean_abs_inventory": 1.278076171875,
+      "bound_fraction": 0.025604248046875,
+      "bins": [
+        {
+          "steps": 344,
+          "mean_loss": 0.34063498175912704
+        },
+        {
+          "steps": 1332,
+          "mean_loss": 0.34186393181608743
+        },
+        {
+          "steps": 1557,
+          "mean_loss": 0.3071890697723326
+        },
+        {
+          "steps": 2813,
+          "mean_loss": 0.22976664819675818
+        },
+        {
+          "steps": 4503,
+          "mean_loss": 0.17622982477846916
+        },
+        {
+          "steps": 5443,
+          "mean_loss": 0.12561525306794022
+        },
+        {
+          "steps": 1704,
+          "mean_loss": 0.10508158585196914
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.4827007586625527
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "fefb92aabad2f66e839c4b52c6d539da91a40ab89740ec122e863f69111e7903",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.39619073470385,
+      "gain": 57.85546807845385,
+      "penalty": 19.459277343749996,
+      "loss": 16.30803813554394,
+      "mean_abs_inventory": 1.2360382080078125,
+      "bound_fraction": 0.0276031494140625,
+      "bins": [
+        {
+          "steps": 330,
+          "mean_loss": 0.3630414327934133
+        },
+        {
+          "steps": 1283,
+          "mean_loss": 0.3808484920328519
+        },
+        {
+          "steps": 1519,
+          "mean_loss": 0.3270167658329305
+        },
+        {
+          "steps": 2755,
+          "mean_loss": 0.2427113712174583
+        },
+        {
+          "steps": 4565,
+          "mean_loss": 0.19346879862559807
+        },
+        {
+          "steps": 5104,
+          "mean_loss": 0.13524549874326783
+        },
+        {
+          "steps": 1772,
+          "mean_loss": 0.09353104543234352
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.5592063511995775
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "79933d9227533b8e88385ef3d4bd9842fd512d6616042a0655fea7f14f41a84a",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 36.78662033546425,
+      "gain": 58.697264866714264,
+      "penalty": 21.910644531249993,
+      "loss": 17.92991376587309,
+      "mean_abs_inventory": 1.3281402587890625,
+      "bound_fraction": 0.03558349609375,
+      "bins": [
+        {
+          "steps": 347,
+          "mean_loss": 0.3543045940951173
+        },
+        {
+          "steps": 1318,
+          "mean_loss": 0.38766702532815706
+        },
+        {
+          "steps": 1571,
+          "mean_loss": 0.3758351452933267
+        },
+        {
+          "steps": 2796,
+          "mean_loss": 0.28268999440105497
+        },
+        {
+          "steps": 4533,
+          "mean_loss": 0.2021609260860878
+        },
+        {
+          "steps": 5408,
+          "mean_loss": 0.14089162710266204
+        },
+        {
+          "steps": 2071,
+          "mean_loss": 0.10022931558873698
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.5469011201100287
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "95a6bfa83e30c46d849b89306ee3f1bb915f1774310ef13515805341ba814dff",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.43330001796858,
+      "gain": 58.843749236718594,
+      "penalty": 20.410449218749996,
+      "loss": 16.14696460680265,
+      "mean_abs_inventory": 1.2776031494140625,
+      "bound_fraction": 0.02734375,
+      "bins": [
+        {
+          "steps": 313,
+          "mean_loss": 0.3600544836365791
+        },
+        {
+          "steps": 1205,
+          "mean_loss": 0.4043803602871903
+        },
+        {
+          "steps": 1398,
+          "mean_loss": 0.3604619380650503
+        },
+        {
+          "steps": 2517,
+          "mean_loss": 0.29308535284175163
+        },
+        {
+          "steps": 4091,
+          "mean_loss": 0.20301262769518047
+        },
+        {
+          "steps": 4944,
+          "mean_loss": 0.15831801430516318
+        },
+        {
+          "steps": 1711,
+          "mean_loss": 0.11388625362747563
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.6831705966761383
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "3e52b37bfebb452a28c5f6555789ca51f95cbac31e5117836f50d8155b8fc13a",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 35.70019455701549,
+      "gain": 59.28710861951551,
+      "penalty": 23.586914062499993,
+      "loss": 19.179381796556754,
+      "mean_abs_inventory": 1.383636474609375,
+      "bound_fraction": 0.037384033203125,
+      "bins": [
+        {
+          "steps": 328,
+          "mean_loss": 0.3597992936473926
+        },
+        {
+          "steps": 1254,
+          "mean_loss": 0.3840162379628281
+        },
+        {
+          "steps": 1474,
+          "mean_loss": 0.35156536816970774
+        },
+        {
+          "steps": 2682,
+          "mean_loss": 0.299337242518446
+        },
+        {
+          "steps": 4093,
+          "mean_loss": 0.24264354959219925
+        },
+        {
+          "steps": 4989,
+          "mean_loss": 0.18412867864678512
+        },
+        {
+          "steps": 1715,
+          "mean_loss": 0.12440823646923593
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.38385886787511936
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "51bff21525e792fedc846fae93beaa14194e25e838eb63341773062271095828",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 35.97861251280119,
+      "gain": 59.054686731551215,
+      "penalty": 23.07607421875,
+      "loss": 19.660935218334494,
+      "mean_abs_inventory": 1.3715362548828125,
+      "bound_fraction": 0.0350494384765625,
+      "bins": [
+        {
+          "steps": 277,
+          "mean_loss": 0.418653122616885
+        },
+        {
+          "steps": 1090,
+          "mean_loss": 0.4163730501510289
+        },
+        {
+          "steps": 1284,
+          "mean_loss": 0.42196505579710786
+        },
+        {
+          "steps": 2295,
+          "mean_loss": 0.32152071128273624
+        },
+        {
+          "steps": 3674,
+          "mean_loss": 0.25312864416883774
+        },
+        {
+          "steps": 4421,
+          "mean_loss": 0.18996756784968347
+        },
+        {
+          "steps": 1482,
+          "mean_loss": 0.16619187302258667
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.3761125096883191
+    },
+    {
+      "method": "varibad_concat",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "00bb3cacc4a56cd03f3ee33ff27b280207fb0a338e6dd862bc56ea563c5f4123",
+        "config": "222de3c8149794bddbd8c7f7007d3def2d37af1b5f269adcbd8d64862de00c36",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.19619062693528,
+      "gain": 57.86913984568528,
+      "penalty": 19.67294921875,
+      "loss": 16.874297288918967,
+      "mean_abs_inventory": 1.2574615478515625,
+      "bound_fraction": 0.0239105224609375,
+      "bins": [
+        {
+          "steps": 344,
+          "mean_loss": 0.32279813767201454
+        },
+        {
+          "steps": 1340,
+          "mean_loss": 0.369226362162888
+        },
+        {
+          "steps": 1593,
+          "mean_loss": 0.33475519918832075
+        },
+        {
+          "steps": 2926,
+          "mean_loss": 0.26458216168795556
+        },
+        {
+          "steps": 4764,
+          "mean_loss": 0.19152715669831058
+        },
+        {
+          "steps": 6059,
+          "mean_loss": 0.1304030347454658
+        },
+        {
+          "steps": 2158,
+          "mean_loss": 0.10660225445392559
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.19294730559312256
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 0,
+      "identity": {
+        "checkpoint": "24c8d6791d30bedea3e4af95b2be03a3d1d89507b55e2ef4964326755daa4b01",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.35039019762189,
+      "gain": 59.65429644762189,
+      "penalty": 16.303906249999997,
+      "loss": 9.797336866385944,
+      "mean_abs_inventory": 1.184783935546875,
+      "bound_fraction": 0.0155029296875,
+      "bins": [
+        {
+          "steps": 333,
+          "mean_loss": 0.304985861228432
+        },
+        {
+          "steps": 1282,
+          "mean_loss": 0.33954830956756804
+        },
+        {
+          "steps": 1529,
+          "mean_loss": 0.32938428646121193
+        },
+        {
+          "steps": 2774,
+          "mean_loss": 0.18701716288097017
+        },
+        {
+          "steps": 4364,
+          "mean_loss": 0.0871292802447702
+        },
+        {
+          "steps": 5233,
+          "mean_loss": 0.045038793698804334
+        },
+        {
+          "steps": 1681,
+          "mean_loss": 0.04482477983223154
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 2.1157081574395313
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 1,
+      "identity": {
+        "checkpoint": "7f13382ad9a132ccc0fd97d5c7344c254f0d181824efec646734505bc6c0dcf0",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 47.616698902602366,
+      "gain": 62.744140308852366,
+      "penalty": 15.12744140625,
+      "loss": 7.93171113715365,
+      "mean_abs_inventory": 1.1424407958984375,
+      "bound_fraction": 0.0121307373046875,
+      "bins": [
+        {
+          "steps": 321,
+          "mean_loss": 0.28989473833337565
+        },
+        {
+          "steps": 1234,
+          "mean_loss": 0.2922781972914725
+        },
+        {
+          "steps": 1451,
+          "mean_loss": 0.2624316631331626
+        },
+        {
+          "steps": 2608,
+          "mean_loss": 0.16778769011100642
+        },
+        {
+          "steps": 4129,
+          "mean_loss": 0.06218365983559888
+        },
+        {
+          "steps": 4802,
+          "mean_loss": 0.037605742367355324
+        },
+        {
+          "steps": 1723,
+          "mean_loss": 0.040373688276228226
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.28497481830864935
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 2,
+      "identity": {
+        "checkpoint": "748ed82f9c67794c91198b3271af6b03444e506fd076c6f6af2e86254a3ac6eb",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.559862550326216,
+      "gain": 58.68359301907623,
+      "penalty": 20.123730468749997,
+      "loss": 15.637816468875636,
+      "mean_abs_inventory": 1.2823944091796875,
+      "bound_fraction": 0.02313232421875,
+      "bins": [
+        {
+          "steps": 324,
+          "mean_loss": 0.3358057189488245
+        },
+        {
+          "steps": 1244,
+          "mean_loss": 0.34411004095891246
+        },
+        {
+          "steps": 1477,
+          "mean_loss": 0.30189778934940165
+        },
+        {
+          "steps": 2724,
+          "mean_loss": 0.2141199711116349
+        },
+        {
+          "steps": 4448,
+          "mean_loss": 0.12201166354784755
+        },
+        {
+          "steps": 4944,
+          "mean_loss": 0.10569128376149191
+        },
+        {
+          "steps": 1682,
+          "mean_loss": 0.0727865014779901
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.065756202245515
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 3,
+      "identity": {
+        "checkpoint": "e62b0e903312e8832f2e719a6c5ebda82103caa824876d9ed3bd175e2a7e3f2b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.9050773552226,
+      "gain": 59.30078048022261,
+      "penalty": 20.395703124999997,
+      "loss": 16.045644122926266,
+      "mean_abs_inventory": 1.276458740234375,
+      "bound_fraction": 0.026092529296875,
+      "bins": [
+        {
+          "steps": 355,
+          "mean_loss": 0.32673259064562193
+        },
+        {
+          "steps": 1398,
+          "mean_loss": 0.3487386176589111
+        },
+        {
+          "steps": 1675,
+          "mean_loss": 0.3041908014321995
+        },
+        {
+          "steps": 3053,
+          "mean_loss": 0.21219674164420235
+        },
+        {
+          "steps": 4975,
+          "mean_loss": 0.11841349785048817
+        },
+        {
+          "steps": 6466,
+          "mean_loss": 0.09936128255851438
+        },
+        {
+          "steps": 2191,
+          "mean_loss": 0.10263882036104208
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.31271374329849877
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 4,
+      "identity": {
+        "checkpoint": "ef98389cc1489fcdf5311ae8022388544248de3adff31f85760ae38a60cad25b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.28915940177103,
+      "gain": 58.33007737052104,
+      "penalty": 20.04091796875,
+      "loss": 16.12253807916636,
+      "mean_abs_inventory": 1.2668609619140625,
+      "bound_fraction": 0.02435302734375,
+      "bins": [
+        {
+          "steps": 285,
+          "mean_loss": 0.37800727933777073
+        },
+        {
+          "steps": 1104,
+          "mean_loss": 0.4031924673684716
+        },
+        {
+          "steps": 1324,
+          "mean_loss": 0.3657805736537964
+        },
+        {
+          "steps": 2410,
+          "mean_loss": 0.25532833123560844
+        },
+        {
+          "steps": 4015,
+          "mean_loss": 0.13864652741814065
+        },
+        {
+          "steps": 4978,
+          "mean_loss": 0.08294770879769568
+        },
+        {
+          "steps": 1685,
+          "mean_loss": 0.09024569641534566
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.8517377405099751
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 5,
+      "identity": {
+        "checkpoint": "d3eeac5d9b1e30d4944111046aafa5e748178aa107d4f6f21343d0e9dc2b9887",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 40.13662041128555,
+      "gain": 59.01171806753556,
+      "penalty": 18.875097656249995,
+      "loss": 15.050216475657194,
+      "mean_abs_inventory": 1.2418975830078125,
+      "bound_fraction": 0.022125244140625,
+      "bins": [
+        {
+          "steps": 310,
+          "mean_loss": 0.3212669777541232
+        },
+        {
+          "steps": 1212,
+          "mean_loss": 0.3273746640627559
+        },
+        {
+          "steps": 1432,
+          "mean_loss": 0.28614471406741016
+        },
+        {
+          "steps": 2633,
+          "mean_loss": 0.21480515438200343
+        },
+        {
+          "steps": 4277,
+          "mean_loss": 0.12054307830474649
+        },
+        {
+          "steps": 5320,
+          "mean_loss": 0.1161279936407046
+        },
+        {
+          "steps": 1828,
+          "mean_loss": 0.10127366830631576
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.07659833450462372
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 6,
+      "identity": {
+        "checkpoint": "f2e3daf9924297469af488c469315d3fed01afe06b670fe3dbc4005860207a9b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 40.10449140212586,
+      "gain": 59.269530464625866,
+      "penalty": 19.1650390625,
+      "loss": 15.034000012123391,
+      "mean_abs_inventory": 1.254058837890625,
+      "bound_fraction": 0.0186767578125,
+      "bins": [
+        {
+          "steps": 293,
+          "mean_loss": 0.30840901752825894
+        },
+        {
+          "steps": 1130,
+          "mean_loss": 0.33529180550810084
+        },
+        {
+          "steps": 1346,
+          "mean_loss": 0.3203721929052672
+        },
+        {
+          "steps": 2505,
+          "mean_loss": 0.20087322023944865
+        },
+        {
+          "steps": 3993,
+          "mean_loss": 0.12203889048873086
+        },
+        {
+          "steps": 4492,
+          "mean_loss": 0.11261977066648324
+        },
+        {
+          "steps": 1673,
+          "mean_loss": 0.10807685436921567
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.12494380719811637
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 7,
+      "identity": {
+        "checkpoint": "5f501c9a5d7e66d9d7e1772edcd713c6104af5f82ec119db773b2a93d0f6bb32",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 36.36279232067318,
+      "gain": 61.23632747692318,
+      "penalty": 24.87353515625,
+      "loss": 19.57296549512098,
+      "mean_abs_inventory": 1.4498443603515625,
+      "bound_fraction": 0.0339508056640625,
+      "bins": [
+        {
+          "steps": 375,
+          "mean_loss": 0.3354441099837565
+        },
+        {
+          "steps": 1429,
+          "mean_loss": 0.3542469870728958
+        },
+        {
+          "steps": 1686,
+          "mean_loss": 0.3240698403113258
+        },
+        {
+          "steps": 2957,
+          "mean_loss": 0.26168549253586754
+        },
+        {
+          "steps": 4527,
+          "mean_loss": 0.1472046309334036
+        },
+        {
+          "steps": 5648,
+          "mean_loss": 0.1322911346218282
+        },
+        {
+          "steps": 2051,
+          "mean_loss": 0.10151884733181733
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.6723225943467916
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 8,
+      "identity": {
+        "checkpoint": "43894e5913a143c16103cad5ebd43ac15ded1a0476a7b31eedb3b6eadf413d45",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.56787031026761,
+      "gain": 59.92382734151762,
+      "penalty": 20.35595703125,
+      "loss": 16.330373172356794,
+      "mean_abs_inventory": 1.3107452392578125,
+      "bound_fraction": 0.02093505859375,
+      "bins": [
+        {
+          "steps": 328,
+          "mean_loss": 0.30868871612834486
+        },
+        {
+          "steps": 1272,
+          "mean_loss": 0.315168804178133
+        },
+        {
+          "steps": 1512,
+          "mean_loss": 0.2944755724295431
+        },
+        {
+          "steps": 2802,
+          "mean_loss": 0.19543273690591734
+        },
+        {
+          "steps": 4684,
+          "mean_loss": 0.1278787979218246
+        },
+        {
+          "steps": 5501,
+          "mean_loss": 0.10331673047809788
+        },
+        {
+          "steps": 1866,
+          "mean_loss": 0.07114696484168397
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.6348082611770351
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 9,
+      "identity": {
+        "checkpoint": "8c4835d944ea2ecb4ec4f6d3e44ca5090467b7c18ff4e6816eada42dec6f1ce6",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 40.03310471381701,
+      "gain": 59.32421799506702,
+      "penalty": 19.29111328125,
+      "loss": 15.464387343388353,
+      "mean_abs_inventory": 1.2537384033203125,
+      "bound_fraction": 0.0211639404296875,
+      "bins": [
+        {
+          "steps": 319,
+          "mean_loss": 0.3490223086447178
+        },
+        {
+          "steps": 1247,
+          "mean_loss": 0.36514335583183744
+        },
+        {
+          "steps": 1484,
+          "mean_loss": 0.31447372245473715
+        },
+        {
+          "steps": 2687,
+          "mean_loss": 0.22831779481687212
+        },
+        {
+          "steps": 4316,
+          "mean_loss": 0.13229940745188304
+        },
+        {
+          "steps": 5022,
+          "mean_loss": 0.10338384392226428
+        },
+        {
+          "steps": 1980,
+          "mean_loss": 0.11048066089879505
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.23405683575799685
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 10,
+      "identity": {
+        "checkpoint": "e5f207b383043835218c48d321eccdc20f040c557199f187c572f8569a965c58",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.00790959900041,
+      "gain": 60.914061942750415,
+      "penalty": 17.906152343749998,
+      "loss": 12.166208174822948,
+      "mean_abs_inventory": 1.2308502197265625,
+      "bound_fraction": 0.0193023681640625,
+      "bins": [
+        {
+          "steps": 328,
+          "mean_loss": 0.31981754701223253
+        },
+        {
+          "steps": 1265,
+          "mean_loss": 0.32095494967047794
+        },
+        {
+          "steps": 1467,
+          "mean_loss": 0.3051249502615639
+        },
+        {
+          "steps": 2626,
+          "mean_loss": 0.24973713012939683
+        },
+        {
+          "steps": 4203,
+          "mean_loss": 0.11857862796804955
+        },
+        {
+          "steps": 5104,
+          "mean_loss": 0.08064078138122806
+        },
+        {
+          "steps": 1674,
+          "mean_loss": 0.07667181360110394
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.08931744762400484
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 11,
+      "identity": {
+        "checkpoint": "c7c71c7bb553674c7ed671e801b53672e9dcfe813d80e5c47f21ac0f3437e323",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 45.424608956469456,
+      "gain": 61.99218708146945,
+      "penalty": 16.567578125,
+      "loss": 9.511686500109843,
+      "mean_abs_inventory": 1.195556640625,
+      "bound_fraction": 0.016876220703125,
+      "bins": [
+        {
+          "steps": 306,
+          "mean_loss": 0.30293661058239435
+        },
+        {
+          "steps": 1186,
+          "mean_loss": 0.36041596839001466
+        },
+        {
+          "steps": 1410,
+          "mean_loss": 0.3322358294301459
+        },
+        {
+          "steps": 2550,
+          "mean_loss": 0.20612842983360188
+        },
+        {
+          "steps": 4235,
+          "mean_loss": 0.07704000626001516
+        },
+        {
+          "steps": 5311,
+          "mean_loss": 0.050723484859936045
+        },
+        {
+          "steps": 1670,
+          "mean_loss": 0.047021714010035166
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.3271397648680683
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 12,
+      "identity": {
+        "checkpoint": "7675243c952c9e609b3b6f524ce323ccce67343ea4044561408767b0caaed60a",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 38.70732341531402,
+      "gain": 60.24999919656403,
+      "penalty": 21.54267578125,
+      "loss": 16.895111420087595,
+      "mean_abs_inventory": 1.3358917236328125,
+      "bound_fraction": 0.027313232421875,
+      "bins": [
+        {
+          "steps": 310,
+          "mean_loss": 0.329074197879607
+        },
+        {
+          "steps": 1191,
+          "mean_loss": 0.34911824659019797
+        },
+        {
+          "steps": 1378,
+          "mean_loss": 0.3247978189206461
+        },
+        {
+          "steps": 2525,
+          "mean_loss": 0.2388909058732394
+        },
+        {
+          "steps": 4060,
+          "mean_loss": 0.14412873675165785
+        },
+        {
+          "steps": 4927,
+          "mean_loss": 0.10318887470273022
+        },
+        {
+          "steps": 1540,
+          "mean_loss": 0.10080836077274419
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.3389996139542504
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 13,
+      "identity": {
+        "checkpoint": "1469f2f1b051c439cffdeb4098bf76c1cb593a53408769c38abe471fc219750f",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.42060473391757,
+      "gain": 59.23046801516758,
+      "penalty": 19.80986328125,
+      "loss": 16.23022593128685,
+      "mean_abs_inventory": 1.2687835693359375,
+      "bound_fraction": 0.0227813720703125,
+      "bins": [
+        {
+          "steps": 325,
+          "mean_loss": 0.36392747169124073
+        },
+        {
+          "steps": 1246,
+          "mean_loss": 0.359015653500513
+        },
+        {
+          "steps": 1477,
+          "mean_loss": 0.33499657006726713
+        },
+        {
+          "steps": 2701,
+          "mean_loss": 0.2228030954155335
+        },
+        {
+          "steps": 4412,
+          "mean_loss": 0.1307043392397606
+        },
+        {
+          "steps": 5285,
+          "mean_loss": 0.10565714680765051
+        },
+        {
+          "steps": 1758,
+          "mean_loss": 0.08124384295129397
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.3873954437570539
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 14,
+      "identity": {
+        "checkpoint": "9c620b8398670795ffe05788d3d426d593937feeeb6f6672896eeac410640e70",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 41.57646422317339,
+      "gain": 58.783202504423386,
+      "penalty": 17.20673828125,
+      "loss": 13.278147937627825,
+      "mean_abs_inventory": 1.1683502197265625,
+      "bound_fraction": 0.0179443359375,
+      "bins": [
+        {
+          "steps": 322,
+          "mean_loss": 0.29513495033648324
+        },
+        {
+          "steps": 1255,
+          "mean_loss": 0.3042779079900697
+        },
+        {
+          "steps": 1470,
+          "mean_loss": 0.26460167683561653
+        },
+        {
+          "steps": 2630,
+          "mean_loss": 0.16266033256049545
+        },
+        {
+          "steps": 4113,
+          "mean_loss": 0.10763590389442206
+        },
+        {
+          "steps": 4898,
+          "mean_loss": 0.08820541056557907
+        },
+        {
+          "steps": 1836,
+          "mean_loss": 0.06427868635670152
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.4088230606461529
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 15,
+      "identity": {
+        "checkpoint": "12d6a96e4a7d87fb9a83fb8827aaf3d9f9d6d9d16ceafb512b43a0f71424e9a8",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 43.189843275358726,
+      "gain": 58.42968702535873,
+      "penalty": 15.239843749999999,
+      "loss": 10.46730854544936,
+      "mean_abs_inventory": 1.118438720703125,
+      "bound_fraction": 0.013397216796875,
+      "bins": [
+        {
+          "steps": 306,
+          "mean_loss": 0.28602154578927624
+        },
+        {
+          "steps": 1196,
+          "mean_loss": 0.2926497828128157
+        },
+        {
+          "steps": 1399,
+          "mean_loss": 0.28815461359878863
+        },
+        {
+          "steps": 2484,
+          "mean_loss": 0.1818094031692082
+        },
+        {
+          "steps": 3910,
+          "mean_loss": 0.09754616326949689
+        },
+        {
+          "steps": 4871,
+          "mean_loss": 0.06315545544440708
+        },
+        {
+          "steps": 1584,
+          "mean_loss": 0.0413644561380388
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.6062834006392812
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 16,
+      "identity": {
+        "checkpoint": "dc2f3d09f47976be135c21b7c53f4a3275eded350435dad0efcb1153fe563429",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.433104852018005,
+      "gain": 60.47656188326802,
+      "penalty": 18.04345703125,
+      "loss": 13.60539755288702,
+      "mean_abs_inventory": 1.2098846435546875,
+      "bound_fraction": 0.0201263427734375,
+      "bins": [
+        {
+          "steps": 298,
+          "mean_loss": 0.3581555528644794
+        },
+        {
+          "steps": 1143,
+          "mean_loss": 0.3517841553184699
+        },
+        {
+          "steps": 1345,
+          "mean_loss": 0.3122406630027269
+        },
+        {
+          "steps": 2469,
+          "mean_loss": 0.18608687968497448
+        },
+        {
+          "steps": 4128,
+          "mean_loss": 0.12308287296503638
+        },
+        {
+          "steps": 4537,
+          "mean_loss": 0.12024083363523792
+        },
+        {
+          "steps": 1301,
+          "mean_loss": 0.11141880551960423
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -0.7750671834576579
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 17,
+      "identity": {
+        "checkpoint": "a24ce455ea738372363a5d76507785cdbd5529c26ba0dff4cf0953d63ebe634b",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 39.120116419522674,
+      "gain": 58.88085860702268,
+      "penalty": 19.760742187499996,
+      "loss": 15.600157528851845,
+      "mean_abs_inventory": 1.25433349609375,
+      "bound_fraction": 0.023223876953125,
+      "bins": [
+        {
+          "steps": 324,
+          "mean_loss": 0.345764983256611
+        },
+        {
+          "steps": 1275,
+          "mean_loss": 0.3775548549923177
+        },
+        {
+          "steps": 1510,
+          "mean_loss": 0.34214775833663813
+        },
+        {
+          "steps": 2775,
+          "mean_loss": 0.2270582999674529
+        },
+        {
+          "steps": 4476,
+          "mean_loss": 0.1277044760554338
+        },
+        {
+          "steps": 5739,
+          "mean_loss": 0.09619021166360217
+        },
+        {
+          "steps": 1889,
+          "mean_loss": 0.09483408511340347
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 0.5431612730728475
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 18,
+      "identity": {
+        "checkpoint": "f60cb6f277d87a010c7a6bc06ffb60c6f054c4bfd3d07970cc5c721349ecf8e6",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.580077661856194,
+      "gain": 57.89843703685619,
+      "penalty": 15.318359374999996,
+      "loss": 11.64664111168414,
+      "mean_abs_inventory": 1.103057861328125,
+      "bound_fraction": 0.0165252685546875,
+      "bins": [
+        {
+          "steps": 346,
+          "mean_loss": 0.3207430627360399
+        },
+        {
+          "steps": 1341,
+          "mean_loss": 0.32535937283174127
+        },
+        {
+          "steps": 1583,
+          "mean_loss": 0.30911482371713106
+        },
+        {
+          "steps": 2864,
+          "mean_loss": 0.2063039740206881
+        },
+        {
+          "steps": 4611,
+          "mean_loss": 0.10270335456287619
+        },
+        {
+          "steps": 5861,
+          "mean_loss": 0.07356187825621656
+        },
+        {
+          "steps": 1955,
+          "mean_loss": 0.082808390458386
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": 1.0367164479070325
+    },
+    {
+      "method": "varibad_hypernet",
+      "seed": 19,
+      "identity": {
+        "checkpoint": "8bf43ec9462fb032b77ad749b6bf04244eca72445b0c9a243700a360342421fc",
+        "config": "0ba936cef3454d72ddf2604d068761919b8099a53a0e216e97174d0793e53e4f",
+        "script": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
+        "rollout": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356"
+      },
+      "return": 42.63271414978226,
+      "gain": 60.570311806032265,
+      "penalty": 17.93759765625,
+      "loss": 13.710539246348237,
+      "mean_abs_inventory": 1.2024993896484375,
+      "bound_fraction": 0.01922607421875,
+      "bins": [
+        {
+          "steps": 323,
+          "mean_loss": 0.3156935192517568
+        },
+        {
+          "steps": 1252,
+          "mean_loss": 0.3080287002647264
+        },
+        {
+          "steps": 1442,
+          "mean_loss": 0.26984172116637034
+        },
+        {
+          "steps": 2672,
+          "mean_loss": 0.1742924388783455
+        },
+        {
+          "steps": 4384,
+          "mean_loss": 0.09768178842702907
+        },
+        {
+          "steps": 5201,
+          "mean_loss": 0.09380135677984834
+        },
+        {
+          "steps": 1956,
+          "mean_loss": 0.10286797735802547
+        }
+      ],
+      "oracle_optimum": 55.26343522144737,
+      "oracle_gap_minus_loss": -1.0798181746831297
+    }
+  ],
+  "methods": {
+    "rl2_concat": {
+      "return": {
+        "mean": 43.70770458834704,
+        "ci95": [
+          43.02538461229673,
+          44.463338761393594
+        ]
+      },
+      "gain": {
+        "mean": 61.07001904147205,
+        "ci95": [
+          60.63349313126548,
+          61.53232369386161
+        ]
+      },
+      "penalty": {
+        "mean": 17.362314453124995,
+        "ci95": [
+          16.538347534179685,
+          18.09279663085937
+        ]
+      },
+      "loss": {
+        "mean": 11.3815264099681,
+        "ci95": [
+          10.545358382233708,
+          12.097718112622617
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.1947357177734375,
+        "ci95": [
+          1.1623578071594238,
+          1.2240587043762206
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.019556427001953126,
+        "ci95": [
+          0.017882518768310547,
+          0.0210479736328125
+        ]
+      },
+      "oracle_gap_minus_loss": {
+        "mean": 0.17420422313222406,
+        "ci95": [
+          -0.24664335799776524,
+          0.565891046700229
+        ]
+      }
+    },
+    "rl2_hypernet": {
+      "return": {
+        "mean": 46.01571740392755,
+        "ci95": [
+          44.508533344588635,
+          47.39199333804592
+        ]
+      },
+      "gain": {
+        "mean": 60.947655880490046,
+        "ci95": [
+          60.297548398532186,
+          61.544631104832725
+        ]
+      },
+      "penalty": {
+        "mean": 14.931938476562497,
+        "ci95": [
+          13.860442260742186,
+          16.108879394531247
+        ]
+      },
+      "loss": {
+        "mean": 9.149345635590237,
+        "ci95": [
+          7.839182087629439,
+          10.568781738680146
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.0927253723144532,
+        "ci95": [
+          1.0504370689392089,
+          1.1385146141052247
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.0146148681640625,
+        "ci95": [
+          0.012625102996826171,
+          0.016843471527099606
+        ]
+      },
+      "oracle_gap_minus_loss": {
+        "mean": 0.09837218192957446,
+        "ci95": [
+          -0.30316056883788767,
+          0.5237068126015705
+        ]
+      }
+    },
+    "varibad_concat": {
+      "return": {
+        "mean": 37.60742111832733,
+        "ci95": [
+          37.117722636056214,
+          38.09455551660122
+        ]
+      },
+      "gain": {
+        "mean": 58.78144455582735,
+        "ci95": [
+          58.452145255816305,
+          59.104786840623966
+        ]
+      },
+      "penalty": {
+        "mean": 21.174023437499997,
+        "ci95": [
+          20.647019165039058,
+          21.708083007812498
+        ]
+      },
+      "loss": {
+        "mean": 17.603008694909356,
+        "ci95": [
+          17.134390272773764,
+          18.079412847772332
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.30345458984375,
+        "ci95": [
+          1.285740623474121,
+          1.3214406394958496
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.029933929443359375,
+        "ci95": [
+          0.0280548095703125,
+          0.03186492919921875
+        ]
+      },
+      "oracle_gap_minus_loss": {
+        "mean": 0.05300540821068296,
+        "ci95": [
+          -0.26323044166110976,
+          0.3609797469495808
+        ]
+      }
+    },
+    "varibad_hypernet": {
+      "return": {
+        "mean": 41.0509417426063,
+        "ci95": [
+          39.925817689412135,
+          42.24117180256711
+        ]
+      },
+      "gain": {
+        "mean": 59.74521420354381,
+        "ci95": [
+          59.23426931630749,
+          60.30841000776617
+        ]
+      },
+      "penalty": {
+        "mean": 18.694272460937498,
+        "ci95": [
+          17.70014990234375,
+          19.756717041015623
+        ]
+      },
+      "loss": {
+        "mean": 14.00492065611551,
+        "ci95": [
+          12.724583827482947,
+          15.245412167288421
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": 1.237543487548828,
+        "ci95": [
+          1.2051924324035646,
+          1.2728427314758302
+        ]
+      },
+      "bound_fraction": {
+        "mean": 0.020738983154296876,
+        "ci95": [
+          0.01865457534790039,
+          0.02294239044189453
+        ]
+      },
+      "oracle_gap_minus_loss": {
+        "mean": 0.20757282272555413,
+        "ci95": [
+          -0.139244387499548,
+          0.5681670717509621
+        ]
+      }
+    }
+  },
+  "comparisons": {
+    "rl2": {
+      "return": {
+        "mean": 2.308012815580514,
+        "ci95": [
+          0.6652791635086032,
+          3.866518306653241
+        ]
+      },
+      "gain": {
+        "mean": -0.12236316098199289,
+        "ci95": [
+          -0.947766007731805,
+          0.7133106757082167
+        ]
+      },
+      "penalty": {
+        "mean": -2.430375976562499,
+        "ci95": [
+          -3.6322985839843747,
+          -1.101805786132812
+        ]
+      },
+      "loss": {
+        "mean": -2.232180774377865,
+        "ci95": [
+          -3.739552157164525,
+          -0.5975249081172952
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": -0.10201034545898438,
+        "ci95": [
+          -0.14787200927734376,
+          -0.051862049102783206
+        ]
+      },
+      "bound_fraction": {
+        "mean": -0.004941558837890625,
+        "ci95": [
+          -0.007494487762451172,
+          -0.0021903228759765636
+        ]
+      },
+      "matched_loss_per_step": {
+        "mean": -0.011868277612271574,
+        "ci95": [
+          -0.02247818139740584,
+          -0.00028867037793713405
+        ]
+      },
+      "matched_overlap_fraction": {
+        "mean": 0.8197761535644531,
+        "ci95": [
+          0.810422248840332,
+          0.8298334121704101
+        ]
+      },
+      "after_switch_loss": [
+        {
+          "interval": [
+            0,
+            0
+          ],
+          "difference": {
+            "mean": -0.013292663916410962,
+            "ci95": [
+              -0.0284317531412189,
+              0.0010590444418406878
+            ]
+          }
+        },
+        {
+          "interval": [
+            1,
+            4
+          ],
+          "difference": {
+            "mean": -0.012376921428171442,
+            "ci95": [
+              -0.0251082187741098,
+              0.0005784878737576758
+            ]
+          }
+        },
+        {
+          "interval": [
+            5,
+            9
+          ],
+          "difference": {
+            "mean": -0.016268546700545023,
+            "ci95": [
+              -0.03113254202150459,
+              -0.0013683785103659595
+            ]
+          }
+        },
+        {
+          "interval": [
+            10,
+            19
+          ],
+          "difference": {
+            "mean": -0.027282687170907528,
+            "ci95": [
+              -0.04453108167149967,
+              -0.008746405679944622
+            ]
+          }
+        },
+        {
+          "interval": [
+            20,
+            39
+          ],
+          "difference": {
+            "mean": -0.03327470728374014,
+            "ci95": [
+              -0.04921723457245409,
+              -0.01594483554220302
+            ]
+          }
+        },
+        {
+          "interval": [
+            40,
+            79
+          ],
+          "difference": {
+            "mean": -0.02845999385420426,
+            "ci95": [
+              -0.04329094159828403,
+              -0.01266542113170727
+            ]
+          }
+        },
+        {
+          "interval": [
+            80,
+            126
+          ],
+          "difference": {
+            "mean": -0.01921367742894407,
+            "ci95": [
+              -0.03062637476373647,
+              -0.007240566310056947
+            ]
+          }
+        }
+      ]
+    },
+    "varibad": {
+      "return": {
+        "mean": 3.443520624278972,
+        "ci95": [
+          2.111610516584324,
+          4.862324162365603
+        ]
+      },
+      "gain": {
+        "mean": 0.9637696477164652,
+        "ci95": [
+          0.27187264927406923,
+          1.7107422919176623
+        ]
+      },
+      "penalty": {
+        "mean": -2.479750976562498,
+        "ci95": [
+          -3.7108383789062485,
+          -1.2627430419921861
+        ]
+      },
+      "loss": {
+        "mean": -3.5980880387938434,
+        "ci95": [
+          -5.047122075204483,
+          -2.2124666987329835
+        ]
+      },
+      "mean_abs_inventory": {
+        "mean": -0.06591110229492188,
+        "ci95": [
+          -0.10589300155639648,
+          -0.025472545623779305
+        ]
+      },
+      "bound_fraction": {
+        "mean": -0.0091949462890625,
+        "ci95": [
+          -0.012358303070068358,
+          -0.00612255096435547
+        ]
+      },
+      "matched_loss_per_step": {
+        "mean": -0.022091309815655387,
+        "ci95": [
+          -0.03484654470582282,
+          -0.009613214389461179
+        ]
+      },
+      "matched_overlap_fraction": {
+        "mean": 0.8522720336914062,
+        "ci95": [
+          0.8356200790405273,
+          0.8673699569702148
+        ]
+      },
+      "after_switch_loss": [
+        {
+          "interval": [
+            0,
+            0
+          ],
+          "difference": {
+            "mean": -0.021408316555389474,
+            "ci95": [
+              -0.04344649651988441,
+              -0.0006157591624926033
+            ]
+          }
+        },
+        {
+          "interval": [
+            1,
+            4
+          ],
+          "difference": {
+            "mean": -0.03282759312015425,
+            "ci95": [
+              -0.054178586445605324,
+              -0.01121254969357079
+            ]
+          }
+        },
+        {
+          "interval": [
+            5,
+            9
+          ],
+          "difference": {
+            "mean": -0.032816062659908905,
+            "ci95": [
+              -0.053240928213889205,
+              -0.0116418713151233
+            ]
+          }
+        },
+        {
+          "interval": [
+            10,
+            19
+          ],
+          "difference": {
+            "mean": -0.06358421969784407,
+            "ci95": [
+              -0.08454717418211907,
+              -0.04234320127841112
+            ]
+          }
+        },
+        {
+          "interval": [
+            20,
+            39
+          ],
+          "difference": {
+            "mean": -0.08877894317692,
+            "ci95": [
+              -0.106955981776714,
+              -0.07069218406324955
+            ]
+          }
+        },
+        {
+          "interval": [
+            40,
+            79
+          ],
+          "difference": {
+            "mean": -0.05767398965246652,
+            "ci95": [
+              -0.07554839078853233,
+              -0.040635439214621025
+            ]
+          }
+        },
+        {
+          "interval": [
+            80,
+            126
+          ],
+          "difference": {
+            "mean": -0.0269251165666061,
+            "ci95": [
+              -0.04028375833560264,
+              -0.01370248884961883
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

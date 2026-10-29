@@ -27,9 +27,10 @@ def main():
  quality=json.loads((a.input.parent/'decision_quality_comparisons.json').read_text())
  fig,axes=plt.subplots(2,2,figsize=(11,6),sharex=True)
  for ax,c in zip(axes.flat,quality['comparisons']):
-  for y,key,marker in [(0,'all_decisions','o'),(1,'comparable_situations','s')]:
-   e=c[key];v=e['mean'];lo,hi=e['ci95'];ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt=marker,color='black',mfc='white' if marker=='s' else 'black',capsize=4,ms=6)
-  ax.axvline(0,color='grey',lw=1);ax.set(yticks=[0,1],yticklabels=['All recorded decisions','Comparable situations'],title=c['label'],ylim=(1.6,-.6));ax.spines[['top','right','left']].set_visible(False);ax.tick_params(axis='y',length=0)
+  e=c['comparable_situations'];v=e['mean'];lo,hi=e['ci95']
+  ax.errorbar(v,0,xerr=[[v-lo],[hi-v]],fmt='o',color='black',capsize=5,ms=7)
+  ax.axvline(0,color='grey',lw=1);ax.set(yticks=[],title=c['label'],ylim=(-.6,.6));ax.spines[['top','right','left']].set_visible(False)
+  ax.text(.5,.12,f"Shared-state overlap: {100*c['overlap']['mean']:.0f}%",transform=ax.transAxes,ha='center',fontsize=11)
  for ax in axes[-1]:ax.set_xlabel('Reduction in decision loss per decision\n(positive favours the first named agent)')
  fig.tight_layout();fig.savefig(a.output/'decision_quality.pdf');plt.close(fig)
 if __name__=='__main__':main()

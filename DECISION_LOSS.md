@@ -37,3 +37,9 @@ unadjusted 95% intervals; no causal architecture or detection-speed claim follow
 Expected cumulative decision loss equals the full-information expected return gap, but finite
 sample realised returns differ through initial draws and transition/reward sampling noise.
 The tests verify the Bellman values against the existing oracle and this telescoping identity.
+
+Main explanation charts can be regenerated from the same saved summary:
+
+```sh
+python -m scripts.plot_control_explanations --input reproduction/data/decision_loss_summary.json --output /tmp/control-charts
+```

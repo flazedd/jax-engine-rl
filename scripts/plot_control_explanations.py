@@ -1,0 +1,26 @@
+"""Charts of saved return components and matched decision loss; no model updates."""
+import argparse,json
+from pathlib import Path
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+def main():
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--input',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();d=json.loads(a.input.read_text());a.output.mkdir(parents=True,exist_ok=True)
+ plt.rcParams.update({'font.size':12,'pdf.fonttype':42,'font.family':'DejaVu Sans'})
+ fig,axes=plt.subplots(1,2,figsize=(10,3.8),sharex=True)
+ for ax,key,label in zip(axes,['rl2','varibad'],['RL²','VariBAD']):
+  c=d['comparisons'][key]
+  for y,metric,sign in [(0,'gain',1),(1,'penalty',-1)]:
+   e=c[metric];v=sign*e['mean'];lo,hi=sorted(sign*x for x in e['ci95']);ax.barh(y,v,height=.45,color=['#b4bec4','#269d91'][y]);ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt='none',color='black',capsize=4)
+  ax.plot(c['return']['mean'],2,'D',color='black',ms=7);ax.axvline(0,color='black',lw=.8);ax.set(yticks=[0,1,2],yticklabels=['Trading gains','Penalty savings','Net return gain'],title=label,xlabel='Hypernetwork minus concatenation');ax.invert_yaxis();ax.spines[['top','right']].set_visible(False);ax.set_xlim(-1.2,4.4)
+ fig.tight_layout();fig.savefig(a.output/'return_components.pdf');plt.close(fig)
+ fig,ax=plt.subplots(figsize=(8,3.2))
+ for i,(key,label) in enumerate([('rl2','RL²'),('varibad','VariBAD')]):
+  c=d['comparisons'][key]
+  for metric,offset,marker,scale in [('loss',-.12,'o',128),('matched_loss_per_step',.12,'s',1)]:
+   e=c[metric];v=e['mean']/scale;lo,hi=np.array(e['ci95'])/scale
+   ax.errorbar(v,i+offset,xerr=[[v-lo],[hi-v]],fmt=marker,color='black',mfc='white' if marker=='s' else 'black',capsize=4,label=('Own trajectories' if marker=='o' else 'Matched states') if i==0 else None)
+ ax.axvline(0,color='grey',lw=1);ax.set(yticks=[0,1],yticklabels=['RL²','VariBAD'],xlabel='Decision loss difference per decision\n(hypernetwork minus concatenation)');ax.invert_yaxis();ax.spines[['top','right']].set_visible(False);ax.legend(frameon=False,loc='lower left',bbox_to_anchor=(0,1.01),ncol=2);fig.tight_layout();fig.savefig(a.output/'decision_quality.pdf');plt.close(fig)
+if __name__=='__main__':main()

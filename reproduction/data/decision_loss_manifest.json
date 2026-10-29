@@ -2,7 +2,7 @@
   "analysis": "Frozen-checkpoint return accounting and decision loss",
   "sha256": {
     "scripts/decision_loss_analysis.py": "689b5c05a658a3463f105b95482b9b83296b0a16b936248a0aa0baefe3ee6e21",
-    "scripts/summarize_decision_loss.py": "bd4dfbd5fd66f3fe7d648302ccbbd250708058488aa568018f431f6e7d2b227c",
+    "scripts/summarize_decision_loss.py": "39ee4fe489184e6dfd6241e63ffcb6dce75c8d8035d29515cd1fb8b2c5bfdbfb",
     "tests/test_decision_loss_analysis.py": "4efddc6a9f37e4efdc305fab5163d75af4c9a81f04efe54cfd968559827007d8",
     "oracles/value_iteration.py": "5e7b00e89be2c04fb0ae50970db51040928ed60e8356bafcee8908d27592dc3d",
     "envs/market_making_v1.py": "d80025b6d66c49f86496c6152ef0f61cc961d21184f8c1354738c953e7f32c00",

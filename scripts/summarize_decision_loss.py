@@ -8,7 +8,7 @@ def main():
  def estimate(e,digits=2):return f"${e['mean']:+.{digits}f}$ & $[{e['ci95'][0]:+.{digits}f}, {e['ci95'][1]:+.{digits}f}]$"
  lines=[r'\begin{tabular}{llrr}',r'\toprule',r'Method & Component & Difference & $95\%$ interval \\',r'\midrule']
  for family,label in [('rl2',r'RL\textsuperscript{2}'),('varibad','VariBAD')]:
-  for metric,name in [('return','Return'),('gain','Trading gains'),('penalty','Inventory penalty')]:lines.append(label+' & '+name+' & '+estimate(d['comparisons'][family][metric])+r' \\')
+  for metric,name in [('return','Return'),('gain','Trading gains'),('penalty','Inventory penalty')]:lines.append(label+' & '+name+' & '+(f"${d['comparisons'][family][metric]['mean']:+.2f}$ & --" if metric=='return' else estimate(d['comparisons'][family][metric]))+r' \\')
  lines += [r'\bottomrule',r'\end{tabular}'];(a.tables/'return_decomposition.tex').write_text('\n'.join(lines)+'\n')
  lines=[r'\begin{tabular}{llrr}',r'\toprule',r'Method & Decision loss & Difference & $95\%$ interval \\',r'\midrule']
  for family,label in [('rl2',r'RL\textsuperscript{2}'),('varibad','VariBAD')]:

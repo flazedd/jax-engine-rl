@@ -14,7 +14,7 @@ def main():
   c=d['comparisons'][key]
   for y,metric,sign in [(0,'gain',1),(1,'penalty',-1)]:
    e=c[metric];v=sign*e['mean'];lo,hi=sorted(sign*x for x in e['ci95']);ax.barh(y,v,height=.45,color=['#b4bec4','#269d91'][y]);ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt='none',color='black',capsize=4)
-  ax.plot(c['return']['mean'],2,'D',color='black',ms=7);ax.axvline(0,color='black',lw=.8);ax.set(yticks=[0,1,2],yticklabels=['Trading gains','Penalty savings','Net return gain'],title=label,xlabel='Hypernetwork minus concatenation');ax.invert_yaxis();ax.spines[['top','right']].set_visible(False);ax.set_xlim(-1.2,4.4)
+  ax.barh(2,c['return']['mean'],height=.45,color='#303030');ax.axvline(0,color='black',lw=.8);ax.set(yticks=[0,1,2],yticklabels=['Trading gains','Penalty savings','Total return gain'],title=label,xlabel='Hypernetwork minus concatenation');ax.invert_yaxis();ax.spines[['top','right']].set_visible(False);ax.set_xlim(-1.2,4.4)
  fig.tight_layout();fig.savefig(a.output/'return_components.pdf');plt.close(fig)
  fig,ax=plt.subplots(figsize=(8,3.2))
  for i,(key,label) in enumerate([('rl2','RL²'),('varibad','VariBAD')]):

@@ -43,3 +43,9 @@ Main explanation charts can be regenerated from the same saved summary:
 ```sh
 python -m scripts.plot_control_explanations --input reproduction/data/decision_loss_summary.json --output /tmp/control-charts
 ```
+
+The joint switch overview reads the original saved-results archive and verifies all checkpoint hashes and returns against the decision-loss summary:
+
+```sh
+python -m scripts.plot_switch_overview --archive reproduction/data/saved-results.tar.gz --decision-loss reproduction/data/decision_loss_summary.json --output /tmp/switch_overview.pdf
+```

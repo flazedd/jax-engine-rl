@@ -9,7 +9,8 @@
     "evaluation/action_distribution.py": "380099e70a088b02dae9b63089b859cd7321d9f3dfe7fac4b336d287849ec356",
     "evaluation/posterior_probe.py": "a1170a2d427dff089dde4fea381397b0064887e0d42198521ff14e986cc47c65",
     "reproduction/data/decision_loss_summary.json": "b9e517cc546982a26dc226defcc861a9f28753f2b2237edc2bdbda7ccb85556a",
-    "scripts/plot_control_explanations.py": "189b83a5688704d305cfb099d2e783fe0c9af6c8be05bca4b38dfb5cc9cc94a2"
+    "scripts/plot_control_explanations.py": "189b83a5688704d305cfb099d2e783fe0c9af6c8be05bca4b38dfb5cc9cc94a2",
+    "scripts/plot_switch_overview.py": "11dc7a5e70ba17bda662c32267f67e8901743a0574c7506241ebe9b2bdddc609"
   },
   "runs": 80,
   "episodes_per_run": 512,

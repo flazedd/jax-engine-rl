@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--input',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();d=json.loads(a.input.read_text());a.output.mkdir(parents=True,exist_ok=True)
  plt.rcParams.update({'font.size':12,'pdf.fonttype':42,'font.family':'DejaVu Sans'})
- fig,axes=plt.subplots(2,2,figsize=(10,6),sharex=True)
- for ax,method,label in zip(axes.flat,['rl2_concat','rl2_hypernet','varibad_concat','varibad_hypernet'],['RL² concatenation','RL² hypernetwork','VariBAD concatenation','VariBAD hypernetwork']):
-  for y,metric,sign,color in [(0,'gain',1,'#b4bec4'),(1,'penalty',-1,'#269d91'),(2,'return',1,'#303030')]:
-   e=d['methods'][method][metric];v=sign*e['mean'];lo,hi=sorted(sign*x for x in e['ci95']);ax.barh(y,v,height=.5,color=color);ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt='none',color='black',capsize=4)
-  ax.axvline(0,color='black',lw=.8);ax.set(yticks=[0,1,2],yticklabels=['Trading gains','Inventory penalty','Total return'],title=label);ax.invert_yaxis();ax.spines[['top','right']].set_visible(False)
- for ax in axes[-1]:ax.set_xlabel('Mean episode total')
+ fig,axes=plt.subplots(1,2,figsize=(10,3.8),sharex=True)
+ for ax,key,label in zip(axes,['rl2','varibad'],['RL²','VariBAD']):
+  c=d['comparisons'][key]
+  for y,metric,sign in [(0,'gain',1),(1,'penalty',-1)]:
+   e=c[metric];v=sign*e['mean'];lo,hi=sorted(sign*x for x in e['ci95']);ax.barh(y,v,height=.45,color=['#b4bec4','#269d91'][y]);ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt='none',color='black',capsize=4)
+  ax.barh(2,c['return']['mean'],height=.45,color='#303030');ax.axvline(0,color='black',lw=.8);ax.set(yticks=[0,1,2],yticklabels=['Trading gains','Penalty savings','Total return gain'],title=label,xlabel='Hypernetwork minus concatenation');ax.invert_yaxis();ax.spines[['top','right']].set_visible(False);ax.set_xlim(-1.2,4.4)
  fig.tight_layout();fig.savefig(a.output/'return_components.pdf');plt.close(fig)
  fig,ax=plt.subplots(figsize=(8,3.2))
  for i,(key,label) in enumerate([('rl2','RL²'),('varibad','VariBAD')]):

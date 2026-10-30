@@ -187,5 +187,424 @@
     "varibad_concat_18.npz": "c11bad5b834461b69ffe30312ff7b3eb9a0b461d1a70b3fd1cb0c7c827f46a6c",
     "varibad_hypernet_19.npz": "bedddf6525f9409ccfc4dbe005f9d6c10b1ab32759e587683900a586a6500923",
     "varibad_concat_19.npz": "9a8709d18fcf787b830f1070738727da5b9f71a46c082c9bbdac751eeea19dfa"
+  },
+  "common_states": {
+    "weighting": "Minimum visit count across all four configurations within each seed; exact episode step, inventory and regime.",
+    "configurations": {
+      "rl2_concat": {
+        "mean": 0.06889960331559272,
+        "ci95": [
+          0.06293653435553247,
+          0.07438534461907673
+        ]
+      },
+      "rl2_hypernet": {
+        "mean": 0.059239902984492235,
+        "ci95": [
+          0.04964262795664725,
+          0.07033464839033696
+        ]
+      },
+      "varibad_concat": {
+        "mean": 0.1077341120482213,
+        "ci95": [
+          0.10403244608770866,
+          0.11165887102481983
+        ]
+      },
+      "varibad_hypernet": {
+        "mean": 0.0900171039033396,
+        "ci95": [
+          0.07954172156602336,
+          0.1002733755135247
+        ]
+      }
+    },
+    "coverage": {
+      "rl2_concat": {
+        "mean": 0.7010078430175781,
+        "ci95": [
+          0.6905104637145997,
+          0.7122905540466309
+        ],
+        "min": 0.6626129150390625,
+        "max": 0.7511138916015625
+      },
+      "rl2_hypernet": {
+        "mean": 0.7010078430175781,
+        "ci95": [
+          0.6905104637145997,
+          0.7122905540466309
+        ],
+        "min": 0.6626129150390625,
+        "max": 0.7511138916015625
+      },
+      "varibad_concat": {
+        "mean": 0.7010078430175781,
+        "ci95": [
+          0.6905104637145997,
+          0.7122905540466309
+        ],
+        "min": 0.6626129150390625,
+        "max": 0.7511138916015625
+      },
+      "varibad_hypernet": {
+        "mean": 0.7010078430175781,
+        "ci95": [
+          0.6905104637145997,
+          0.7122905540466309
+        ],
+        "min": 0.6626129150390625,
+        "max": 0.7511138916015625
+      }
+    },
+    "comparisons": [
+      {
+        "first": "rl2_hypernet",
+        "second": "rl2_concat",
+        "reduction": {
+          "mean": 0.009659700331100488,
+          "ci95": [
+            -0.001094913534047799,
+            0.019586273984436808
+          ]
+        }
+      },
+      {
+        "first": "varibad_hypernet",
+        "second": "varibad_concat",
+        "reduction": {
+          "mean": 0.01771700814488167,
+          "ci95": [
+            0.008162958265131835,
+            0.027701563672577457
+          ]
+        }
+      },
+      {
+        "first": "rl2_concat",
+        "second": "varibad_concat",
+        "reduction": {
+          "mean": 0.03883450873262856,
+          "ci95": [
+            0.033443301971146436,
+            0.04415838750744145
+          ]
+        }
+      },
+      {
+        "first": "rl2_hypernet",
+        "second": "varibad_hypernet",
+        "reduction": {
+          "mean": 0.030777200918847374,
+          "ci95": [
+            0.019206496506553265,
+            0.042169849522458606
+          ]
+        }
+      }
+    ],
+    "rows": [
+      {
+        "seed": 0,
+        "loss": {
+          "rl2_concat": 0.07072757331626517,
+          "rl2_hypernet": 0.07210465762686359,
+          "varibad_concat": 0.10032845987498136,
+          "varibad_hypernet": 0.0613216278167985
+        },
+        "coverage": {
+          "rl2_concat": 0.6946258544921875,
+          "rl2_hypernet": 0.6946258544921875,
+          "varibad_concat": 0.6946258544921875,
+          "varibad_hypernet": 0.6946258544921875
+        }
+      },
+      {
+        "seed": 1,
+        "loss": {
+          "rl2_concat": 0.07084745120197825,
+          "rl2_hypernet": 0.0439367620065741,
+          "varibad_concat": 0.10525744008973123,
+          "varibad_hypernet": 0.04441384583031457
+        },
+        "coverage": {
+          "rl2_concat": 0.6626129150390625,
+          "rl2_hypernet": 0.6626129150390625,
+          "varibad_concat": 0.6626129150390625,
+          "varibad_hypernet": 0.6626129150390625
+        }
+      },
+      {
+        "seed": 2,
+        "loss": {
+          "rl2_concat": 0.04558835940083085,
+          "rl2_hypernet": 0.04019890557643307,
+          "varibad_concat": 0.09365360596370113,
+          "varibad_hypernet": 0.09674099035621413
+        },
+        "coverage": {
+          "rl2_concat": 0.6891021728515625,
+          "rl2_hypernet": 0.6891021728515625,
+          "varibad_concat": 0.6891021728515625,
+          "varibad_hypernet": 0.6891021728515625
+        }
+      },
+      {
+        "seed": 3,
+        "loss": {
+          "rl2_concat": 0.07937251713667033,
+          "rl2_hypernet": 0.10548386902696323,
+          "varibad_concat": 0.11669612873385869,
+          "varibad_hypernet": 0.11365223641202239
+        },
+        "coverage": {
+          "rl2_concat": 0.7468719482421875,
+          "rl2_hypernet": 0.7468719482421875,
+          "varibad_concat": 0.7468719482421875,
+          "varibad_hypernet": 0.7468719482421875
+        }
+      },
+      {
+        "seed": 4,
+        "loss": {
+          "rl2_concat": 0.0682828823084925,
+          "rl2_hypernet": 0.04129205953741392,
+          "varibad_concat": 0.10718026523423504,
+          "varibad_hypernet": 0.10824446078904654
+        },
+        "coverage": {
+          "rl2_concat": 0.690032958984375,
+          "rl2_hypernet": 0.690032958984375,
+          "varibad_concat": 0.690032958984375,
+          "varibad_hypernet": 0.690032958984375
+        }
+      },
+      {
+        "seed": 5,
+        "loss": {
+          "rl2_concat": 0.08110380274749225,
+          "rl2_hypernet": 0.1201021840792765,
+          "varibad_concat": 0.12192618559532997,
+          "varibad_hypernet": 0.09708434660418806
+        },
+        "coverage": {
+          "rl2_concat": 0.7511138916015625,
+          "rl2_hypernet": 0.7511138916015625,
+          "varibad_concat": 0.7511138916015625,
+          "varibad_hypernet": 0.7511138916015625
+        }
+      },
+      {
+        "seed": 6,
+        "loss": {
+          "rl2_concat": 0.06024096322786535,
+          "rl2_hypernet": 0.03933701223071527,
+          "varibad_concat": 0.10010095348672099,
+          "varibad_hypernet": 0.09911521965330444
+        },
+        "coverage": {
+          "rl2_concat": 0.6663665771484375,
+          "rl2_hypernet": 0.6663665771484375,
+          "varibad_concat": 0.6663665771484375,
+          "varibad_hypernet": 0.6663665771484375
+        }
+      },
+      {
+        "seed": 7,
+        "loss": {
+          "rl2_concat": 0.042647788440070486,
+          "rl2_hypernet": 0.07763495715404493,
+          "varibad_concat": 0.10210000652938725,
+          "varibad_hypernet": 0.12064495324968237
+        },
+        "coverage": {
+          "rl2_concat": 0.67901611328125,
+          "rl2_hypernet": 0.67901611328125,
+          "varibad_concat": 0.67901611328125,
+          "varibad_hypernet": 0.67901611328125
+        }
+      },
+      {
+        "seed": 8,
+        "loss": {
+          "rl2_concat": 0.07940607491512211,
+          "rl2_hypernet": 0.04305280819943516,
+          "varibad_concat": 0.11478672036136385,
+          "varibad_hypernet": 0.1141474866206474
+        },
+        "coverage": {
+          "rl2_concat": 0.7175140380859375,
+          "rl2_hypernet": 0.7175140380859375,
+          "varibad_concat": 0.7175140380859375,
+          "varibad_hypernet": 0.7175140380859375
+        }
+      },
+      {
+        "seed": 9,
+        "loss": {
+          "rl2_concat": 0.080320118642919,
+          "rl2_hypernet": 0.058753636141046645,
+          "varibad_concat": 0.11108469780202301,
+          "varibad_hypernet": 0.11319250121601132
+        },
+        "coverage": {
+          "rl2_concat": 0.7100372314453125,
+          "rl2_hypernet": 0.7100372314453125,
+          "varibad_concat": 0.7100372314453125,
+          "varibad_hypernet": 0.7100372314453125
+        }
+      },
+      {
+        "seed": 10,
+        "loss": {
+          "rl2_concat": 0.06698970682885962,
+          "rl2_hypernet": 0.03440302205429246,
+          "varibad_concat": 0.09876142941670493,
+          "varibad_hypernet": 0.0660505011422398
+        },
+        "coverage": {
+          "rl2_concat": 0.6740264892578125,
+          "rl2_hypernet": 0.6740264892578125,
+          "varibad_concat": 0.6740264892578125,
+          "varibad_hypernet": 0.6740264892578125
+        }
+      },
+      {
+        "seed": 11,
+        "loss": {
+          "rl2_concat": 0.07474968065328229,
+          "rl2_hypernet": 0.04136026021893422,
+          "varibad_concat": 0.11538199323040127,
+          "varibad_hypernet": 0.04988696695740108
+        },
+        "coverage": {
+          "rl2_concat": 0.6836090087890625,
+          "rl2_hypernet": 0.6836090087890625,
+          "varibad_concat": 0.6836090087890625,
+          "varibad_hypernet": 0.6836090087890625
+        }
+      },
+      {
+        "seed": 12,
+        "loss": {
+          "rl2_concat": 0.0692793396734539,
+          "rl2_hypernet": 0.037598851027095724,
+          "varibad_concat": 0.10442797450351912,
+          "varibad_hypernet": 0.10059518321995237
+        },
+        "coverage": {
+          "rl2_concat": 0.6884613037109375,
+          "rl2_hypernet": 0.6884613037109375,
+          "varibad_concat": 0.6884613037109375,
+          "varibad_hypernet": 0.6884613037109375
+        }
+      },
+      {
+        "seed": 13,
+        "loss": {
+          "rl2_concat": 0.07778367707244374,
+          "rl2_hypernet": 0.08050272448248003,
+          "varibad_concat": 0.12052591072635335,
+          "varibad_hypernet": 0.11765863100811687
+        },
+        "coverage": {
+          "rl2_concat": 0.7106170654296875,
+          "rl2_hypernet": 0.7106170654296875,
+          "varibad_concat": 0.7106170654296875,
+          "varibad_hypernet": 0.7106170654296875
+        }
+      },
+      {
+        "seed": 14,
+        "loss": {
+          "rl2_concat": 0.06974679950916068,
+          "rl2_hypernet": 0.04510755364390816,
+          "varibad_concat": 0.09980571320951846,
+          "varibad_hypernet": 0.08101633256884143
+        },
+        "coverage": {
+          "rl2_concat": 0.68218994140625,
+          "rl2_hypernet": 0.68218994140625,
+          "varibad_concat": 0.68218994140625,
+          "varibad_hypernet": 0.68218994140625
+        }
+      },
+      {
+        "seed": 15,
+        "loss": {
+          "rl2_concat": 0.07614265299811031,
+          "rl2_hypernet": 0.04272540890015513,
+          "varibad_concat": 0.105667423190015,
+          "varibad_hypernet": 0.06288542669901546
+        },
+        "coverage": {
+          "rl2_concat": 0.7198486328125,
+          "rl2_hypernet": 0.7198486328125,
+          "varibad_concat": 0.7198486328125,
+          "varibad_hypernet": 0.7198486328125
+        }
+      },
+      {
+        "seed": 16,
+        "loss": {
+          "rl2_concat": 0.04567156324396779,
+          "rl2_hypernet": 0.06663443462748532,
+          "varibad_concat": 0.10120250944859795,
+          "varibad_hypernet": 0.07694289330777093
+        },
+        "coverage": {
+          "rl2_concat": 0.7022552490234375,
+          "rl2_hypernet": 0.7022552490234375,
+          "varibad_concat": 0.7022552490234375,
+          "varibad_hypernet": 0.7022552490234375
+        }
+      },
+      {
+        "seed": 17,
+        "loss": {
+          "rl2_concat": 0.07339432653618848,
+          "rl2_hypernet": 0.07232238453588898,
+          "varibad_concat": 0.12441945209975676,
+          "varibad_hypernet": 0.11717965350959016
+        },
+        "coverage": {
+          "rl2_concat": 0.7473602294921875,
+          "rl2_hypernet": 0.7473602294921875,
+          "varibad_concat": 0.7473602294921875,
+          "varibad_hypernet": 0.7473602294921875
+        }
+      },
+      {
+        "seed": 18,
+        "loss": {
+          "rl2_concat": 0.05388355761531904,
+          "rl2_hypernet": 0.04628716545158184,
+          "varibad_concat": 0.11403555335675415,
+          "varibad_hypernet": 0.07148565303872095
+        },
+        "coverage": {
+          "rl2_concat": 0.69732666015625,
+          "rl2_hypernet": 0.69732666015625,
+          "varibad_concat": 0.69732666015625,
+          "varibad_hypernet": 0.69732666015625
+        }
+      },
+      {
+        "seed": 19,
+        "loss": {
+          "rl2_concat": 0.09181323084336235,
+          "rl2_hypernet": 0.07595940316925646,
+          "varibad_concat": 0.09733981811147206,
+          "varibad_hypernet": 0.08808316806691348
+        },
+        "coverage": {
+          "rl2_concat": 0.7071685791015625,
+          "rl2_hypernet": 0.7071685791015625,
+          "varibad_concat": 0.7071685791015625,
+          "varibad_hypernet": 0.7071685791015625
+        }
+      }
+    ]
   }
 }

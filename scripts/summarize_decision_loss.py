@@ -15,6 +15,12 @@ def main():
   c=d['comparisons'][family];own={k:(v/128 if k=='mean' else [x/128 for x in v]) for k,v in c['loss'].items()}
   lines += [label+' & Own trajectories & '+estimate(own,4)+r' \\',label+' & Matched states & '+estimate(c['matched_loss_per_step'],4)+r' \\']
  lines += [r'\bottomrule',r'\end{tabular}'];(a.tables/'decision_loss.tex').write_text('\n'.join(lines)+'\n')
+ lines=[r'\begin{tabular}{llrr}',r'\toprule',r'Method & Steps since switch & Difference & $95\%$ interval \\',r'\midrule']
+ labels=['0','1--4','5--9','10--19','20--39','40--79','80--126']
+ for family,label in [('rl2',r'RL\textsuperscript{2}'),('varibad','VariBAD')]:
+  for i,b in enumerate(d['comparisons'][family]['after_switch_loss']):
+   lines.append((label if i==0 else '')+' & '+labels[i]+' & '+estimate(b['difference'],4)+r' \\')
+ lines += [r'\bottomrule',r'\end{tabular}'];(a.tables/'decision_loss_switch_differences.tex').write_text('\n'.join(lines)+'\n')
  import matplotlib;matplotlib.use('Agg')
  import matplotlib.pyplot as plt
  plt.rcParams.update({'font.size':12,'pdf.fonttype':42})

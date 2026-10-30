@@ -105,8 +105,10 @@ def main():
             for method in METHODS:
                 cells = ["Linear" if classifier == "logistic" else "MLP",
                          "Concatenation" if method == METHODS[0] else "Hypernetwork"]
-                cells += [f"${summary['classifiers'][classifier]['means'][method][inp][metric]:.3f}$"
-                          for inp in INPUTS for metric in METRICS]
+                for inp in INPUTS:
+                    for metric in METRICS:
+                        value = summary['classifiers'][classifier]['means'][method][inp][metric]
+                        cells.append(f"${100 * value:.1f}\\%$" if metric == "accuracy" else f"${value:.3f}$")
                 lines.append(" & ".join(cells) + r" \\")
         lines += [r"\bottomrule", r"\end{tabular}"]
         args.table.parent.mkdir(parents=True, exist_ok=True)

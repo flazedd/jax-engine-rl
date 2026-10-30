@@ -1,10 +1,11 @@
 # Frozen-checkpoint inventory exposure and accepted fills
 
-No training or policy updates. Prepare the original saved data and checkpoints using
-REPRODUCE.md, then run from the repository root:
+No training or policy updates. First install the locked dependencies with `uv sync --locked`
+and prepare the saved data and checkpoints using REPRODUCE.md. Run these commands from the
+repository root:
 
 ```sh
-python -m scripts.inventory_activity_analysis
+uv run python -m scripts.inventory_activity_analysis
 ```
 
 This replays the same 512 evaluation episodes for each of the 80 learned checkpoints.
@@ -27,7 +28,7 @@ histograms and fill counts are saved, with checkpoint/config/collector/script ha
 To regenerate the chart and table from packaged data, without checkpoints:
 
 ```sh
-python -m scripts.plot_inventory_activity --input reproduction/data/inventory_activity_summary.json --figure /tmp/inventory_activity.pdf --table /tmp/inventory_activity.tex
+uv run python -m scripts.plot_inventory_activity --input reproduction/data/inventory_activity_summary.json --figure /tmp/inventory_activity.pdf --table /tmp/inventory_activity.tex
 ```
 
 Verify source and summary hashes in reproduction/data/inventory_activity_manifest.json.

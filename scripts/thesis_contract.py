@@ -223,6 +223,10 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
                     "architecture_returns": "tab:integration_gap", "method_returns": "tab:method_effect"}
     for table, fragments in expected_fragments.items():
         table_text = _thesis_table_text(thesis_root, table_labels[table])
+        # These historical analyses are still checked as data, but their tables
+        # were removed when Chapter 5 switched to control and quote-quality results.
+        if table in ("diagnostics", "decoupling") and not table_text:
+            continue
         for fragment in fragments:
             if " ".join(fragment.split()) not in table_text:
                 findings.append({"kind": "thesis_table_drift", "table": table,
@@ -264,15 +268,53 @@ def _check_thesis_result_tables(thesis_root: Path, root: Path, findings: list[di
             fragment = f"{display} & ${mean:.2f}$ & ${sd:.2f}$ & ${(mean-floor)/gap:.2f}$"
             if fragment not in appendix:
                 findings.append({"kind":"thesis_table_drift", "table":"variant_ladder", "row":key})
-            if key in ("regime_agnostic_ppo", "stacked_obs_ppo", "belief_ppo", "oracle_ppo"):
-                lo,hi = result["evaluation_return_ci95"]
-                fragment = f"{display} & ${mean:.2f}$ & ${sd:.2f}$ & $[{lo:.2f},\\ {hi:.2f}]$"
-                if fragment not in appendix:
-                    findings.append({"kind":"thesis_table_drift", "table":"reference_levels", "row":key})
+            # The current variant-ladder table above includes all four reference
+            # agents. The earlier duplicate reference-level table was removed.
     for fragment in ("& $\\geq 0.85$ & $0.964$ & Pass",):
         if fragment not in _thesis_table_text(thesis_root, "tab:validation_requirements"):
             findings.append({"kind": "thesis_table_drift", "table": "environment_validation",
                              "expected_fragment": fragment})
+
+
+def _check_full_representation_tables(thesis_root: Path, root: Path, findings: list[dict]) -> None:
+    """Keep the full-input summary and its gains aligned with unrounded scores."""
+    full = _load(root / "analysis/m5r_full_belief_summary.json")
+    probe = _load(root / "analysis/m5r_posterior_vs_performance.json")
+    if not full or not probe:
+        findings.append({"kind": "missing_artifact", "set": "full_representation_tables"})
+        return
+    primary = _thesis_table_text(thesis_root, "tab:primary_probe_summary")
+    for method in ("rl2", "varibad"):
+        for architecture in ("concat", "hypernet"):
+            name = f"{method}_{architecture}"
+            if method == "rl2":
+                points = [p for p in probe["scatter_points"] if p["method"] == name]
+                accuracy = np.mean([p["method_test_acc"] for p in points])
+                kl = np.mean([p["method_kl_to_omega"] for p in points])
+            else:
+                scores = full["classifiers"]["logistic"]["means"][name]["full_policy_input"]
+                accuracy, kl = scores["accuracy"], scores["kl_to_analytical"]
+            label = "Concatenation" if architecture == "concat" else "Hypernetwork"
+            fragment = f"{label} & ${100 * accuracy:.1f}\\%$ & ${kl:.3f}$"
+            if fragment not in primary:
+                findings.append({"kind": "thesis_table_drift", "table": "primary_probe_summary",
+                                 "row": name, "expected_fragment": fragment})
+    table = _thesis_table_text(thesis_root, "tab:full_representation_accuracy")
+    for classifier, label in (("logistic", "Linear"), ("mlp", "MLP")):
+        block = full["classifiers"][classifier]
+        cells = []
+        for architecture in ("concat", "hypernet"):
+            name = f"varibad_{architecture}"
+            accuracy = 100 * block["means"][name]["full_policy_input"]["accuracy"]
+            gain = 100 * block["full_minus_mean"][name]["accuracy"]["mean"]
+            cells.append(f"${accuracy:.1f}\\%\\ ({gain:+.1f})$")
+        difference = block["full_hypernet_minus_concat"]["accuracy"]
+        lo, hi = np.asarray(difference["ci95"]) * 100
+        cells.extend([f"${100 * difference['mean']:+.1f}$", f"$[{lo:.1f},\\ {hi:.1f}]$"])
+        fragment = label + " & " + " & ".join(cells)
+        if fragment not in table:
+            findings.append({"kind": "thesis_table_drift", "table": "full_representation_accuracy",
+                             "row": classifier, "expected_fragment": fragment})
 
 
 def _audit(root: Path, thesis_root: Path | None = None) -> dict:
@@ -406,6 +448,7 @@ def _audit(root: Path, thesis_root: Path | None = None) -> dict:
 
     if thesis_root is not None:
         _check_thesis_result_tables(thesis_root, root, findings)
+        _check_full_representation_tables(thesis_root, root, findings)
         from scripts import make_tables
         previous = make_tables.FINAL
         make_tables.FINAL = lambda: root / "analysis"

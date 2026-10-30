@@ -68,9 +68,42 @@ This route uses saved probe measurements. It does not refit classifiers or gener
 trajectories. The strict check without a thesis checkout checks scientific data; it does not
 check prose or manually typeset thesis tables.
 
-It also regenerates the additional descriptive analysis of trading after natural regime
+It also regenerates the additional descriptive analysis of trading after regime
 switches from `analysis/natural_switch_evaluation.json`: the figure, interval sample counts,
 and paired seed-level uncertainty. This analysis is outside the original 18 comparisons.
+
+## Current Chapter 5 figures and tables
+
+The quick start also verifies the decision-loss and inventory manifests, then copies their
+saved inputs into `results/analysis/frozen_policy/` inside the chosen output directory.
+It generates all seven main Chapter 5 figures under `figures/results/RQ1/`, including:
+
+- `return_components.pdf`: trading gains and inventory penalties by configuration. Grey denotes
+  concatenation and teal denotes hypernetworks; the trading-gains axis starts at 50.
+- `decision_quality.pdf`: four mean decision-loss bars using the same matched states and weights
+  within each seed. Coverage averages 70.1% (66.3–75.1% across seeds).
+- `inventory_activity.pdf`: inventory exposure and accepted fills.
+- `switch_overview.pdf`: reward, inventory penalties and decision loss after regime switches.
+
+`scripts.summarize_quote_quality` recalculates the common-sample means, paired differences,
+coverage and 10,000-resample intervals from the saved per-seed records. It rejects inconsistent
+summaries. The saved-result route does not repeat the raw state matching or replay checkpoints.
+To redo matching from cached state-action counts, follow [DECISION_LOSS.md](DECISION_LOSS.md).
+Generated accuracy tables use percentages; accuracy differences use percentage points. KL
+values keep their original scale.
+
+To check against a local thesis checkout as well, use a new output directory:
+
+```bash
+uv run python -m scripts.reproduce_saved_results --output reproduced-thesis-check \
+  --thesis-root /absolute/path/to/thesis
+```
+
+This checks the manually typeset result rows and compares seven regenerated supporting tables
+with the thesis files. The final report requires all seven Chapter 5 figures and those tables
+to exist. It records their hashes, the input manifests, the Git commit, whether the working tree
+has changes, and hashes of the source files actually used. A commit hash alone does not describe
+uncommitted work. The report does not claim to check thesis prose or the defense slides.
 
 ## Primary analysis and retained sensitivity results
 
@@ -234,20 +267,26 @@ The original training hardware was not recorded in the available evidence.
 ## Statistical details
 
 Learning speed is the zero-based index at the end of the first complete 25-iteration window
-whose mean reaches the target. Unreached targets are censored at the 1,500-iteration budget.
+whose mean reaches the target. Runs that never reach the target receive 1,500, the full training budget.
 Linear regime-probe comparisons are primary; MLP comparisons assess classifier sensitivity
-and use a separate correction set. The main summary figure displays the MLP sensitivity curves.
+and use a separate correction set. Chapter 5 reports the full-input linear probe scores; MLP comparisons are supporting checks.
 
-The six primary correction sets contain 2, 2, 2, 4, 4, and 4 comparisons. The original analysis
-uses independent resampling across conditions. Training shares random streams between matching
-seeds, so a separate sensitivity analysis preserves groups of matching seeds. Its paired intervals
-and sign reversals retain every primary significance decision in the published data. Sign
-reversals require symmetric paired differences or exchangeability within pairs under the null;
-matching seeds alone does not establish that assumption.
+The current thesis applies Holm correction separately to three sets of two tests: architecture
+return differences, RL²–VariBAD return differences, and iterations to the return target.
+The repository also retains the original 18 comparisons in six correction sets, including older
+probe and policy diagnostics. The strict contract verifies these historical results as well;
+they are not all primary tests in the current thesis.
 
-For correlations, resampling retains all four variants within a seed. Associations within
-variants subtract their means again in every resample. Reference and short-history comparisons
-are exploratory and are outside the 18 primary tests.
+The primary analysis pairs runs by training seed. Original independent estimates remain as
+supporting checks. All six current return and learning-speed significance decisions agree under
+both procedures. Pairing was chosen during review, rather than specified before the experiment.
+Sign flips require symmetry of paired differences or interchangeable labels within pairs under
+the null; matching seeds alone does not establish either assumption.
+
+Additional control measurements, full-input probes and reference-agent comparisons report
+exploratory intervals. These do not account for selecting an analysis after inspecting results.
+Historical policy-substitution, response and correlation analyses remain available in the
+reproduced output but are not used as main explanations in the current thesis.
 
 ## Map from thesis to repository
 
@@ -258,46 +297,33 @@ Paths under `results/` refer to unpacked data. All analysis filenames are relati
 | Environment and analytical posterior (Chapter 3) | `envs/`, `beliefs/`, `oracles/`; `experiments/configs/main/` |
 | Training settings (Chapter 4, Appendix C) | Eight YAML configurations in `experiments/configs/main/`; `results/medium/*/{config,metrics,summary}.json` |
 | Return and learning speed (Chapter 5) | `m5r_post_training_evaluation.json`, `m5r_method_return_tests.json`, `m5r_time_to_threshold_tests.json` |
-| Regime information and its relation to return | `m5r_posterior_vs_performance*.json`, `m5r_belief_quality*_tests.json`, `m5r_accuracy_references.json` |
-| Policy response and belief substitution | `m5r_action_distributions.json`, `m5r_belief_swap.json`, `m5r_diagnostic_tests.json` |
+| Regime decoding (Chapter 5, Appendix B.4) | `m5r_posterior_vs_performance*.json`, `m5r_supplemental_belief_checks.json`, `reproduction/data/m5r_full_belief_mlp.json`; `scripts.summarize_full_belief` |
+| Return components and quote quality (Figures 5.5 and 5.7) | `reproduction/data/decision_loss_summary.json`, `reproduction/data/decision_quality_comparisons.json`; `scripts.plot_control_explanations`, `scripts.summarize_quote_quality` |
+| Inventory and accepted fills (Figure 5.6) | `reproduction/data/inventory_activity_summary.json`; `scripts.plot_inventory_activity` |
+| Performance after regime switches (Figure 5.4) | `analysis/natural_switch_evaluation.json`; `scripts.plot_switch_overview`, `scripts.summarize_natural_switches` |
+| Historical supporting policy diagnostics | `m5r_action_distributions.json`, `m5r_belief_swap.json`, `m5r_diagnostic_tests.json` |
 | Environment and implementation checks (Appendix B) | `results/foundations/`; `scripts.env_validation_final`; `plotting.m4_plots` |
 | Confusion matrices and full-belief checks | `m5r_probe_confusion.json`, `m5r_supplemental_belief_checks.json` |
 | Sensitivity to shared training seeds | `m5r_seed_block_sensitivity.json`, `m5r_exploratory_baseline_seed_pairs.json` |
 | Generated tables | `scripts.make_tables` |
-| Main and supporting charts | `plotting.trading_results`, `plotting.reference_levels`, `plotting.action_inventory_heatmap` |
+| All current Chapter 5 figures and supporting tables | `scripts.reproduce_saved_results`; see the current-figures section above |
 
 The thesis equations and interpretations remain in the thesis. The repository supplies the
 executable procedures and saved evidence.
 
 ## Optional: update a local thesis checkout
 
-The repository works on its own. If you also have the LaTeX thesis, use its actual path:
+First run the saved-result workflow with `--thesis-root` as shown above. It creates outputs in a
+separate directory and does not overwrite thesis files. Inspect regenerated outputs before
+copying any changed figures or tables into the thesis. Environment-validation charts are
+retained in the repository; recreating them requires the validation training runs.
+
+Compile the thesis from its own directory:
 
 ```bash
-export THESIS_FIG_ROOT="/absolute/path/to/thesis/figures"
-uv run python -m plotting.trading_results
-uv run python -m plotting.reference_levels
-uv run python -m plotting.action_inventory_heatmap
-uv run python -m plotting.m4_plots
-uv run python -m scripts.make_tables
-uv run python -m scripts.plot_supplemental_belief_checks --output "$THESIS_FIG_ROOT/appendix/direct_posterior_accuracy.png"
-uv run python -m scripts.thesis_contract --strict --thesis-root "/absolute/path/to/thesis"
+latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
 ```
 
-These commands require unpacked results or `THESIS_RESULTS_ROOT` pointing to them. The final
-check also compares generated and manually typeset thesis tables. Compile the thesis from its
-own directory with `latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex`.
-
-## Inventory exposure and accepted fills
-
-`INVENTORY_ACTIVITY.md` documents the additional frozen-checkpoint evaluation. Run
-`python -m scripts.inventory_activity_analysis` after preparing the existing checkpoints.
-It reuses the original evaluation keys and verifies every return and inventory penalty.
-To rebuild the chart and table without checkpoints, run:
-
-```sh
-python -m scripts.plot_inventory_activity --input reproduction/data/inventory_activity_summary.json --figure /tmp/inventory_activity.pdf --table /tmp/inventory_activity.tex
-```
-
-The packaged summary retains each trained run's absolute post-fill inventory histogram
-and separate accepted bid and ask fill counts. Its manifest records source and data hashes.
+For checkpoint replay and rematching instructions, use [DECISION_LOSS.md](DECISION_LOSS.md) and
+[INVENTORY_ACTIVITY.md](INVENTORY_ACTIVITY.md). Retraining and replay are separate from this
+saved-data check.

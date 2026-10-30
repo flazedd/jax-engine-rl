@@ -35,12 +35,13 @@ uv run python -m scripts.reproduce_saved_results
 ```
 
 This verifies and unpacks the saved data, recalculates the main statistical comparisons, and
-regenerates the result figures and LaTeX tables. It does **not** train agents. It writes into a new
+regenerates all seven Chapter 5 figures and their supporting LaTeX tables. It does **not** train agents. It writes into a new
 `reproduced/` directory and leaves the published inputs unchanged.
 
 On success, the command prints `Saved result reproduction passed`. Open:
 
-- `reproduced/verification.json` for the overall check and links to stage logs.
+- `reproduced/verification.json` for the overall check, stage logs, input/output hashes, and hashes
+  of the actual source files (including uncommitted changes).
 - `reproduced/figures/` for regenerated charts.
 - `reproduced/tables/` for generated LaTeX tables.
 - `reproduced/results/audits/thesis_contract.json` for the scientific consistency check.

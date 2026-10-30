@@ -9,6 +9,11 @@ agents. They contain synthetic experiment data; no market-data subscription is n
 | `checkpoints.tar.gz` | All 160 main checkpoints plus saved checkpoints for supporting validation experiments |
 | `manifest.json` | SHA-256 hashes of both archives, every file inside, and both supplemental JSON inputs, plus the original training commit |
 | `m5r_recovery_audit.json` | Verified replay of all 80 main runs: extended recovery bins, direct posterior predictions, and fitted-reference comparisons |
+| `decision_loss_summary.json` | Per-run trading gains, inventory penalties, decision loss, and switch-window summaries for 80 learned agents |
+| `decision_quality_comparisons.json` | Common-state per-seed loss and coverage for all four configurations, paired differences, and raw-cache hashes |
+| `decision_loss_manifest.json` | Hashes of decision-loss inputs and analysis sources |
+| `inventory_activity_summary.json` | Per-run inventory and fill statistics and paired comparisons |
+| `inventory_activity_manifest.json` | Hashes of inventory inputs and analysis sources |
 | `m5r_full_belief_mlp.json` | Exploratory MLP probes of VariBAD's means and full policy input, using 500 episodes for each of 40 saved runs |
 
 Files extract relative to a `results/` directory. The quick-start command handles extraction
@@ -57,3 +62,8 @@ that all reproduction changes were already part of that commit.
 Maintainers can rebuild these archives from verified local results with
 `uv run python -m scripts.build_repository_data`. Review changes to the manifest and run the
 saved-result reproduction before publishing updated data.
+
+The frozen-policy JSON inputs are separate from the historical archive. The quick start verifies
+their analysis manifests and copies them into the clean output before generating the current
+Chapter 5 figures. Common-sample estimates are checked from saved per-seed records; rebuilding
+the matched states themselves requires the raw evaluation caches or a checkpoint replay.

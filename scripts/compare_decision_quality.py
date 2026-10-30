@@ -16,13 +16,29 @@ def main():
    lx=(cx*L).sum(-1)/np.maximum(nx,1);ly=(cy*L).sum(-1)/np.maximum(ny,1)
    own.append((ry['loss']-rx['loss'])/128);matched.append(float(((ly-lx)*w).sum()/w.sum()));overlap.append(float(w.sum()/cx.sum()))
   out['comparisons'].append({'first':first,'second':second,'label':label,'all_decisions':estimate(own),'comparable_situations':estimate(matched),'overlap':estimate(overlap)})
+ # Use one common state distribution for the four displayed configuration levels.
+ methods=['rl2_concat','rl2_hypernet','varibad_concat','varibad_hypernet']
+ levels=[];coverage=[];common_rows=[]
+ for seed in range(20):
+  xs=[np.load(a.cache/f'{m}_{seed}.npz') for m in methods]
+  for x in xs[1:]:np.testing.assert_array_equal(xs[0]['loss'],x['loss'])
+  counts=np.array([x['counts'] for x in xs]);visits=counts.sum(-1);weights=visits.min(0)
+  assert weights.sum()>0
+  losses=(counts*xs[0]['loss']).sum(-1)/np.maximum(visits,1)
+  values=(losses*weights).sum((1,2,3))/weights.sum()
+  fractions=weights.sum()/visits.sum((1,2,3))
+  levels.append(values);coverage.append(fractions)
+  common_rows.append({'seed':seed,'loss':dict(zip(methods,values.tolist())),'coverage':dict(zip(methods,fractions.tolist()))})
+ levels=np.array(levels);coverage=np.array(coverage)
+ out['common_states']={'weighting':'Minimum visit count across all four configurations within each seed; exact episode step, inventory and regime.',
+  'configurations':{m:estimate(levels[:,i]) for i,m in enumerate(methods)},
+  'coverage':{m:{**estimate(coverage[:,i]),'min':float(coverage[:,i].min()),'max':float(coverage[:,i].max())} for i,m in enumerate(methods)},
+  'comparisons':[{'first':f,'second':s,'reduction':estimate(levels[:,methods.index(s)]-levels[:,methods.index(f)])} for f,s,_ in PAIRS],
+  'rows':common_rows}
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(out,indent=2)+'\n');print(json.dumps(out['comparisons'],indent=2))
  if a.table:
-  lines=[r'\begin{tabular}{llrr}',r'\toprule',r'Comparison & Decisions & Reduction & $95\%$ interval \\',r'\midrule']
-  labels=[r'RL\textsuperscript{2}: hypernet vs concat.','VariBAD: hypernet vs concat.',r'Concat.: RL\textsuperscript{2} vs VariBAD',r'Hypernet: RL\textsuperscript{2} vs VariBAD']
-  for label,c in zip(labels,out['comparisons']):
-   for key,kind in [('all_decisions','All recorded'),('comparable_situations','Comparable')]:
-    e=c[key];lines.append(label+' & '+kind+f" & ${e['mean']:.4f}$ & $[{e['ci95'][0]:.4f}, {e['ci95'][1]:.4f}]$"+r' \\')
-  lines +=[r'\bottomrule',r'\end{tabular}'];a.table.parent.mkdir(parents=True,exist_ok=True);a.table.write_text('\n'.join(lines)+'\n')
+  from scripts.summarize_quote_quality import verify_common_states,write_table
+  verify_common_states(out)
+  write_table(out,a.table)
 
 if __name__=='__main__':main()

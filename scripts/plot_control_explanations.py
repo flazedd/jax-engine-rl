@@ -1,35 +1,48 @@
-"""Charts of saved return components and matched decision loss; no model updates."""
+"""Plot configuration levels from verified frozen-checkpoint summaries."""
 import argparse,json
 from pathlib import Path
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from plotting.style import apply_style, polish, PALETTE
+
+METHODS=['rl2_concat','rl2_hypernet','varibad_concat','varibad_hypernet']
+COLORS=[PALETTE['concat'],PALETTE['hyper']]*2
+
+def bars(ax,estimates,ylabel):
+ means=np.array([e['mean'] for e in estimates]);ci=np.array([e['ci95'] for e in estimates])
+ positions=np.array([-.18,.18,.82,1.18]);width=.34
+ ax.bar(positions,means,color=COLORS,width=width,edgecolor='white',linewidth=1.2,zorder=3,
+        yerr=[means-ci[:,0],ci[:,1]-means],capsize=4,
+        error_kw={'ecolor':'#3a3a3a','elinewidth':1.2})
+ for x,m,hi in zip(positions,means,ci[:,1]):
+  label=f'{m:.3f}' if means.max()<1 else f'{m:.1f}'
+  ax.annotate(label,xy=(x,hi),xytext=(0,6),textcoords='offset points',ha='center',va='bottom',fontsize=8.5,fontweight='bold',color='#333333')
+ ax.set(xticks=[0,1],xticklabels=['RL²','VariBAD'],ylabel=ylabel,ylim=(0,ci[:,1].max()*1.22),xlim=(-.55,1.55))
+ polish(ax)
+ ax.legend(handles=[Patch(facecolor=PALETTE['hyper'],edgecolor='white',label='Hypernet integration'),Patch(facecolor=PALETTE['concat'],edgecolor='white',label='Concat integration')],loc='upper left',frameon=True,facecolor='white',edgecolor='#cccccc',fontsize=8)
+
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--input',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();d=json.loads(a.input.read_text());a.output.mkdir(parents=True,exist_ok=True)
- plt.rcParams.update({'font.size':12,'pdf.fonttype':42,'font.family':'DejaVu Sans'})
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--input',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+ d=json.loads(a.input.read_text());a.output.mkdir(parents=True,exist_ok=True)
+ apply_style()
+ plt.rcParams.update({'pdf.fonttype':42,'font.family':'DejaVu Sans'})
  rows={(r['method'],r['seed']):r for r in d['rows']}
  ix=np.random.default_rng(0).integers(20,size=(10000,20))
- comparisons=[('rl2_hypernet','rl2_concat','RL²: hypernet − concat.'),('varibad_hypernet','varibad_concat','VariBAD: hypernet − concat.'),('rl2_concat','varibad_concat','Concatenation: RL² − VariBAD'),('rl2_hypernet','varibad_hypernet','Hypernetwork: RL² − VariBAD')]
- fig,axes=plt.subplots(2,2,figsize=(11,6.5),sharex=True);estimates={}
- for ax,(first,second,label) in zip(axes.flat,comparisons):
-  c={}
-  for metric in ['gain','penalty','return']:
-   values=np.array([rows[first,seed][metric]-rows[second,seed][metric] for seed in range(20)]);c[metric]={'mean':float(values.mean()),'ci95':np.percentile(values[ix].mean(1),[2.5,97.5]).tolist()}
-  estimates[first+' minus '+second]=c
-  for y,metric,sign in [(0,'gain',1),(1,'penalty',-1)]:
-   e=c[metric];v=sign*e['mean'];lo,hi=sorted(sign*x for x in e['ci95']);ax.barh(y,v,height=.45,color=['#b4bec4','#269d91'][y]);ax.errorbar(v,y,xerr=[[v-lo],[hi-v]],fmt='none',color='black',capsize=4)
-  ax.barh(2,c['return']['mean'],height=.45,color='#303030');ax.axvline(0,color='black',lw=.8);ax.set(yticks=[0,1,2],yticklabels=['Trading gains','Penalty savings','Total return gain'],title=label);ax.invert_yaxis();ax.spines[['top','right']].set_visible(False)
- for ax in axes[-1]:ax.set_xlabel('Difference in mean episode totals')
+ def estimate(v):return {'mean':float(v.mean()),'ci95':np.percentile(v[ix].mean(1),[2.5,97.5]).tolist()}
+ fig,axes=plt.subplots(1,2,figsize=(11,4.3));levels={}
+ for ax,metric,title in zip(axes,['gain','penalty'],['Trading gains (higher is better)','Inventory penalties (lower is better)']):
+  estimates=[estimate(np.array([rows[m,s][metric] for s in range(20)])) for m in METHODS]
+  levels[metric]=dict(zip(METHODS,estimates));bars(ax,estimates,'Mean episode total');ax.set_title(title)
+  if metric=='gain':ax.set_ylim(bottom=50)
  fig.tight_layout();fig.savefig(a.output/'return_components.pdf');plt.close(fig)
- (a.output/'return_component_comparisons.json').write_text(json.dumps(estimates,indent=2)+'\n')
- quality=json.loads((a.input.parent/'decision_quality_comparisons.json').read_text())
- fig,axes=plt.subplots(2,2,figsize=(11,6),sharex=True)
- for ax,c in zip(axes.flat,quality['comparisons']):
-  e=c['comparable_situations'];v=e['mean'];lo,hi=e['ci95']
-  ax.errorbar(v,0,xerr=[[v-lo],[hi-v]],fmt='o',color='black',capsize=5,ms=7)
-  ax.axvline(0,color='grey',lw=1);ax.set(yticks=[],title=c['label'],ylim=(-.6,.6));ax.spines[['top','right','left']].set_visible(False)
- for ax in axes[-1]:ax.set_xlabel('Improvement in quote quality\n(positive favours the first named agent)')
+ (a.output/'return_component_levels.json').write_text(json.dumps(levels,indent=2)+'\n')
+ quality=json.loads((a.input.parent/'decision_quality_comparisons.json').read_text())['common_states']
+ fig,ax=plt.subplots(figsize=(9.2,5.8))
+ bars(ax,[quality['configurations'][m] for m in METHODS],'Mean decision loss per decision')
+ ax.set_ylabel('Mean decision loss per decision (lower is better)')
  fig.tight_layout();fig.savefig(a.output/'decision_quality.pdf');plt.close(fig)
 if __name__=='__main__':main()
